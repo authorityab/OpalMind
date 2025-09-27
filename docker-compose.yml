@@ -12,5 +12,5 @@ services:
       - MATOMO_DEFAULT_SITE_ID=${MATOMO_DEFAULT_SITE_ID:-1}
       - OPAL_BEARER_TOKEN=${OPAL_BEARER_TOKEN:-change-me}
     ports:
-      - "4000:4000"
+      - "3000:3000"
     restart: unless-stopped

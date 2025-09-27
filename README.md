@@ -104,7 +104,7 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 
 ## Docker Deployment
 - Pull the published container: `docker compose pull` (override `MATOKIT_IMAGE` to pin a specific tag if needed, defaults to `ghcr.io/puttrix/matokit-api:latest`). The `Docker Image` GitHub Action automatically builds and pushes fresh images on every `main` push.
-- Launch locally: `docker compose up -d` (reads `.env` for Matomo/Opal secrets and exposes port `4000`).
+- Launch locally: `docker compose up -d` (reads `.env` for Matomo/Opal secrets and exposes port `3000`).
 - For Portainer, copy `deploy/matokit.env.example` to `matokit.env`, fill in secrets, and point the stack at `deploy/portainer-stack.yml`—ensure the stack references your published registry tag.
 
 ## Next Steps
