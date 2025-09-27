@@ -245,7 +245,6 @@ export function createMatomoClient(config: MatomoClientConfig) {
 
 export type {
   KeyNumbers,
-  KeyNumbersSeriesPoint,
   MostPopularUrl,
   EventSummary,
   EntryPage,
