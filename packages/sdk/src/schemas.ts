@@ -13,6 +13,8 @@ export const keyNumbersSchema = z
     max_actions: numeric.optional(),
     bounce_rate: z.string().optional(),
     nb_actions_per_visit: z.union([numeric, z.string()]).optional(),
+    nb_pageviews: numeric.optional(),
+    nb_uniq_pageviews: numeric.optional(),
   })
   .passthrough();
 

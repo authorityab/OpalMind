@@ -79,7 +79,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 | Tool | Endpoint | Purpose |
 |------|----------|---------|
-| `GetKeyNumbers` | `POST /tools/get-key-numbers` | Returns visit counts and summary metrics for a period/date. |
+| `GetKeyNumbers` | `POST /tools/get-key-numbers` | Returns visits, pageviews, and summary metrics for a period/date. |
 | `GetMostPopularUrls` | `POST /tools/get-most-popular-urls` | Lists the most visited URLs for a period/date. |
 | `GetTopReferrers` | `POST /tools/get-top-referrers` | Lists top referrer sources for a period/date. |
 | `GetEntryPages` | `POST /tools/get-entry-pages` | Shows entry-page performance with bounce and exit metrics. |

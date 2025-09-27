@@ -18,6 +18,8 @@ curl -X POST http://localhost:4000/tools/get-key-numbers \
   "nb_visits": 0,
   "nb_uniq_visitors": 0,
   "nb_actions": 0,
+  "nb_pageviews": 0,
+  "nb_uniq_pageviews": 0,
   "nb_users": 0,
   "nb_visits_converted": 0,
   "sum_visit_length": 0,

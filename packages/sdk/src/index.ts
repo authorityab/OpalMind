@@ -99,7 +99,36 @@ export class MatomoClient {
       },
     });
 
-    return keyNumbersSchema.parse(data);
+    let pageviewSummary: Partial<Pick<KeyNumbers, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
+
+    try {
+      const actionsSummary = await matomoGet<Record<string, unknown>>(this.http, {
+        method: 'Actions.get',
+        params: {
+          idSite: siteId,
+          period: input.period ?? 'day',
+          date: input.date ?? 'today',
+          segment: input.segment,
+        },
+      });
+
+      const nb_pageviews = actionsSummary?.['nb_pageviews'];
+      const nb_uniq_pageviews = actionsSummary?.['nb_uniq_pageviews'];
+
+      pageviewSummary = {
+        nb_pageviews: typeof nb_pageviews === 'number' ? nb_pageviews : undefined,
+        nb_uniq_pageviews:
+          typeof nb_uniq_pageviews === 'number' ? nb_uniq_pageviews : undefined,
+      };
+    } catch (error) {
+      // swallow errors; nb_actions will still be returned
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to fetch pageview summary from Actions.get', error);
+      }
+    }
+
+    return keyNumbersSchema.parse({ ...data, ...pageviewSummary });
   }
 
   async getMostPopularUrls(

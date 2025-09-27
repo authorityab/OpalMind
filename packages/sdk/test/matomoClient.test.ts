@@ -24,17 +24,25 @@ describe('MatomoClient', () => {
     await expect(client.getKeyNumbers()).rejects.toThrow('siteId is required');
   });
 
-  it('resolves default site ID when provided', async () => {
+  it('resolves default site ID when provided and merges pageview totals', async () => {
     const fetchMock = createFetchMock({ nb_visits: 42 });
-    vi.stubGlobal('fetch', fetchMock);
+    const pageviewMock = createFetchMock({ nb_pageviews: 149, nb_uniq_pageviews: 140 });
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(fetchMock).mockImplementationOnce(pageviewMock));
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
     const result = await client.getKeyNumbers();
 
     expect(result.nb_visits).toEqual(42);
+    expect(result.nb_pageviews).toEqual(149);
+    expect(result.nb_uniq_pageviews).toEqual(140);
 
-    const url = new URL(fetchMock.mock.calls[0][0] as string);
-    expect(url.searchParams.get('idSite')).toBe('5');
+    const firstUrl = new URL((fetchMock.mock.calls[0] ?? [])[0] as string);
+    expect(firstUrl.searchParams.get('idSite')).toBe('5');
+
+    const secondUrl = new URL((pageviewMock.mock.calls[0] ?? [])[0] as string);
+    expect(secondUrl.searchParams.get('method')).toBe('Actions.get');
+    expect(secondUrl.searchParams.get('idSite')).toBe('5');
   });
 
   it('passes through overrides for reporting helpers', async () => {
