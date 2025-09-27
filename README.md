@@ -109,7 +109,6 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 
 ## Next Steps
 - Replace the default bearer token with a secure secret before deploying.
-- Add CI (GitHub Actions) for lint, test, and build workflows.
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
 - Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
