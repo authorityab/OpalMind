@@ -12,12 +12,17 @@
     "outDir": "dist",
     "sourceMap": true,
     "declaration": true,
-    "noEmit": true,
-    "types": ["node"],
+    "noEmit": false,
+    "types": [
+      "node"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@matokit/sdk": ["packages/sdk/src/index.ts"]
-    }
+      "@matokit/sdk": [
+        "packages/sdk/src/index.ts"
+      ]
+    },
+    "emitDeclarationOnly": true
   },
   "include": []
 }
