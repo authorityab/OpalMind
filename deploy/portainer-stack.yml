@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   matokit-api:
-    image: ghcr.io/your-org/matokit-api:latest
+    image: ghcr.io/puttrix/matokit-api:latest
     env_file:
       - matokit.env
     environment:

@@ -103,9 +103,9 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 - Run individual workspace tests using the commands listed in [Available Scripts](#available-scripts).
 
 ## Docker Deployment
-- Build the production image: `docker build -t matokit-api .`
-- Orchestrate locally with compose: `docker compose up -d` (reads `.env` for Matomo/Opal secrets).
-- For Portainer, copy `deploy/matokit.env.example` to `matokit.env`, fill in secrets, and point the stack at `deploy/portainer-stack.yml` (update the image reference to match your registry tag first).
+- Pull the published container: `docker compose pull` (override `MATOKIT_IMAGE` to pin a specific tag if needed, defaults to `ghcr.io/puttrix/matokit-api:latest`).
+- Launch locally: `docker compose up -d` (reads `.env` for Matomo/Opal secrets and exposes port `4000`).
+- For Portainer, copy `deploy/matokit.env.example` to `matokit.env`, fill in secrets, and point the stack at `deploy/portainer-stack.yml`—ensure the stack references your published registry tag.
 
 ## Next Steps
 - Replace the default bearer token with a secure secret before deploying.

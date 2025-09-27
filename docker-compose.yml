@@ -2,9 +2,7 @@ version: '3.9'
 
 services:
   matokit-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${MATOKIT_IMAGE:-ghcr.io/puttrix/matokit-api:latest}
     env_file:
       - .env
     environment:
