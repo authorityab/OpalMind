@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockMatomoClient = {
   getKeyNumbers: vi.fn(),
+  getKeyNumbersSeries: vi.fn(),
   getMostPopularUrls: vi.fn(),
   getTopReferrers: vi.fn(),
   getEntryPages: vi.fn(),
@@ -66,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   createMatomoClientMock.mockImplementation(() => mockMatomoClient);
   mockMatomoClient.getKeyNumbers.mockReset();
+  mockMatomoClient.getKeyNumbersSeries.mockReset();
   mockMatomoClient.getMostPopularUrls.mockReset();
   mockMatomoClient.getTopReferrers.mockReset();
   mockMatomoClient.getEntryPages.mockReset();
@@ -120,6 +122,30 @@ describe('tool endpoints', () => {
       period: 'week',
       date: '2024-01-01',
       segment: 'country==SE',
+    });
+  });
+
+  it('returns historical key numbers with defaults', async () => {
+    const app = await createApp();
+    const historicalPayload = [
+      { date: '2024-02-01', nb_visits: 10, nb_pageviews: 15 },
+      { date: '2024-02-02', nb_visits: 12, nb_pageviews: 18 },
+    ];
+    mockMatomoClient.getKeyNumbersSeries.mockResolvedValue(historicalPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers-historical',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(historicalPayload);
+    expect(mockMatomoClient.getKeyNumbersSeries).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'last7',
+      segment: undefined,
     });
   });
 

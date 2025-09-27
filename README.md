@@ -80,6 +80,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | Tool | Endpoint | Purpose |
 |------|----------|---------|
 | `GetKeyNumbers` | `POST /tools/get-key-numbers` | Returns visits, pageviews, and summary metrics for a period/date. |
+| `GetKeyNumbersHistorical` | `POST /tools/get-key-numbers-historical` | Returns per-period key metrics for historical comparisons. |
 | `GetMostPopularUrls` | `POST /tools/get-most-popular-urls` | Lists the most visited URLs for a period/date. |
 | `GetTopReferrers` | `POST /tools/get-top-referrers` | Lists top referrer sources for a period/date. |
 | `GetEntryPages` | `POST /tools/get-entry-pages` | Shows entry-page performance with bounce and exit metrics. |
@@ -112,3 +113,4 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
 - Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
+- Tune caching defaults based on traffic patterns and monitor Matomo load.

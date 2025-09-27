@@ -1,7 +1,14 @@
 import { MatomoHttpClient, matomoGet } from './httpClient.js';
 import { ReportsService } from './reports.js';
-import { keyNumbersSchema } from './schemas.js';
-import type { Campaign, EntryPage, EventSummary, KeyNumbers, MostPopularUrl, TopReferrer } from './schemas.js';
+import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
+import type {
+  Campaign,
+  EntryPage,
+  EventSummary,
+  KeyNumbers,
+  MostPopularUrl,
+  TopReferrer,
+} from './schemas.js';
 import {
   TrackingService,
   type TrackEventInput,
@@ -20,6 +27,7 @@ export interface MatomoClientConfig {
     maxRetries?: number;
     retryDelayMs?: number;
   };
+  cacheTtlMs?: number;
 }
 
 export interface GetKeyNumbersInput {
@@ -56,6 +64,12 @@ export interface GetCampaignsInput {
   limit?: number;
 }
 
+export interface GetKeyNumbersSeriesInput extends GetKeyNumbersInput {}
+
+export interface KeyNumbersSeriesPoint extends KeyNumbers {
+  date: string;
+}
+
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
   if (typeof siteId !== 'number' || Number.isNaN(siteId)) {
     throw new Error('siteId is required');
@@ -70,7 +84,7 @@ export class MatomoClient {
 
   constructor(config: MatomoClientConfig) {
     this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth);
-    this.reports = new ReportsService(this.http);
+    this.reports = new ReportsService(this.http, { cacheTtlMs: config.cacheTtlMs });
     this.tracking = new TrackingService({
       baseUrl: config.tracking?.baseUrl ?? config.baseUrl,
       tokenAuth: config.tokenAuth,
@@ -129,6 +143,28 @@ export class MatomoClient {
     }
 
     return keyNumbersSchema.parse({ ...data, ...pageviewSummary });
+  }
+
+  async getKeyNumbersSeries(input: GetKeyNumbersSeriesInput = {}): Promise<KeyNumbersSeriesPoint[]> {
+    const siteId = this.resolveSiteId(input.siteId);
+    const period = input.period ?? 'day';
+    const date = input.date ?? 'last7';
+
+    const response = await matomoGet<Record<string, KeyNumbers>>(this.http, {
+      method: 'VisitsSummary.get',
+      params: {
+        idSite: siteId,
+        period,
+        date,
+        segment: input.segment,
+      },
+    });
+
+    const parsed = keyNumbersSeriesSchema.parse(response ?? {});
+
+    return Object.entries(parsed)
+      .map(([label, value]) => ({ date: label, ...value }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   async getMostPopularUrls(
@@ -209,6 +245,7 @@ export function createMatomoClient(config: MatomoClientConfig) {
 
 export type {
   KeyNumbers,
+  KeyNumbersSeriesPoint,
   MostPopularUrl,
   EventSummary,
   EntryPage,

@@ -219,3 +219,33 @@ curl -X POST http://localhost:4000/track/goal \
 ```
 
 > Tip: Use segments or different date/period combinations to explore other datasets while testing.
+
+## GetKeyNumbersHistorical
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-key-numbers-historical \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"day","date":"last7"}}'
+```
+
+**Example Response**
+```json
+[
+  {
+    "date": "2024-02-01",
+    "nb_visits": 120,
+    "nb_actions": 430,
+    "nb_pageviews": 310,
+    "nb_uniq_pageviews": 290
+  },
+  {
+    "date": "2024-02-02",
+    "nb_visits": 98,
+    "nb_actions": 360,
+    "nb_pageviews": 270,
+    "nb_uniq_pageviews": 250
+  }
+]
+```

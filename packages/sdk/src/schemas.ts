@@ -20,6 +20,8 @@ export const keyNumbersSchema = z
 
 export type KeyNumbers = z.infer<typeof keyNumbersSchema>;
 
+export const keyNumbersSeriesSchema = z.record(keyNumbersSchema);
+
 export const mostPopularUrlsSchema = z.array(
   z
     .object({

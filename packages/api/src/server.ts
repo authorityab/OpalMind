@@ -115,6 +115,29 @@ export function buildServer() {
   );
 
   toolsService.registerTool(
+    'GetKeyNumbersHistorical',
+    'Returns key metrics broken down per period for multi-day comparisons.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      return matomoClient.getKeyNumbersSeries({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'last7',
+        segment,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam],
+    '/tools/get-key-numbers-historical'
+  );
+
+  toolsService.registerTool(
     'GetMostPopularUrls',
     'Retrieves the most visited pages for the selected period and date.',
     async (parameters: Record<string, unknown>) => {

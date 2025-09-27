@@ -14,6 +14,20 @@ const createFetchMock = <T>(data: T) =>
     text: async () => JSON.stringify(data),
   });
 
+const createSequencedFetchMock = (responses: unknown[]) => {
+  const mock = vi.fn();
+  responses.forEach(response => {
+    mock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => response,
+      text: async () => JSON.stringify(response),
+    });
+  });
+  return mock;
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -25,10 +39,9 @@ describe('MatomoClient', () => {
   });
 
   it('resolves default site ID when provided and merges pageview totals', async () => {
-    const fetchMock = createFetchMock({ nb_visits: 42 });
-    const pageviewMock = createFetchMock({ nb_pageviews: 149, nb_uniq_pageviews: 140 });
+    const fetchMock = createSequencedFetchMock([{ nb_visits: 42 }, { nb_pageviews: 149, nb_uniq_pageviews: 140 }]);
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(fetchMock).mockImplementationOnce(pageviewMock));
+    vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
     const result = await client.getKeyNumbers();
@@ -40,9 +53,43 @@ describe('MatomoClient', () => {
     const firstUrl = new URL((fetchMock.mock.calls[0] ?? [])[0] as string);
     expect(firstUrl.searchParams.get('idSite')).toBe('5');
 
-    const secondUrl = new URL((pageviewMock.mock.calls[0] ?? [])[0] as string);
+    const secondUrl = new URL((fetchMock.mock.calls[1] ?? [])[0] as string);
     expect(secondUrl.searchParams.get('method')).toBe('Actions.get');
     expect(secondUrl.searchParams.get('idSite')).toBe('5');
+  });
+
+  it('returns key number series sorted by date', async () => {
+    const seriesData = {
+      '2024-01-02': { nb_visits: 2, nb_pageviews: 5 },
+      '2024-01-01': { nb_visits: 1, nb_pageviews: 3 },
+    };
+
+    const fetchMock = createFetchMock(seriesData);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const result = await client.getKeyNumbersSeries({ date: 'last2' });
+
+    expect(result).toEqual([
+      { date: '2024-01-01', nb_visits: 1, nb_pageviews: 3 },
+      { date: '2024-01-02', nb_visits: 2, nb_pageviews: 5 },
+    ]);
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('VisitsSummary.get');
+    expect(url.searchParams.get('date')).toBe('last2');
+  });
+
+  it('caches repeated reporting calls within TTL', async () => {
+    const responses = [[{ label: '/home' }], [{ label: '/other' }]];
+    const fetchMock = createSequencedFetchMock(responses);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4, cacheTtlMs: 60_000 });
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('passes through overrides for reporting helpers', async () => {

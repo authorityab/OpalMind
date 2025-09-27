@@ -46,9 +46,32 @@ export interface CampaignsInput {
 }
 
 export class ReportsService {
-  constructor(private readonly http: MatomoHttpClient) {}
+  private readonly cache = new Map<string, { expiresAt: number; value: unknown }>();
+  private readonly cacheTtlMs: number;
+
+  constructor(private readonly http: MatomoHttpClient, options: { cacheTtlMs?: number } = {}) {
+    this.cacheTtlMs = options.cacheTtlMs ?? 60_000;
+  }
+
+  private getFromCache<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt < Date.now()) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+
+  private setCache<T>(key: string, value: T) {
+    this.cache.set(key, { value, expiresAt: Date.now() + this.cacheTtlMs });
+  }
 
   async getMostPopularUrls(input: MostPopularUrlsInput): Promise<MostPopularUrl[]> {
+    const cacheKey = JSON.stringify({ feature: 'popularUrls', input });
+    const cached = this.getFromCache<MostPopularUrl[]>(cacheKey);
+    if (cached) return cached;
+
     const data = await matomoGet<MostPopularUrl[]>(this.http, {
       method: 'Actions.getPageUrls',
       params: {
@@ -61,10 +84,16 @@ export class ReportsService {
       },
     });
 
-    return mostPopularUrlsSchema.parse(data);
+    const parsed = mostPopularUrlsSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
   }
 
   async getTopReferrers(input: TopReferrersInput): Promise<TopReferrer[]> {
+    const cacheKey = JSON.stringify({ feature: 'topReferrers', input });
+    const cached = this.getFromCache<TopReferrer[]>(cacheKey);
+    if (cached) return cached;
+
     const data = await matomoGet<TopReferrer[]>(this.http, {
       method: 'Referrers.getReferrerType',
       params: {
@@ -76,10 +105,16 @@ export class ReportsService {
       },
     });
 
-    return topReferrersSchema.parse(data);
+    const parsed = topReferrersSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
   }
 
   async getEvents(input: EventsInput): Promise<EventSummary[]> {
+    const cacheKey = JSON.stringify({ feature: 'events', input });
+    const cached = this.getFromCache<EventSummary[]>(cacheKey);
+    if (cached) return cached;
+
     const data = await matomoGet<EventSummary[]>(this.http, {
       method: 'Events.getAction',
       params: {
@@ -95,10 +130,16 @@ export class ReportsService {
       },
     });
 
-    return eventsSchema.parse(data);
+    const parsed = eventsSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
   }
 
   async getEntryPages(input: EntryPagesInput): Promise<EntryPage[]> {
+    const cacheKey = JSON.stringify({ feature: 'entryPages', input });
+    const cached = this.getFromCache<EntryPage[]>(cacheKey);
+    if (cached) return cached;
+
     const data = await matomoGet<EntryPage[]>(this.http, {
       method: 'Actions.getEntryPageUrls',
       params: {
@@ -111,10 +152,16 @@ export class ReportsService {
       },
     });
 
-    return entryPagesSchema.parse(data);
+    const parsed = entryPagesSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
   }
 
   async getCampaigns(input: CampaignsInput): Promise<Campaign[]> {
+    const cacheKey = JSON.stringify({ feature: 'campaigns', input });
+    const cached = this.getFromCache<Campaign[]>(cacheKey);
+    if (cached) return cached;
+
     const data = await matomoGet<Campaign[]>(this.http, {
       method: 'Referrers.getCampaigns',
       params: {
@@ -126,6 +173,8 @@ export class ReportsService {
       },
     });
 
-    return campaignsSchema.parse(data);
+    const parsed = campaignsSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
   }
 }
