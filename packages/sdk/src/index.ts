@@ -64,7 +64,7 @@ export interface GetCampaignsInput {
   limit?: number;
 }
 
-export interface GetKeyNumbersSeriesInput extends GetKeyNumbersInput {}
+export type GetKeyNumbersSeriesInput = GetKeyNumbersInput;
 
 export interface KeyNumbersSeriesPoint extends KeyNumbers {
   date: string;
