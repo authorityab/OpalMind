@@ -1,0 +1,367 @@
+import { EventEmitter } from 'node:events';
+
+import type { Express } from 'express';
+import httpMocks from 'node-mocks-http';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockMatomoClient = {
+  getKeyNumbers: vi.fn(),
+  getMostPopularUrls: vi.fn(),
+  getTopReferrers: vi.fn(),
+  getEntryPages: vi.fn(),
+  getCampaigns: vi.fn(),
+  getEvents: vi.fn(),
+  trackPageview: vi.fn(),
+  trackEvent: vi.fn(),
+  trackGoal: vi.fn(),
+};
+
+const createMatomoClientMock = vi.fn(() => mockMatomoClient);
+
+vi.mock('@matokit/sdk', () => ({
+  createMatomoClient: createMatomoClientMock,
+}));
+
+async function createApp(): Promise<Express> {
+  const module = await import('../src/server.js');
+  return module.buildServer();
+}
+
+interface InvokeOptions {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+async function invoke(app: Express, options: InvokeOptions): Promise<{ status: number; body: unknown }> {
+  const { url, method = 'POST', headers = {}, body } = options;
+
+  const req = httpMocks.createRequest({
+    method,
+    url,
+    headers: { 'content-type': 'application/json', ...headers },
+    body,
+  });
+
+  const res = httpMocks.createResponse({ eventEmitter: EventEmitter });
+
+  return new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+    res.on('end', () => {
+      const payload = res._isJSON() ? res._getJSONData() : res._getData();
+      resolve({
+        status: res.statusCode,
+        body: payload,
+      });
+    });
+
+    res.on('error', reject);
+
+    app.handle(req, res);
+  });
+}
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.clearAllMocks();
+  createMatomoClientMock.mockImplementation(() => mockMatomoClient);
+  mockMatomoClient.getKeyNumbers.mockReset();
+  mockMatomoClient.getMostPopularUrls.mockReset();
+  mockMatomoClient.getTopReferrers.mockReset();
+  mockMatomoClient.getEntryPages.mockReset();
+  mockMatomoClient.getCampaigns.mockReset();
+  mockMatomoClient.getEvents.mockReset();
+  mockMatomoClient.trackPageview.mockReset();
+  mockMatomoClient.trackEvent.mockReset();
+  mockMatomoClient.trackGoal.mockReset();
+
+  process.env.MATOMO_BASE_URL = 'https://matomo.example.com';
+  process.env.MATOMO_TOKEN = 'token';
+  process.env.MATOMO_DEFAULT_SITE_ID = '1';
+  process.env.OPAL_BEARER_TOKEN = 'change-me';
+});
+
+afterEach(() => {
+  delete process.env.MATOMO_BASE_URL;
+  delete process.env.MATOMO_TOKEN;
+  delete process.env.MATOMO_DEFAULT_SITE_ID;
+  delete process.env.OPAL_BEARER_TOKEN;
+});
+
+describe('tool endpoints', () => {
+  it('rejects unauthenticated requests', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      body: { parameters: { period: 'day', date: 'today' } },
+      headers: {},
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('proxies to getKeyNumbers with parsed parameters', async () => {
+    const app = await createApp();
+    const mockResponse = { nb_visits: 10 };
+    mockMatomoClient.getKeyNumbers.mockResolvedValue(mockResponse);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { period: 'week', date: '2024-01-01', segment: 'country==SE' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(mockResponse);
+    expect(mockMatomoClient.getKeyNumbers).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'week',
+      date: '2024-01-01',
+      segment: 'country==SE',
+    });
+  });
+
+  it('coerces numeric parameters for list endpoints', async () => {
+    const app = await createApp();
+    const urlsPayload = [{ label: 'Home', nb_visits: 42 }];
+    mockMatomoClient.getMostPopularUrls.mockResolvedValue(urlsPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-most-popular-urls',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { limit: '5', period: 'month', date: 'yesterday' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(urlsPayload);
+    expect(mockMatomoClient.getMostPopularUrls).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'month',
+      date: 'yesterday',
+      segment: undefined,
+      limit: 5,
+    });
+  });
+
+  it('forwards referrer requests with defaults when omitted', async () => {
+    const app = await createApp();
+    const referrersPayload = [{ label: 'Search', nb_visits: 12 }];
+    mockMatomoClient.getTopReferrers.mockResolvedValue(referrersPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-top-referrers',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(referrersPayload);
+    expect(mockMatomoClient.getTopReferrers).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'today',
+      segment: undefined,
+      limit: undefined,
+    });
+  });
+
+  it('returns entry pages with parsed parameters', async () => {
+    const app = await createApp();
+    const entryPayload = [{ label: '/home', nb_visits: 42 }];
+    mockMatomoClient.getEntryPages.mockResolvedValue(entryPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-entry-pages',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { period: 'week', date: 'yesterday', limit: '15' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(entryPayload);
+    expect(mockMatomoClient.getEntryPages).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'week',
+      date: 'yesterday',
+      segment: undefined,
+      limit: 15,
+    });
+  });
+
+  it('returns campaign metrics with defaults', async () => {
+    const app = await createApp();
+    const campaignPayload = [{ label: 'Spring Launch', nb_visits: 12 }];
+    mockMatomoClient.getCampaigns.mockResolvedValue(campaignPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-campaigns',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(campaignPayload);
+    expect(mockMatomoClient.getCampaigns).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'today',
+      segment: undefined,
+      limit: undefined,
+    });
+  });
+
+  it('retrieves events with optional filters', async () => {
+    const app = await createApp();
+    const eventsPayload = [{ label: 'CTA > click', nb_events: 5 }];
+    mockMatomoClient.getEvents.mockResolvedValue(eventsPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-events',
+      headers: { authorization: 'Bearer change-me' },
+      body: {
+        parameters: {
+          period: 'month',
+          date: '2024-02-01',
+          segment: 'country==SE',
+          limit: '50',
+          category: 'CTA',
+          action: 'click',
+          name: 'Download',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(eventsPayload);
+    expect(mockMatomoClient.getEvents).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'month',
+      date: '2024-02-01',
+      segment: 'country==SE',
+      limit: 50,
+      category: 'CTA',
+      action: 'click',
+      name: 'Download',
+    });
+  });
+
+  it('returns 500 when Matomo client rejects (missing siteId)', async () => {
+    const app = await createApp();
+    const error = new Error('siteId is required');
+    mockMatomoClient.getKeyNumbers.mockRejectedValue(error);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'siteId is required' });
+    expect(mockMatomoClient.getKeyNumbers).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces Matomo client parse errors (bad JSON)', async () => {
+    const app = await createApp();
+    const parseError = new SyntaxError('Unexpected token < in JSON at position 0');
+    mockMatomoClient.getKeyNumbers.mockRejectedValue(parseError);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Unexpected token < in JSON at position 0' });
+  });
+
+  it('records pageviews via track endpoint', async () => {
+    const app = await createApp();
+    mockMatomoClient.trackPageview.mockResolvedValue({ ok: true, status: 204, body: '', pvId: 'abcdef1234567890' });
+
+    const response = await invoke(app, {
+      url: '/track/pageview',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { url: 'https://example.com/', actionName: 'Home' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, status: 204, pvId: 'abcdef1234567890' });
+    expect(mockMatomoClient.trackPageview).toHaveBeenCalledWith({
+      siteId: undefined,
+      url: 'https://example.com/',
+      actionName: 'Home',
+      pvId: undefined,
+      visitorId: undefined,
+      uid: undefined,
+      referrer: undefined,
+      ts: undefined,
+    });
+  });
+
+  it('requires url for pageview tracking', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/track/pageview',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'url is required' });
+    expect(mockMatomoClient.trackPageview).not.toHaveBeenCalled();
+  });
+
+  it('records events via track endpoint', async () => {
+    const app = await createApp();
+    mockMatomoClient.trackEvent.mockResolvedValue({ ok: true, status: 204, body: '' });
+
+    const response = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { category: 'CTA', action: 'click', value: 2 } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, status: 204 });
+    expect(mockMatomoClient.trackEvent).toHaveBeenCalledWith({
+      siteId: undefined,
+      category: 'CTA',
+      action: 'click',
+      name: undefined,
+      value: 2,
+      url: undefined,
+      visitorId: undefined,
+      uid: undefined,
+      referrer: undefined,
+      ts: undefined,
+    });
+  });
+
+  it('records goals via track endpoint', async () => {
+    const app = await createApp();
+    mockMatomoClient.trackGoal.mockResolvedValue({ ok: true, status: 204, body: '' });
+
+    const response = await invoke(app, {
+      url: '/track/goal',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { goalId: 5, revenue: 10.5 } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, status: 204 });
+    expect(mockMatomoClient.trackGoal).toHaveBeenCalledWith({
+      siteId: undefined,
+      goalId: 5,
+      revenue: 10.5,
+      url: undefined,
+      visitorId: undefined,
+      uid: undefined,
+      referrer: undefined,
+      ts: undefined,
+    });
+  });
+});
