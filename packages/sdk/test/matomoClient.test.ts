@@ -186,6 +186,63 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('25');
   });
 
+  it('tracks cache stats and emits events', async () => {
+    const fetchMock = createFetchMock([{ label: 'Home', nb_visits: '42' }]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const events: Array<{ type: string }> = [];
+
+    const client = createMatomoClient({
+      baseUrl,
+      tokenAuth: token,
+      defaultSiteId: 5,
+      cache: {
+        ttlMs: 60_000,
+        onEvent: event => events.push(event),
+      },
+    });
+
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+
+    const stats = client.getCacheStats();
+    expect(stats.total.misses).toBe(1);
+    expect(stats.total.hits).toBe(1);
+    expect(stats.total.sets).toBe(1);
+
+    const popularStats = stats.features.find(feature => feature.feature === 'popularUrls');
+    expect(popularStats?.hits).toBe(1);
+    expect(popularStats?.misses).toBe(1);
+
+    expect(events.some(event => event.type === 'set')).toBe(true);
+    expect(events.some(event => event.type === 'hit')).toBe(true);
+  });
+
+  it('records stale evictions when cache entries expire', async () => {
+    const fetchMock = createSequencedFetchMock([
+      [{ label: 'Home', nb_visits: '10' }],
+      [{ label: 'Home', nb_visits: '12' }],
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({
+      baseUrl,
+      tokenAuth: token,
+      defaultSiteId: 6,
+      cache: {
+        ttlMs: 1,
+      },
+    });
+
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
+
+    const stats = client.getCacheStats();
+    expect(stats.total.staleEvictions).toBeGreaterThanOrEqual(1);
+    expect(stats.total.sets).toBe(2);
+  });
+
   it('extracts ecommerce overview from nested responses', async () => {
     const fetchMock = createFetchMock({
       '2025-09-25': {

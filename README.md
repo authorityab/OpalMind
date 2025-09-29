@@ -16,6 +16,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 ## Features
 - Typed Matomo SDK with convenience methods for key metrics, most popular URLs, and top referrers.
 - Expanded reporting helpers covering ecommerce revenue, event categories, campaigns, entry pages, and device breakdowns.
+- In-memory reporting cache with observable hit/miss metrics and optional event hooks.
 - Opal Tools SDK integration exposing `/tools/*` endpoints plus discovery metadata.
 - Bearer-token authenticated Express service ready for Opal integration.
 - Vitest-based unit and integration tests for SDK and API layers.
@@ -102,6 +103,12 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 3. Tool discovery is provided automatically by the Opal Tools SDK (e.g., `GET /discovery`).
 4. Tool handlers map directly to SDK methods—extend the SDK first, then expose new tools.
 
+## Cache Monitoring
+- The `ReportsService` keeps an in-memory cache per report helper. Configure cache behaviour via the Matomo client:
+  - `cache.ttlMs` overrides the default 60s TTL.
+  - `cache.onEvent` receives `{ type, feature, key, expiresAt }` notifications for hits, misses, sets, and stale evictions—pipe these into your metrics system.
+- Call `client.getCacheStats()` to retrieve cumulative hit/miss/set counts and current entry totals per feature.
+
 ## Testing
 - SDK tests rely on mocked `fetch` and validate request construction and response parsing.
 - API tests mock the Matomo client and simulate Express requests via `node-mocks-http`, covering happy paths and error branches.
@@ -118,3 +125,4 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 - Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
 - Tune caching defaults based on traffic patterns and monitor Matomo load.
+- Ship cache stats to your preferred observability stack (Grafana/Prometheus/etc.) once production traffic is available.

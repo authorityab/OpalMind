@@ -1,5 +1,5 @@
 import { MatomoHttpClient, matomoGet } from './httpClient.js';
-import { ReportsService } from './reports.js';
+import { ReportsService, type CacheStatsSnapshot, type ReportsServiceOptions, type CacheEvent } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
   Campaign,
@@ -21,6 +21,11 @@ import {
   type TrackResult,
 } from './tracking.js';
 
+export interface CacheConfig {
+  ttlMs?: number;
+  onEvent?: (event: CacheEvent) => void;
+}
+
 export interface MatomoClientConfig {
   baseUrl: string;
   tokenAuth: string;
@@ -31,6 +36,7 @@ export interface MatomoClientConfig {
     retryDelayMs?: number;
   };
   cacheTtlMs?: number;
+  cache?: CacheConfig;
 }
 
 export interface GetKeyNumbersInput {
@@ -110,7 +116,11 @@ export class MatomoClient {
 
   constructor(config: MatomoClientConfig) {
     this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth);
-    this.reports = new ReportsService(this.http, { cacheTtlMs: config.cacheTtlMs });
+    const reportsOptions: ReportsServiceOptions = {
+      cacheTtlMs: config.cache?.ttlMs ?? config.cacheTtlMs,
+      onCacheEvent: config.cache?.onEvent,
+    };
+    this.reports = new ReportsService(this.http, reportsOptions);
     this.tracking = new TrackingService({
       baseUrl: config.tracking?.baseUrl ?? config.baseUrl,
       tokenAuth: config.tokenAuth,
@@ -275,6 +285,10 @@ export class MatomoClient {
     });
   }
 
+  getCacheStats(): CacheStatsSnapshot {
+    return this.reports.getCacheStats();
+  }
+
   async trackPageview(
     input: Omit<TrackPageviewInput, 'siteId'> & { siteId?: number }
   ): Promise<TrackPageviewResult> {
@@ -316,6 +330,9 @@ export type {
   TrackPageviewInput,
   TrackPageviewResult,
   TrackResult,
+  CacheStatsSnapshot,
+  CacheEvent,
+  CacheConfig,
 };
 
 export { TrackingService } from './tracking.js';
