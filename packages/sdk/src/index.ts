@@ -332,7 +332,6 @@ export type {
   TrackResult,
   CacheStatsSnapshot,
   CacheEvent,
-  CacheConfig,
 };
 
 export { TrackingService } from './tracking.js';
