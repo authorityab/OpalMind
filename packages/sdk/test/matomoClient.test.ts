@@ -350,6 +350,29 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('5');
   });
 
+  it('retrieves traffic channels and supports alias filtering', async () => {
+    const fetchMock = createFetchMock([
+      { label: 'Direct Entry', nb_visits: '120' },
+      { label: 'Search Engines', nb_visits: '80' },
+      { label: 'Websites', nb_visits: '25' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+
+    const channels = await client.getTrafficChannels({ period: 'week', date: '2025-09-01' });
+    expect(channels).toHaveLength(3);
+    expect(channels[0].nb_visits).toBe(120);
+
+    const filtered = await client.getTrafficChannels({ channelType: 'search', period: 'week', date: '2025-09-01' });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toBe('Search Engines');
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Referrers.getReferrerType');
+    expect(url.searchParams.get('filter_limit')).toBe('10');
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

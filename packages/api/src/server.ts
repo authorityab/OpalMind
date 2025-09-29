@@ -101,6 +101,12 @@ export function buildServer() {
     'Include per-period breakdown for ecommerce revenue totals',
     false
   );
+  const channelTypeParam = new Parameter(
+    'channelType',
+    ParameterType.String,
+    'Filter traffic channels to a specific type (e.g., direct, search, social)',
+    false
+  );
 
   toolsService.registerTool(
     'GetKeyNumbers',
@@ -283,6 +289,33 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam, includeSeriesParam],
     '/tools/get-ecommerce-revenue'
+  );
+
+  toolsService.registerTool(
+    'GetTrafficChannels',
+    'Provides a high-level breakdown of traffic sources (direct, search, social, referrals, campaigns).',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const limit = parseOptionalNumber(parameters?.['limit']);
+      const channelType = parseOptionalString(parameters?.['channelType']);
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      return matomoClient.getTrafficChannels({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+        limit,
+        channelType,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam, limitParam, channelTypeParam],
+    '/tools/get-traffic-channels'
   );
 
   toolsService.registerTool(

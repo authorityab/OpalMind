@@ -8,6 +8,7 @@ import {
   eventsSchema,
   mostPopularUrlsSchema,
   topReferrersSchema,
+  trafficChannelsSchema,
 } from './schemas.js';
 import type {
   Campaign,
@@ -18,6 +19,7 @@ import type {
   EventSummary,
   MostPopularUrl,
   TopReferrer,
+  TrafficChannel,
 } from './schemas.js';
 
 export interface MostPopularUrlsInput {
@@ -97,6 +99,15 @@ export interface DeviceTypesInput {
   date: string;
   limit?: number;
   segment?: string;
+}
+
+export interface TrafficChannelsInput {
+  siteId: number;
+  period: string;
+  date: string;
+  segment?: string;
+  limit?: number;
+  channelType?: string;
 }
 
 export interface CacheEvent {
@@ -434,6 +445,34 @@ export class ReportsService {
     this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
+
+  async getTrafficChannels(input: TrafficChannelsInput): Promise<TrafficChannel[]> {
+    const feature = 'trafficChannels';
+    const cacheKey = this.makeCacheKey(feature, input);
+    const cached = this.getFromCache<TrafficChannel[]>(feature, cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<TrafficChannel[]>(this.http, {
+      method: 'Referrers.getReferrerType',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        filter_limit: input.limit ?? 10,
+      },
+    });
+
+    let parsed = trafficChannelsSchema.parse(data);
+
+    if (input.channelType) {
+      const target = resolveChannelAlias(input.channelType);
+      parsed = parsed.filter(channel => resolveChannelAlias(channel.label) === target);
+    }
+
+    this.setCache(feature, cacheKey, parsed);
+    return parsed;
+  }
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {
@@ -511,4 +550,31 @@ function aggregateEcommerceSummaries(summaries: EcommerceSummary[]): EcommerceSu
   }
 
   return ecommerceSummarySchema.parse(totals);
+}
+
+function resolveChannelAlias(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, '_');
+
+  switch (normalized) {
+    case 'direct':
+    case 'direct_entry':
+      return 'direct_entry';
+    case 'search':
+    case 'organic_search':
+    case 'paid_search':
+    case 'search_engines':
+      return 'search_engines';
+    case 'referral':
+    case 'referrers':
+    case 'websites':
+      return 'websites';
+    case 'campaign':
+    case 'campaigns':
+      return 'campaigns';
+    case 'social':
+    case 'social_networks':
+      return 'social_networks';
+    default:
+      return normalized;
+  }
 }

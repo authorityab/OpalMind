@@ -163,6 +163,36 @@ curl -X POST http://localhost:4000/tools/get-campaigns \
 ]
 ```
 
+## GetTrafficChannels
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-traffic-channels \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"week","date":"today","channelType":"search"}}'
+```
+
+**Example Response**
+```json
+[
+  {
+    "label": "Search Engines",
+    "nb_visits": 480,
+    "nb_actions": 1310,
+    "nb_visits_converted": 42,
+    "sum_visit_length": 86400
+  },
+  {
+    "label": "Direct Entry",
+    "nb_visits": 320,
+    "nb_actions": 720,
+    "nb_visits_converted": 18,
+    "sum_visit_length": 54000
+  }
+]
+```
+
 ## GetEcommerceOverview
 
 **Request**

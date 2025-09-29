@@ -16,6 +16,7 @@ const mockMatomoClient = {
   getEcommerceRevenueTotals: vi.fn(),
   getEventCategories: vi.fn(),
   getDeviceTypes: vi.fn(),
+  getTrafficChannels: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
@@ -81,6 +82,8 @@ beforeEach(() => {
   mockMatomoClient.getEcommerceRevenueTotals.mockReset();
   mockMatomoClient.getEventCategories.mockReset();
   mockMatomoClient.getDeviceTypes.mockReset();
+  mockMatomoClient.getTrafficChannels.mockReset();
+  mockMatomoClient.getTrafficChannels?.mockReset?.();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
@@ -288,6 +291,32 @@ describe('tool endpoints', () => {
       date: 'last2',
       segment: undefined,
       includeSeries: true,
+    });
+  });
+
+  it('returns traffic channels with optional filtering', async () => {
+    const app = await createApp();
+    const channelsPayload = [
+      { label: 'Direct Entry', nb_visits: 120 },
+      { label: 'Search Engines', nb_visits: 80 },
+    ];
+    mockMatomoClient.getTrafficChannels.mockResolvedValue(channelsPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-traffic-channels',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { channelType: 'search', period: 'week', date: '2025-09-01', limit: '10' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(channelsPayload);
+    expect(mockMatomoClient.getTrafficChannels).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'week',
+      date: '2025-09-01',
+      segment: undefined,
+      limit: 10,
+      channelType: 'search',
     });
   });
 

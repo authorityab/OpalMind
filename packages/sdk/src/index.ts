@@ -19,6 +19,7 @@ import type {
   KeyNumbers,
   MostPopularUrl,
   TopReferrer,
+  TrafficChannel,
 } from './schemas.js';
 import {
   TrackingService,
@@ -106,6 +107,15 @@ export interface GetDeviceTypesInput {
   date?: string;
   segment?: string;
   limit?: number;
+}
+
+export interface GetTrafficChannelsInput {
+  siteId?: number;
+  period?: string;
+  date?: string;
+  segment?: string;
+  limit?: number;
+  channelType?: string;
 }
 
 export type GetKeyNumbersSeriesInput = GetKeyNumbersInput;
@@ -310,6 +320,18 @@ export class MatomoClient {
     });
   }
 
+  async getTrafficChannels(input: GetTrafficChannelsInput = {}): Promise<TrafficChannel[]> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getTrafficChannels({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+      limit: input.limit,
+      channelType: input.channelType,
+    });
+  }
+
   getCacheStats(): CacheStatsSnapshot {
     return this.reports.getCacheStats();
   }
@@ -360,6 +382,7 @@ export type {
   EcommerceRevenueTotals,
   EcommerceRevenueSeriesPoint,
   EcommerceRevenueTotalsInput,
+  TrafficChannel,
 };
 
 export { TrackingService } from './tracking.js';

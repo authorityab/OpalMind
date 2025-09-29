@@ -89,6 +89,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `GetCampaigns` | `POST /tools/get-campaigns` | Aggregates referrer campaign activity and conversions. |
 | `GetEcommerceOverview` | `POST /tools/get-ecommerce-overview` | Summarizes ecommerce revenue and conversion totals. |
 | `GetEcommerceRevenue` | `POST /tools/get-ecommerce-revenue` | Returns total ecommerce revenue with optional per-period breakdown. |
+| `GetTrafficChannels` | `POST /tools/get-traffic-channels` | Provides a high-level breakdown of traffic sources (direct, search, referrals, social, campaigns). |
 | `GetEvents` | `POST /tools/get-events` | Returns aggregated Matomo event metrics with optional filters. |
 | `GetEventCategories` | `POST /tools/get-event-categories` | Aggregates events grouped by category for quick comparisons. |
 | `GetDeviceTypes` | `POST /tools/get-device-types` | Breaks down visits by high-level device type (desktop, mobile, tablet). |

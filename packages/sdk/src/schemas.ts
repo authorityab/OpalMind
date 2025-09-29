@@ -163,3 +163,19 @@ export const deviceTypesSchema = z.array(
 );
 
 export type DeviceTypeSummary = z.infer<typeof deviceTypesSchema>[number];
+
+export const trafficChannelsSchema = z.array(
+  z
+    .object({
+      label: z.string(),
+      nb_visits: numeric.optional(),
+      nb_actions: numeric.optional(),
+      nb_visits_converted: numeric.optional(),
+      sum_visit_length: numeric.optional(),
+      nb_hits: numeric.optional(),
+      bounce_rate: z.string().optional(),
+    })
+    .passthrough()
+);
+
+export type TrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
