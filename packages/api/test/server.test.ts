@@ -17,6 +17,7 @@ const mockMatomoClient = {
   getEventCategories: vi.fn(),
   getDeviceTypes: vi.fn(),
   getTrafficChannels: vi.fn(),
+  getGoalConversions: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
@@ -83,7 +84,7 @@ beforeEach(() => {
   mockMatomoClient.getEventCategories.mockReset();
   mockMatomoClient.getDeviceTypes.mockReset();
   mockMatomoClient.getTrafficChannels.mockReset();
-  mockMatomoClient.getTrafficChannels?.mockReset?.();
+  mockMatomoClient.getGoalConversions.mockReset();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
@@ -317,6 +318,30 @@ describe('tool endpoints', () => {
       segment: undefined,
       limit: 10,
       channelType: 'search',
+    });
+  });
+
+  it('returns goal conversions with optional filters', async () => {
+    const app = await createApp();
+    const goalsPayload = [{ id: 'ecommerceOrder', label: 'Orders', type: 'ecommerce', nb_conversions: 12 }];
+    mockMatomoClient.getGoalConversions.mockResolvedValue(goalsPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-goal-conversions',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { goalType: 'ecommerce', period: 'month', date: '2025-01' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(goalsPayload);
+    expect(mockMatomoClient.getGoalConversions).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'month',
+      date: '2025-01',
+      segment: undefined,
+      limit: undefined,
+      goalId: undefined,
+      goalType: 'ecommerce',
     });
   });
 

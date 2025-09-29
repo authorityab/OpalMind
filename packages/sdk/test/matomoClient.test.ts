@@ -373,6 +373,28 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('10');
   });
 
+  it('fetches goal conversions with filters and normalization', async () => {
+    const fetchMock = createFetchMock([
+      { idgoal: 'ecommerceOrder', goal: 'Orders', type: 'ecommerce', nb_conversions: '12' },
+      { idgoal: 2, name: 'Newsletter Signup', type: 'manually', nb_conversions: '8' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+
+    const allGoals = await client.getGoalConversions({ period: 'month', date: '2025-01-01', limit: 5 });
+    expect(allGoals).toHaveLength(2);
+    expect(allGoals[0]).toMatchObject({ id: 'ecommerceOrder', type: 'ecommerce', nb_conversions: 12 });
+
+    const ecommerceOnly = await client.getGoalConversions({ goalType: 'ecommerce', period: 'month', date: '2025-01-01' });
+    expect(ecommerceOnly).toHaveLength(1);
+    expect(ecommerceOnly[0].label).toBe('Orders');
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Goals.get');
+    expect(url.searchParams.get('filter_limit')).toBe('5');
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

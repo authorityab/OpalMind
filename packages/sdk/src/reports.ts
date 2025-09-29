@@ -9,6 +9,7 @@ import {
   mostPopularUrlsSchema,
   topReferrersSchema,
   trafficChannelsSchema,
+  goalConversionsSchema,
 } from './schemas.js';
 import type {
   Campaign,
@@ -20,6 +21,7 @@ import type {
   MostPopularUrl,
   TopReferrer,
   TrafficChannel,
+  RawGoalConversion,
 } from './schemas.js';
 
 export interface MostPopularUrlsInput {
@@ -108,6 +110,25 @@ export interface TrafficChannelsInput {
   segment?: string;
   limit?: number;
   channelType?: string;
+}
+
+export interface GoalConversionsInput {
+  siteId: number;
+  period: string;
+  date: string;
+  segment?: string;
+  limit?: number;
+  goalId?: string | number;
+  goalType?: string;
+}
+
+export interface GoalConversion {
+  id: string;
+  label: string;
+  type: string;
+  nb_conversions?: number;
+  nb_visits_converted?: number;
+  revenue?: number;
 }
 
 export interface CacheEvent {
@@ -473,6 +494,35 @@ export class ReportsService {
     this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
+
+  async getGoalConversions(input: GoalConversionsInput): Promise<GoalConversion[]> {
+    const feature = 'goalConversions';
+    const cacheKey = this.makeCacheKey(feature, input);
+    const cached = this.getFromCache<GoalConversion[]>(feature, cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<GoalConversion[]>(this.http, {
+      method: 'Goals.get',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        filter_limit: input.limit ?? 10,
+        idGoal: input.goalId,
+      },
+    });
+
+    const parsed = goalConversionsSchema.parse(data ?? []);
+    const normalized = parsed.map(entry => normalizeGoalConversion(entry));
+
+    const filtered = input.goalType
+      ? normalized.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
+      : normalized;
+
+    this.setCache(feature, cacheKey, filtered);
+    return filtered;
+  }
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {
@@ -556,7 +606,7 @@ function resolveChannelAlias(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/\s+/g, '_');
 
   switch (normalized) {
-    case 'direct':
+  case 'direct':
     case 'direct_entry':
       return 'direct_entry';
     case 'search':
@@ -577,4 +627,55 @@ function resolveChannelAlias(value: string): string {
     default:
       return normalized;
   }
+}
+
+function normalizeGoalConversion(entry: RawGoalConversion): GoalConversion {
+  const id = normalizeGoalId(entry.idgoal);
+  const type = normalizeGoalType(entry.type, id);
+
+  return {
+    id,
+    label: entry.goal ?? entry.name ?? formatGoalLabel(id),
+    type,
+    nb_conversions: entry.nb_conversions,
+    nb_visits_converted: entry.nb_visits_converted,
+    revenue: entry.revenue,
+  } as GoalConversion;
+}
+
+function normalizeGoalId(id?: string | number): string {
+  if (typeof id === 'number') return String(id);
+  if (typeof id === 'string' && id.trim().length > 0) {
+    return id.trim();
+  }
+  return 'unknown';
+}
+
+function normalizeGoalType(type?: string, id?: string): string {
+  const normalizedType = type?.trim().toLowerCase();
+  const normalizedId = id?.trim().toLowerCase();
+
+  if (normalizedId === 'ecommerceorder') {
+    return 'ecommerce';
+  }
+  if (normalizedId === 'abandonedcart') {
+    return 'ecommerce_cart';
+  }
+  if (normalizedType === 'manually') {
+    return 'manual';
+  }
+  if (normalizedType) {
+    return normalizedType;
+  }
+  return 'manual';
+}
+
+function formatGoalLabel(id: string): string {
+  if (id === 'ecommerceOrder') {
+    return 'Ecommerce Order';
+  }
+  if (id === 'abandonedCart') {
+    return 'Abandoned Cart';
+  }
+  return id;
 }

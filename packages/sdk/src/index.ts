@@ -7,6 +7,8 @@ import {
   type EcommerceRevenueTotals,
   type EcommerceRevenueSeriesPoint,
   type EcommerceRevenueTotalsInput,
+  type GoalConversion,
+  type GoalConversionsInput,
 } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
@@ -117,6 +119,8 @@ export interface GetTrafficChannelsInput {
   limit?: number;
   channelType?: string;
 }
+
+export type GetGoalConversionsInput = Partial<Omit<GoalConversionsInput, 'siteId'>> & { siteId?: number };
 
 export type GetKeyNumbersSeriesInput = GetKeyNumbersInput;
 
@@ -332,6 +336,19 @@ export class MatomoClient {
     });
   }
 
+  async getGoalConversions(input: GetGoalConversionsInput = {}): Promise<GoalConversion[]> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getGoalConversions({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+      limit: input.limit,
+      goalId: input.goalId,
+      goalType: input.goalType,
+    });
+  }
+
   getCacheStats(): CacheStatsSnapshot {
     return this.reports.getCacheStats();
   }
@@ -383,6 +400,7 @@ export type {
   EcommerceRevenueSeriesPoint,
   EcommerceRevenueTotalsInput,
   TrafficChannel,
+  GoalConversion,
 };
 
 export { TrackingService } from './tracking.js';

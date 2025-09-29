@@ -179,3 +179,19 @@ export const trafficChannelsSchema = z.array(
 );
 
 export type TrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
+
+export const goalConversionsSchema = z.array(
+  z
+    .object({
+      idgoal: z.union([z.string(), numeric]).optional(),
+      goal: z.string().optional(),
+      name: z.string().optional(),
+      type: z.string().optional(),
+      nb_conversions: numeric.optional(),
+      nb_visits_converted: numeric.optional(),
+      revenue: numeric.optional(),
+    })
+    .passthrough()
+);
+
+export type RawGoalConversion = z.infer<typeof goalConversionsSchema>[number];

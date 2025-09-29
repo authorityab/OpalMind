@@ -107,6 +107,18 @@ export function buildServer() {
     'Filter traffic channels to a specific type (e.g., direct, search, social)',
     false
   );
+  const goalFilterIdParam = new Parameter(
+    'goalId',
+    ParameterType.String,
+    'Filter to a specific Matomo goal (numeric id or special goal name)',
+    false
+  );
+  const goalTypeFilterParam = new Parameter(
+    'goalType',
+    ParameterType.String,
+    'Filter goal conversions by Matomo goal type (ecommerce, manual, etc.)',
+    false
+  );
 
   toolsService.registerTool(
     'GetKeyNumbers',
@@ -316,6 +328,39 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, channelTypeParam],
     '/tools/get-traffic-channels'
+  );
+
+  toolsService.registerTool(
+    'GetGoalConversions',
+    'Returns goal conversion metrics with optional filtering by goal or type.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const limit = parseOptionalNumber(parameters?.['limit']);
+      const goalIdValue = parameters?.['goalId'];
+      const goalType = parseOptionalString(parameters?.['goalType']);
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      const goalIdNumeric = parseOptionalNumber(goalIdValue);
+      const goalIdString = parseOptionalString(goalIdValue);
+      const goalId = goalIdString ?? goalIdNumeric;
+
+      return matomoClient.getGoalConversions({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+        limit,
+        goalId,
+        goalType,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam, limitParam, goalFilterIdParam, goalTypeFilterParam],
+    '/tools/get-goal-conversions'
   );
 
   toolsService.registerTool(

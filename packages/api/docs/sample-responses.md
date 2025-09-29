@@ -193,6 +193,37 @@ curl -X POST http://localhost:4000/tools/get-traffic-channels \
 ]
 ```
 
+## GetGoalConversions
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-goal-conversions \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"month","date":"2025-01","goalType":"ecommerce"}}'
+```
+
+**Example Response**
+```json
+[
+  {
+    "id": "ecommerceOrder",
+    "label": "Orders",
+    "type": "ecommerce",
+    "nb_conversions": 48,
+    "nb_visits_converted": 32,
+    "revenue": 16420
+  },
+  {
+    "id": "2",
+    "label": "Newsletter Signup",
+    "type": "manual",
+    "nb_conversions": 18,
+    "nb_visits_converted": 18
+  }
+]
+```
+
 ## GetEcommerceOverview
 
 **Request**
