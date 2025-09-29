@@ -163,6 +163,91 @@ curl -X POST http://localhost:4000/tools/get-campaigns \
 ]
 ```
 
+## GetEcommerceOverview
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-ecommerce-overview \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"day","date":"yesterday"}}'
+```
+
+**Example Response**
+```json
+{
+  "nb_conversions": 7,
+  "nb_visits_converted": 5,
+  "revenue": 1349.75,
+  "revenue_per_conversion": 192.8214,
+  "avg_order_revenue": 192.8214,
+  "items": 21,
+  "revenue_subtotal": 1299.75,
+  "revenue_tax": 30,
+  "revenue_shipping": 40,
+  "revenue_discount": 20
+}
+```
+
+## GetEventCategories
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-event-categories \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"week","date":"today","limit":5}}'
+```
+
+**Example Response**
+```json
+[
+  {
+    "label": "CTA",
+    "nb_events": 58,
+    "nb_visits": 42,
+    "sum_event_value": 110,
+    "avg_event_value": 1.9
+  },
+  {
+    "label": "Navigation",
+    "nb_events": 33,
+    "nb_visits": 27,
+    "sum_event_value": 0
+  }
+]
+```
+
+## GetDeviceTypes
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-device-types \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"month","date":"2025-01","limit":5}}'
+```
+
+**Example Response**
+```json
+[
+  {
+    "label": "Desktop",
+    "nb_visits": 980,
+    "nb_actions": 4123,
+    "sum_visit_length": 128400,
+    "bounce_rate": "32%"
+  },
+  {
+    "label": "Smartphone",
+    "nb_visits": 645,
+    "nb_actions": 1984,
+    "sum_visit_length": 58320,
+    "bounce_rate": "48%"
+  }
+]
+```
+
 ## TrackPageview
 
 **Request**

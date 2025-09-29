@@ -12,6 +12,9 @@ const mockMatomoClient = {
   getEntryPages: vi.fn(),
   getCampaigns: vi.fn(),
   getEvents: vi.fn(),
+  getEcommerceOverview: vi.fn(),
+  getEventCategories: vi.fn(),
+  getDeviceTypes: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
@@ -73,6 +76,9 @@ beforeEach(() => {
   mockMatomoClient.getEntryPages.mockReset();
   mockMatomoClient.getCampaigns.mockReset();
   mockMatomoClient.getEvents.mockReset();
+  mockMatomoClient.getEcommerceOverview.mockReset();
+  mockMatomoClient.getEventCategories.mockReset();
+  mockMatomoClient.getDeviceTypes.mockReset();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
@@ -237,6 +243,27 @@ describe('tool endpoints', () => {
     });
   });
 
+  it('returns ecommerce overview with defaults', async () => {
+    const app = await createApp();
+    const ecommerceResponse = { revenue: 120, nb_conversions: 3 };
+    mockMatomoClient.getEcommerceOverview.mockResolvedValue(ecommerceResponse);
+
+    const response = await invoke(app, {
+      url: '/tools/get-ecommerce-overview',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: {} },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(ecommerceResponse);
+    expect(mockMatomoClient.getEcommerceOverview).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'today',
+      segment: undefined,
+    });
+  });
+
   it('retrieves events with optional filters', async () => {
     const app = await createApp();
     const eventsPayload = [{ label: 'CTA > click', nb_events: 5 }];
@@ -269,6 +296,50 @@ describe('tool endpoints', () => {
       category: 'CTA',
       action: 'click',
       name: 'Download',
+    });
+  });
+
+  it('returns event categories with limit parsing', async () => {
+    const app = await createApp();
+    const categoriesPayload = [{ label: 'CTA', nb_events: 5 }];
+    mockMatomoClient.getEventCategories.mockResolvedValue(categoriesPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-event-categories',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { limit: '25', period: 'week', date: '2024-03-01' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(categoriesPayload);
+    expect(mockMatomoClient.getEventCategories).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'week',
+      date: '2024-03-01',
+      segment: undefined,
+      limit: 25,
+    });
+  });
+
+  it('returns device type breakdown', async () => {
+    const app = await createApp();
+    const devicesPayload = [{ label: 'Desktop', nb_visits: 42 }];
+    mockMatomoClient.getDeviceTypes.mockResolvedValue(devicesPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-device-types',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { segment: 'country==SE', limit: '10' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(devicesPayload);
+    expect(mockMatomoClient.getDeviceTypes).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'today',
+      segment: 'country==SE',
+      limit: 10,
     });
   });
 

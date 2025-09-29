@@ -3,7 +3,10 @@ import { ReportsService } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
   Campaign,
+  DeviceTypeSummary,
+  EcommerceSummary,
   EntryPage,
+  EventCategory,
   EventSummary,
   KeyNumbers,
   MostPopularUrl,
@@ -57,6 +60,29 @@ export interface GetEntryPagesInput {
 }
 
 export interface GetCampaignsInput {
+  siteId?: number;
+  period?: string;
+  date?: string;
+  segment?: string;
+  limit?: number;
+}
+
+export interface GetEcommerceOverviewInput {
+  siteId?: number;
+  period?: string;
+  date?: string;
+  segment?: string;
+}
+
+export interface GetEventCategoriesInput {
+  siteId?: number;
+  period?: string;
+  date?: string;
+  segment?: string;
+  limit?: number;
+}
+
+export interface GetDeviceTypesInput {
   siteId?: number;
   period?: string;
   date?: string;
@@ -217,6 +243,38 @@ export class MatomoClient {
     });
   }
 
+  async getEcommerceOverview(input: GetEcommerceOverviewInput = {}): Promise<EcommerceSummary> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getEcommerceOverview({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+    });
+  }
+
+  async getEventCategories(input: GetEventCategoriesInput = {}): Promise<EventCategory[]> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getEventCategories({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+      limit: input.limit,
+    });
+  }
+
+  async getDeviceTypes(input: GetDeviceTypesInput = {}): Promise<DeviceTypeSummary[]> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getDeviceTypes({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+      limit: input.limit,
+    });
+  }
+
   async trackPageview(
     input: Omit<TrackPageviewInput, 'siteId'> & { siteId?: number }
   ): Promise<TrackPageviewResult> {
@@ -249,7 +307,10 @@ export type {
   EventSummary,
   EntryPage,
   Campaign,
+  DeviceTypeSummary,
+  EcommerceSummary,
   TopReferrer,
+  EventCategory,
   TrackEventInput,
   TrackGoalInput,
   TrackPageviewInput,

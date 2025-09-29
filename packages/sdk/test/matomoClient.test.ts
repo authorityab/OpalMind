@@ -186,6 +186,71 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('25');
   });
 
+  it('extracts ecommerce overview from nested responses', async () => {
+    const fetchMock = createFetchMock({
+      '2025-09-25': {
+        'idgoal=ecommerceOrder': {
+          nb_conversions: '3',
+          revenue: '120.5',
+          avg_order_revenue: '40.1666',
+        },
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
+    const result = await client.getEcommerceOverview({ date: '2025-09-25' });
+
+    expect(result.nb_conversions).toBe(3);
+    expect(result.revenue).toBeCloseTo(120.5);
+    expect(result.avg_order_revenue).toBeCloseTo(40.1666);
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Goals.get');
+    expect(url.searchParams.get('idGoal')).toBe('ecommerceOrder');
+    expect(url.searchParams.get('date')).toBe('2025-09-25');
+    expect(url.searchParams.get('idSite')).toBe('6');
+  });
+
+  it('returns event categories with limit handling', async () => {
+    const fetchMock = createFetchMock([
+      { label: 'CTA', nb_events: '5' },
+      { label: 'Navigation', nb_events: '2' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const result = await client.getEventCategories({ limit: 20, segment: 'country==SE' });
+
+    expect(result[0].nb_events).toBe(5);
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Events.getCategory');
+    expect(url.searchParams.get('filter_limit')).toBe('20');
+    expect(url.searchParams.get('segment')).toBe('country==SE');
+    expect(url.searchParams.get('flat')).toBe('1');
+  });
+
+  it('lists device types with numeric coercion and overrides', async () => {
+    const fetchMock = createFetchMock([
+      { label: 'Desktop', nb_visits: '40' },
+      { label: 'Mobile', nb_visits: '25' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.getDeviceTypes({ siteId: 9, period: 'week', date: '2025-09-01', limit: 5 });
+
+    expect(result[0].nb_visits).toBe(40);
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('DevicesDetection.getType');
+    expect(url.searchParams.get('idSite')).toBe('9');
+    expect(url.searchParams.get('period')).toBe('week');
+    expect(url.searchParams.get('date')).toBe('2025-09-01');
+    expect(url.searchParams.get('filter_limit')).toBe('5');
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

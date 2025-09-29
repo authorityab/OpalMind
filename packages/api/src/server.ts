@@ -226,6 +226,29 @@ export function buildServer() {
   );
 
   toolsService.registerTool(
+    'GetEcommerceOverview',
+    'Returns ecommerce order revenue and conversion metrics for the selected period.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      return matomoClient.getEcommerceOverview({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam],
+    '/tools/get-ecommerce-overview'
+  );
+
+  toolsService.registerTool(
     'GetEvents',
     'Returns aggregate event metrics optionally filtered by category, action, or name.',
     async (parameters: Record<string, unknown>) => {
@@ -254,6 +277,56 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, eventCategoryFilterParam, eventActionFilterParam, eventNameFilterParam],
     '/tools/get-events'
+  );
+
+  toolsService.registerTool(
+    'GetEventCategories',
+    'Summarizes events grouped by category with aggregate counts and values.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const limit = parseOptionalNumber(parameters?.['limit']);
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      return matomoClient.getEventCategories({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+        limit,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    '/tools/get-event-categories'
+  );
+
+  toolsService.registerTool(
+    'GetDeviceTypes',
+    'Breaks down visits by high-level device categories (desktop, mobile, tablet).',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const limit = parseOptionalNumber(parameters?.['limit']);
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      return matomoClient.getDeviceTypes({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+        limit,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    '/tools/get-device-types'
   );
 
   toolsService.registerTool(

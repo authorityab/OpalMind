@@ -15,6 +15,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 
 ## Features
 - Typed Matomo SDK with convenience methods for key metrics, most popular URLs, and top referrers.
+- Expanded reporting helpers covering ecommerce revenue, event categories, campaigns, entry pages, and device breakdowns.
 - Opal Tools SDK integration exposing `/tools/*` endpoints plus discovery metadata.
 - Bearer-token authenticated Express service ready for Opal integration.
 - Vitest-based unit and integration tests for SDK and API layers.
@@ -85,7 +86,10 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `GetTopReferrers` | `POST /tools/get-top-referrers` | Lists top referrer sources for a period/date. |
 | `GetEntryPages` | `POST /tools/get-entry-pages` | Shows entry-page performance with bounce and exit metrics. |
 | `GetCampaigns` | `POST /tools/get-campaigns` | Aggregates referrer campaign activity and conversions. |
+| `GetEcommerceOverview` | `POST /tools/get-ecommerce-overview` | Summarizes ecommerce revenue and conversion totals. |
 | `GetEvents` | `POST /tools/get-events` | Returns aggregated Matomo event metrics with optional filters. |
+| `GetEventCategories` | `POST /tools/get-event-categories` | Aggregates events grouped by category for quick comparisons. |
+| `GetDeviceTypes` | `POST /tools/get-device-types` | Breaks down visits by high-level device type (desktop, mobile, tablet). |
 | `TrackPageview` | `POST /track/pageview` | Records server-side pageviews with optional `pv_id` continuity. |
 | `TrackEvent` | `POST /track/event` | Sends Matomo custom events (category/action/name/value). |
 | `TrackGoal` | `POST /track/goal` | Captures goal conversions with optional revenue. |

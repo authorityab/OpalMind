@@ -1,6 +1,24 @@
 import { matomoGet, MatomoHttpClient } from './httpClient.js';
-import { campaignsSchema, entryPagesSchema, eventsSchema, mostPopularUrlsSchema, topReferrersSchema } from './schemas.js';
-import type { Campaign, EntryPage, EventSummary, MostPopularUrl, TopReferrer } from './schemas.js';
+import {
+  campaignsSchema,
+  deviceTypesSchema,
+  ecommerceSummarySchema,
+  entryPagesSchema,
+  eventCategoriesSchema,
+  eventsSchema,
+  mostPopularUrlsSchema,
+  topReferrersSchema,
+} from './schemas.js';
+import type {
+  Campaign,
+  DeviceTypeSummary,
+  EcommerceSummary,
+  EntryPage,
+  EventCategory,
+  EventSummary,
+  MostPopularUrl,
+  TopReferrer,
+} from './schemas.js';
 
 export interface MostPopularUrlsInput {
   siteId: number;
@@ -38,6 +56,29 @@ export interface EntryPagesInput {
 }
 
 export interface CampaignsInput {
+  siteId: number;
+  period: string;
+  date: string;
+  limit?: number;
+  segment?: string;
+}
+
+export interface EcommerceOverviewInput {
+  siteId: number;
+  period: string;
+  date: string;
+  segment?: string;
+}
+
+export interface EventCategoriesInput {
+  siteId: number;
+  period: string;
+  date: string;
+  limit?: number;
+  segment?: string;
+}
+
+export interface DeviceTypesInput {
   siteId: number;
   period: string;
   date: string;
@@ -177,4 +218,109 @@ export class ReportsService {
     this.setCache(cacheKey, parsed);
     return parsed;
   }
+
+  async getEcommerceOverview(input: EcommerceOverviewInput): Promise<EcommerceSummary> {
+    const cacheKey = JSON.stringify({ feature: 'ecommerceOverview', input });
+    const cached = this.getFromCache<EcommerceSummary>(cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<unknown>(this.http, {
+      method: 'Goals.get',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        idGoal: 'ecommerceOrder',
+      },
+    });
+
+    const summary = extractEcommerceSummary(data);
+    const parsed = ecommerceSummarySchema.parse(summary ?? {});
+    this.setCache(cacheKey, parsed);
+    return parsed;
+  }
+
+  async getEventCategories(input: EventCategoriesInput): Promise<EventCategory[]> {
+    const cacheKey = JSON.stringify({ feature: 'eventCategories', input });
+    const cached = this.getFromCache<EventCategory[]>(cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<EventCategory[]>(this.http, {
+      method: 'Events.getCategory',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        filter_limit: input.limit ?? 10,
+        flat: 1,
+      },
+    });
+
+    const parsed = eventCategoriesSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
+  }
+
+  async getDeviceTypes(input: DeviceTypesInput): Promise<DeviceTypeSummary[]> {
+    const cacheKey = JSON.stringify({ feature: 'deviceTypes', input });
+    const cached = this.getFromCache<DeviceTypeSummary[]>(cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<DeviceTypeSummary[]>(this.http, {
+      method: 'DevicesDetection.getType',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        filter_limit: input.limit ?? 10,
+      },
+    });
+
+    const parsed = deviceTypesSchema.parse(data);
+    this.setCache(cacheKey, parsed);
+    return parsed;
+  }
+}
+
+function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+
+  if (!Array.isArray(data)) {
+    const record = data as Record<string, unknown>;
+    if ('revenue' in record || 'nb_conversions' in record || 'avg_order_revenue' in record) {
+      return record;
+    }
+
+    for (const key of Object.keys(record)) {
+      if (key.toLowerCase().includes('ecommerceorder')) {
+        const nested = extractEcommerceSummary(record[key]);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+
+    for (const value of Object.values(record)) {
+      const nested = extractEcommerceSummary(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  if (Array.isArray(data)) {
+    for (const value of data) {
+      const nested = extractEcommerceSummary(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
 }

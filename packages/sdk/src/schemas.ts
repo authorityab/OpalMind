@@ -107,3 +107,59 @@ export const campaignsSchema = z.array(
 );
 
 export type Campaign = z.infer<typeof campaignsSchema>[number];
+
+export const ecommerceSummarySchema = z
+  .object({
+    nb_conversions: numeric.optional(),
+    nb_visits: numeric.optional(),
+    nb_visits_converted: numeric.optional(),
+    conversion_rate: z.string().optional(),
+    revenue: numeric.optional(),
+    revenue_per_visit: numeric.optional(),
+    revenue_per_conversion: numeric.optional(),
+    avg_order_revenue: numeric.optional(),
+    items: numeric.optional(),
+    revenue_subtotal: numeric.optional(),
+    revenue_tax: numeric.optional(),
+    revenue_shipping: numeric.optional(),
+    revenue_discount: numeric.optional(),
+  })
+  .passthrough();
+
+export type EcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
+
+export const eventCategoriesSchema = z.array(
+  z
+    .object({
+      label: z.string(),
+      nb_events: numeric.optional(),
+      nb_visits: numeric.optional(),
+      nb_actions: numeric.optional(),
+      sum_event_value: numeric.optional(),
+      nb_events_with_value: numeric.optional(),
+      avg_event_value: z.union([numeric, z.string()]).optional(),
+      min_event_value: numeric.optional(),
+      max_event_value: numeric.optional(),
+    })
+    .passthrough()
+);
+
+export type EventCategory = z.infer<typeof eventCategoriesSchema>[number];
+
+export const deviceTypesSchema = z.array(
+  z
+    .object({
+      label: z.string(),
+      nb_visits: numeric.optional(),
+      nb_actions: numeric.optional(),
+      nb_visits_converted: numeric.optional(),
+      nb_hits: numeric.optional(),
+      sum_visit_length: numeric.optional(),
+      avg_time_on_site: numeric.optional(),
+      bounce_rate: z.string().optional(),
+      max_actions: numeric.optional(),
+    })
+    .passthrough()
+);
+
+export type DeviceTypeSummary = z.infer<typeof deviceTypesSchema>[number];
