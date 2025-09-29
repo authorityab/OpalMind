@@ -243,6 +243,48 @@ describe('MatomoClient', () => {
     expect(stats.total.sets).toBe(2);
   });
 
+  it('returns ecommerce revenue totals with series when requested', async () => {
+    const payload = {
+      '2025-09-25': { nb_conversions: '2', revenue: '100', items: '5' },
+      '2025-09-26': { nb_conversions: '1', revenue: '50', items: '2' },
+    };
+    const fetchMock = createFetchMock(payload);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
+    const result = await client.getEcommerceRevenueTotals({
+      period: 'day',
+      date: 'last2',
+      includeSeries: true,
+    });
+
+    expect(result.totals.revenue).toBe(150);
+    expect(result.totals.nb_conversions).toBe(3);
+    expect(result.totals.items).toBe(7);
+    expect(result.series).toHaveLength(2);
+    expect(result.series?.[0].label).toBe('2025-09-25');
+    expect(result.series?.[0].revenue).toBe(100);
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Goals.get');
+    expect(url.searchParams.get('idGoal')).toBe('ecommerceOrder');
+    expect(url.searchParams.get('idSite')).toBe('6');
+    expect(url.searchParams.get('period')).toBe('day');
+    expect(url.searchParams.get('date')).toBe('last2');
+  });
+
+  it('omits series when not requested and single summary', async () => {
+    const payload = { nb_conversions: '2', revenue: '80' };
+    const fetchMock = createFetchMock(payload);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const result = await client.getEcommerceRevenueTotals();
+
+    expect(result.totals.revenue).toBe(80);
+    expect(result.series).toBeUndefined();
+  });
+
   it('extracts ecommerce overview from nested responses', async () => {
     const fetchMock = createFetchMock({
       '2025-09-25': {

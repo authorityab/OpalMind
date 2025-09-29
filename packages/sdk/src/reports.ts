@@ -70,6 +70,19 @@ export interface EcommerceOverviewInput {
   segment?: string;
 }
 
+export interface EcommerceRevenueTotalsInput extends EcommerceOverviewInput {
+  includeSeries?: boolean;
+}
+
+export interface EcommerceRevenueSeriesPoint extends EcommerceSummary {
+  label: string;
+}
+
+export interface EcommerceRevenueTotals {
+  totals: EcommerceSummary;
+  series?: EcommerceRevenueSeriesPoint[];
+}
+
 export interface EventCategoriesInput {
   siteId: number;
   period: string;
@@ -340,6 +353,43 @@ export class ReportsService {
     return parsed;
   }
 
+  async getEcommerceRevenueTotals(input: EcommerceRevenueTotalsInput): Promise<EcommerceRevenueTotals> {
+    const feature = 'ecommerceRevenueTotals';
+    const cacheKey = this.makeCacheKey(feature, input);
+    const cached = this.getFromCache<EcommerceRevenueTotals>(feature, cacheKey);
+    if (cached) return cached;
+
+    const data = await matomoGet<unknown>(this.http, {
+      method: 'Goals.get',
+      params: {
+        idSite: input.siteId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+        idGoal: 'ecommerceOrder',
+      },
+    });
+
+    const entries = collectEcommerceSummaries(data);
+    const parsedEntries = entries.map(entry => ({
+      label: entry.label,
+      summary: ecommerceSummarySchema.parse(entry.value ?? {}),
+    }));
+
+    const summaries = parsedEntries.map(entry => entry.summary);
+    const totals = summaries.length > 0 ? aggregateEcommerceSummaries(summaries) : ecommerceSummarySchema.parse({ revenue: 0, nb_conversions: 0 });
+
+    const includeSeries = input.includeSeries ?? false;
+    const seriesCandidates = parsedEntries.filter(entry => entry.label !== '');
+    const series = includeSeries || seriesCandidates.length > 1
+      ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
+      : undefined;
+
+    const result: EcommerceRevenueTotals = { totals, series };
+    this.setCache(feature, cacheKey, result);
+    return result;
+  }
+
   async getEventCategories(input: EventCategoriesInput): Promise<EventCategory[]> {
     const feature = 'eventCategories';
     const cacheKey = this.makeCacheKey(feature, input);
@@ -387,41 +437,78 @@ export class ReportsService {
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {
-  if (!data || typeof data !== 'object') {
-    return undefined;
-  }
+  const summaries = collectEcommerceSummaries(data);
+  return summaries[0]?.value;
+}
 
-  if (!Array.isArray(data)) {
-    const record = data as Record<string, unknown>;
-    if ('revenue' in record || 'nb_conversions' in record || 'avg_order_revenue' in record) {
-      return record;
-    }
+interface EcommerceSummaryCandidate {
+  label: string;
+  value: Record<string, unknown>;
+}
 
-    for (const key of Object.keys(record)) {
-      if (key.toLowerCase().includes('ecommerceorder')) {
-        const nested = extractEcommerceSummary(record[key]);
-        if (nested) {
-          return nested;
-        }
-      }
-    }
-
-    for (const value of Object.values(record)) {
-      const nested = extractEcommerceSummary(value);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
+function collectEcommerceSummaries(data: unknown, label = ''): EcommerceSummaryCandidate[] {
+  if (!data) return [];
 
   if (Array.isArray(data)) {
-    for (const value of data) {
-      const nested = extractEcommerceSummary(value);
-      if (nested) {
-        return nested;
+    return data.flatMap((entry, index) => collectEcommerceSummaries(entry, labelForChild(label, String(index))));
+  }
+
+  if (typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    if (isEcommerceSummaryCandidate(record)) {
+      return [{ label, value: record }];
+    }
+
+    return Object.entries(record).flatMap(([key, value]) => collectEcommerceSummaries(value, labelForChild(label, key)));
+  }
+
+  return [];
+}
+
+function labelForChild(parent: string, child: string): string {
+  const normalized = child.replace(/^idgoal[=:]/i, '').trim();
+  return parent ? `${parent}.${normalized}` : normalized;
+}
+
+function isEcommerceSummaryCandidate(record: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(record, 'revenue') ||
+    Object.prototype.hasOwnProperty.call(record, 'nb_conversions') ||
+    Object.prototype.hasOwnProperty.call(record, 'avg_order_revenue')
+  );
+}
+
+const numericEcommerceFields: Array<keyof EcommerceSummary> = [
+  'nb_conversions',
+  'nb_visits',
+  'nb_visits_converted',
+  'revenue',
+  'revenue_per_visit',
+  'revenue_per_conversion',
+  'avg_order_revenue',
+  'items',
+  'revenue_subtotal',
+  'revenue_tax',
+  'revenue_shipping',
+  'revenue_discount',
+];
+
+function aggregateEcommerceSummaries(summaries: EcommerceSummary[]): EcommerceSummary {
+  const totals: Record<string, number> = {};
+
+  for (const summary of summaries) {
+    for (const field of numericEcommerceFields) {
+      const value = summary[field];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        totals[field] = (totals[field] ?? 0) + value;
       }
     }
   }
 
-  return undefined;
+  if (totals.nb_conversions && totals.nb_conversions > 0 && typeof totals.revenue === 'number') {
+    totals.avg_order_revenue = totals.revenue / totals.nb_conversions;
+    totals.revenue_per_conversion = totals.revenue / totals.nb_conversions;
+  }
+
+  return ecommerceSummarySchema.parse(totals);
 }

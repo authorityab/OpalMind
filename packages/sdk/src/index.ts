@@ -1,5 +1,13 @@
 import { MatomoHttpClient, matomoGet } from './httpClient.js';
-import { ReportsService, type CacheStatsSnapshot, type ReportsServiceOptions, type CacheEvent } from './reports.js';
+import {
+  ReportsService,
+  type CacheStatsSnapshot,
+  type ReportsServiceOptions,
+  type CacheEvent,
+  type EcommerceRevenueTotals,
+  type EcommerceRevenueSeriesPoint,
+  type EcommerceRevenueTotalsInput,
+} from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
   Campaign,
@@ -78,6 +86,10 @@ export interface GetEcommerceOverviewInput {
   period?: string;
   date?: string;
   segment?: string;
+}
+
+export interface GetEcommerceRevenueTotalsInput extends GetEcommerceOverviewInput {
+  includeSeries?: boolean;
 }
 
 export interface GetEventCategoriesInput {
@@ -263,6 +275,19 @@ export class MatomoClient {
     });
   }
 
+  async getEcommerceRevenueTotals(
+    input: GetEcommerceRevenueTotalsInput = {}
+  ): Promise<EcommerceRevenueTotals> {
+    const siteId = this.resolveSiteId(input.siteId);
+    return this.reports.getEcommerceRevenueTotals({
+      siteId,
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+      segment: input.segment,
+      includeSeries: input.includeSeries,
+    });
+  }
+
   async getEventCategories(input: GetEventCategoriesInput = {}): Promise<EventCategory[]> {
     const siteId = this.resolveSiteId(input.siteId);
     return this.reports.getEventCategories({
@@ -332,6 +357,9 @@ export type {
   TrackResult,
   CacheStatsSnapshot,
   CacheEvent,
+  EcommerceRevenueTotals,
+  EcommerceRevenueSeriesPoint,
+  EcommerceRevenueTotalsInput,
 };
 
 export { TrackingService } from './tracking.js';

@@ -189,6 +189,44 @@ curl -X POST http://localhost:4000/tools/get-ecommerce-overview \
 }
 ```
 
+## GetEcommerceRevenue
+
+**Request**
+```bash
+curl -X POST http://localhost:4000/tools/get-ecommerce-revenue \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"period":"day","date":"last7","includeSeries":true}}'
+```
+
+**Example Response**
+```json
+{
+  "totals": {
+    "nb_conversions": 32,
+    "revenue": 4820,
+    "avg_order_revenue": 150.625,
+    "items": 96
+  },
+  "series": [
+    {
+      "label": "2025-09-20",
+      "nb_conversions": 4,
+      "revenue": 600,
+      "avg_order_revenue": 150,
+      "items": 12
+    },
+    {
+      "label": "2025-09-21",
+      "nb_conversions": 6,
+      "revenue": 930,
+      "avg_order_revenue": 155,
+      "items": 18
+    }
+  ]
+}
+```
+
 ## GetEventCategories
 
 **Request**

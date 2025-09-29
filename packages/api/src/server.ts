@@ -95,6 +95,12 @@ export function buildServer() {
   const eventCategoryFilterParam = new Parameter('category', ParameterType.String, 'Filter by event category', false);
   const eventActionFilterParam = new Parameter('action', ParameterType.String, 'Filter by event action', false);
   const eventNameFilterParam = new Parameter('name', ParameterType.String, 'Filter by event name', false);
+  const includeSeriesParam = new Parameter(
+    'includeSeries',
+    ParameterType.Boolean,
+    'Include per-period breakdown for ecommerce revenue totals',
+    false
+  );
 
   toolsService.registerTool(
     'GetKeyNumbers',
@@ -246,6 +252,37 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-ecommerce-overview'
+  );
+
+  toolsService.registerTool(
+    'GetEcommerceRevenue',
+    'Aggregates ecommerce revenue totals with optional per-period breakdown.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const includeSeriesValue = parameters?.['includeSeries'];
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+      const includeSeries =
+        typeof includeSeriesValue === 'boolean'
+          ? includeSeriesValue
+          : typeof includeSeriesValue === 'string'
+          ? includeSeriesValue.toLowerCase() === 'true'
+          : undefined;
+
+      return matomoClient.getEcommerceRevenueTotals({
+        siteId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+        includeSeries,
+      });
+    },
+    [siteIdParam, periodParam, dateParam, segmentParam, includeSeriesParam],
+    '/tools/get-ecommerce-revenue'
   );
 
   toolsService.registerTool(

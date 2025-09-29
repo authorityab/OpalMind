@@ -13,6 +13,7 @@ const mockMatomoClient = {
   getCampaigns: vi.fn(),
   getEvents: vi.fn(),
   getEcommerceOverview: vi.fn(),
+  getEcommerceRevenueTotals: vi.fn(),
   getEventCategories: vi.fn(),
   getDeviceTypes: vi.fn(),
   trackPageview: vi.fn(),
@@ -77,6 +78,7 @@ beforeEach(() => {
   mockMatomoClient.getCampaigns.mockReset();
   mockMatomoClient.getEvents.mockReset();
   mockMatomoClient.getEcommerceOverview.mockReset();
+  mockMatomoClient.getEcommerceRevenueTotals.mockReset();
   mockMatomoClient.getEventCategories.mockReset();
   mockMatomoClient.getDeviceTypes.mockReset();
   mockMatomoClient.trackPageview.mockReset();
@@ -261,6 +263,31 @@ describe('tool endpoints', () => {
       period: 'day',
       date: 'today',
       segment: undefined,
+    });
+  });
+
+  it('returns ecommerce revenue totals with optional series', async () => {
+    const app = await createApp();
+    const payload = {
+      totals: { revenue: 150, nb_conversions: 3 },
+      series: [{ label: '2025-09-25', revenue: 100, nb_conversions: 2 }],
+    };
+    mockMatomoClient.getEcommerceRevenueTotals.mockResolvedValue(payload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-ecommerce-revenue',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { period: 'day', date: 'last2', includeSeries: 'true' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(payload);
+    expect(mockMatomoClient.getEcommerceRevenueTotals).toHaveBeenCalledWith({
+      siteId: undefined,
+      period: 'day',
+      date: 'last2',
+      segment: undefined,
+      includeSeries: true,
     });
   });
 
