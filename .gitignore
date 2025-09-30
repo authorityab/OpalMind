@@ -9,4 +9,3 @@ packages/*/dist
 *.tsbuildinfo
 deploy/matokit.env
 docker-compose.override.yml
-.assistant/

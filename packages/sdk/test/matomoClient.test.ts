@@ -92,6 +92,23 @@ describe('MatomoClient', () => {
     expect(result.nb_pageviews).toBe(0);
   });
 
+  it('unwraps array key number payloads returned by Matomo', async () => {
+    const fetchMock = createSequencedFetchMock([
+      [{ nb_visits: 5, nb_actions: '10' }],
+      [{ nb_pageviews: '15', nb_uniq_pageviews: '12' }],
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 13 });
+    const result = await client.getKeyNumbers();
+
+    expect(result.nb_visits).toBe(5);
+    expect(result.nb_actions).toBe(10);
+    expect(result.nb_pageviews).toBe(15);
+    expect(result.nb_uniq_pageviews).toBe(12);
+  });
+
   it('falls back to nb_visits_series totals when aggregate visits are NaN', async () => {
     const fetchMock = createSequencedFetchMock([
       {
@@ -175,6 +192,24 @@ describe('MatomoClient', () => {
     expect(result).toEqual([
       { date: '2025-08-01', nb_visits: 0 },
       { date: '2025-08-02', nb_visits: 3 },
+    ]);
+  });
+
+  it('unwraps array entries returned in key number series', async () => {
+    const seriesData = {
+      '2025-08-01': [{ nb_visits: '4', nb_pageviews: '6' }],
+      '2025-08-02': [[{ nb_visits: 2 }]],
+    } as Record<string, unknown>;
+
+    const fetchMock = createFetchMock(seriesData);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 14 });
+    const result = await client.getKeyNumbersSeries({ date: '2025-08-01,2025-08-02', period: 'day' });
+
+    expect(result).toEqual([
+      { date: '2025-08-01', nb_visits: 4, nb_pageviews: 6 },
+      { date: '2025-08-02', nb_visits: 2 },
     ]);
   });
 

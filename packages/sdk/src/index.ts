@@ -216,12 +216,29 @@ function sumSeriesValues(series: unknown): number | undefined {
   return seen ? total : undefined;
 }
 
+function unwrapMatomoValue(raw: unknown): unknown {
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return undefined;
+    return unwrapMatomoValue(raw[0]);
+  }
+  return raw;
+}
+
+function unwrapToRecord(raw: unknown): Record<string, unknown> {
+  const unwrapped = unwrapMatomoValue(raw);
+  if (unwrapped && typeof unwrapped === 'object') {
+    return { ...(unwrapped as Record<string, unknown>) };
+  }
+  return {};
+}
+
 function normalizeKeyNumbersPayload(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === 'object') {
-    return { ...(raw as Record<string, unknown>) };
+  const record = unwrapToRecord(raw);
+  if (Object.keys(record).length > 0) {
+    return record;
   }
 
-  const nb_visits = toFiniteNumber(raw) ?? 0;
+  const nb_visits = toFiniteNumber(unwrapMatomoValue(raw)) ?? 0;
   return { nb_visits };
 }
 
@@ -346,7 +363,7 @@ export class MatomoClient {
     let pageviewSummary: Partial<Pick<KeyNumbers, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
 
     try {
-      const actionsSummary = await matomoGet<Record<string, unknown>>(this.http, {
+      const actionsRaw = await matomoGet<unknown>(this.http, {
         method: 'Actions.get',
         params: {
           idSite: siteId,
@@ -355,6 +372,8 @@ export class MatomoClient {
           segment: input.segment,
         },
       });
+
+      const actionsSummary = unwrapToRecord(actionsRaw);
 
       const nb_pageviews = toFiniteNumber(actionsSummary?.['nb_pageviews']);
       const nb_uniq_pageviews = toFiniteNumber(actionsSummary?.['nb_uniq_pageviews']);
@@ -415,11 +434,13 @@ export class MatomoClient {
 
     const normalizedResponse = Object.fromEntries(
       Object.entries(response ?? {}).map(([label, value]) => {
-        if (value && typeof value === 'object') {
-          return [label, value as Record<string, unknown>];
+        const record = unwrapToRecord(value);
+
+        if (Object.keys(record).length > 0) {
+          return [label, record];
         }
 
-        const visits = toFiniteNumber(value) ?? 0;
+        const visits = toFiniteNumber(unwrapMatomoValue(value)) ?? 0;
         return [label, { nb_visits: visits } as Record<string, unknown>];
       })
     );
