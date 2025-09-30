@@ -128,6 +128,33 @@ export interface KeyNumbersSeriesPoint extends KeyNumbers {
   date: string;
 }
 
+type DiagnosticCheckId = 'base-url' | 'token-auth' | 'site-access';
+
+export type DiagnosticStatus = 'ok' | 'error' | 'skipped';
+
+export interface MatomoDiagnosticError {
+  type: 'matomo' | 'network' | 'unknown';
+  message: string;
+  code?: string | number;
+}
+
+export interface MatomoDiagnosticCheck {
+  id: DiagnosticCheckId;
+  label: string;
+  status: DiagnosticStatus;
+  details?: Record<string, unknown>;
+  error?: MatomoDiagnosticError;
+  skippedReason?: string;
+}
+
+export interface RunDiagnosticsInput {
+  siteId?: number;
+}
+
+export interface RunDiagnosticsResult {
+  checks: MatomoDiagnosticCheck[];
+}
+
 const keyNumberNumericFields: Array<keyof KeyNumbers> = [
   'nb_visits',
   'nb_uniq_visitors',
@@ -209,6 +236,86 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
   }
 
   return sanitized;
+}
+
+interface MatomoErrorPayload {
+  result?: unknown;
+  message?: unknown;
+  code?: unknown;
+  [key: string]: unknown;
+}
+
+class DiagnosticMatomoError extends Error {
+  readonly code?: string | number;
+
+  constructor(message: string, code?: string | number) {
+    super(message);
+    this.name = 'DiagnosticMatomoError';
+    this.code = code;
+  }
+}
+
+function extractMatomoError(payload: unknown): { message: string; code?: string | number } | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+
+  const cast = payload as MatomoErrorPayload;
+  const result = typeof cast.result === 'string' ? cast.result.toLowerCase() : undefined;
+
+  if (result === 'error') {
+    const message = typeof cast.message === 'string' ? cast.message : 'Matomo reported an error.';
+    const codeValue = cast.code;
+    const code = typeof codeValue === 'string' || typeof codeValue === 'number' ? codeValue : undefined;
+    return { message, code };
+  }
+
+  if ('error' in cast && typeof cast.error === 'string') {
+    return { message: cast.error };
+  }
+
+  return undefined;
+}
+
+function toDiagnosticError(error: unknown): MatomoDiagnosticError {
+  if (error instanceof DiagnosticMatomoError) {
+    return {
+      type: 'matomo',
+      message: error.message,
+      code: error.code,
+    };
+  }
+
+  if (error instanceof Error) {
+    const message = error.message || 'Unknown error';
+    const type = message.toLowerCase().includes('fetch failed') ? 'network' : 'unknown';
+    return { type, message };
+  }
+
+  return { type: 'unknown', message: String(error) };
+}
+
+type DiagnosticHandler = () => Promise<Record<string, unknown> | void>;
+
+async function performDiagnosticCheck(
+  id: DiagnosticCheckId,
+  label: string,
+  handler: DiagnosticHandler
+): Promise<MatomoDiagnosticCheck> {
+  try {
+    const details = await handler();
+    return {
+      id,
+      label,
+      status: 'ok',
+      ...(details ? { details } : {}),
+    };
+  } catch (error) {
+    return {
+      id,
+      label,
+      status: 'error',
+      error: toDiagnosticError(error),
+    };
+  }
 }
 
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
@@ -478,6 +585,139 @@ export class MatomoClient {
   ): Promise<TrackResult> {
     const siteId = this.resolveSiteId(input.siteId);
     return this.tracking.trackGoal({ ...input, siteId });
+  }
+
+  async runDiagnostics(input: RunDiagnosticsInput = {}): Promise<RunDiagnosticsResult> {
+    const checks: MatomoDiagnosticCheck[] = [];
+
+    const baseCheck = await performDiagnosticCheck('base-url', 'Matomo base URL reachability', async () => {
+      const payload = await matomoGet<unknown>(this.http, {
+        method: 'API.getVersion',
+      });
+
+      const errorInfo = extractMatomoError(payload);
+      if (errorInfo) {
+        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
+      }
+
+      if (typeof payload === 'string') {
+        return { version: payload };
+      }
+
+      if (payload && typeof payload === 'object') {
+        const version = (payload as Record<string, unknown>)['version'];
+        if (typeof version === 'string') {
+          return { version };
+        }
+      }
+
+      return undefined;
+    });
+
+    checks.push(baseCheck);
+
+    if (baseCheck.status !== 'ok') {
+      checks.push({
+        id: 'token-auth',
+        label: 'Token authentication',
+        status: 'skipped',
+        skippedReason: 'Matomo base URL could not be reached.',
+      });
+      checks.push({
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'skipped',
+        skippedReason: 'Matomo base URL could not be reached.',
+      });
+
+      return { checks };
+    }
+
+    const tokenCheck = await performDiagnosticCheck('token-auth', 'Token authentication', async () => {
+      const payload = await matomoGet<unknown>(this.http, {
+        method: 'API.getLoggedInUser',
+      });
+
+      const errorInfo = extractMatomoError(payload);
+      if (errorInfo) {
+        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
+      }
+
+      if (payload && typeof payload === 'object') {
+        const login = (payload as Record<string, unknown>)['login'];
+        if (typeof login === 'string') {
+          return { login };
+        }
+      }
+
+      return undefined;
+    });
+
+    checks.push(tokenCheck);
+
+    if (tokenCheck.status !== 'ok') {
+      checks.push({
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'skipped',
+        skippedReason: 'Authentication failed, unable to verify site permissions.',
+      });
+
+      return { checks };
+    }
+
+    let resolvedSiteId: number | undefined;
+    let siteIdError: MatomoDiagnosticError | undefined;
+
+    try {
+      resolvedSiteId = this.resolveSiteId(input.siteId);
+    } catch (error) {
+      siteIdError = toDiagnosticError(error);
+    }
+
+    if (siteIdError) {
+      checks.push({
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'error',
+        error: siteIdError,
+      });
+
+      return { checks };
+    }
+
+    const siteIdForCheck = resolvedSiteId as number;
+
+    const siteCheck = await performDiagnosticCheck('site-access', 'Site access permissions', async () => {
+      const payload = await matomoGet<unknown>(this.http, {
+        method: 'SitesManager.getSiteFromId',
+        params: { idSite: siteIdForCheck },
+      });
+
+      const errorInfo = extractMatomoError(payload);
+      if (errorInfo) {
+        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
+      }
+
+      if (payload && typeof payload === 'object') {
+        const data = payload as Record<string, unknown>;
+        const idsite = typeof data.idsite === 'string' || typeof data.idsite === 'number' ? data.idsite : undefined;
+        const name = typeof data.name === 'string' ? data.name : undefined;
+
+        if (idsite !== undefined || name !== undefined) {
+          const details: Record<string, unknown> = {};
+          if (idsite !== undefined) details.idsite = idsite;
+          if (name !== undefined) details.name = name;
+          return details;
+        }
+      }
+
+      return undefined;
+    });
+
+    checks.push(siteCheck);
+
+    return { checks };
   }
 }
 

@@ -18,6 +18,7 @@ const mockMatomoClient = {
   getDeviceTypes: vi.fn(),
   getTrafficChannels: vi.fn(),
   getGoalConversions: vi.fn(),
+  runDiagnostics: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
@@ -85,6 +86,7 @@ beforeEach(() => {
   mockMatomoClient.getDeviceTypes.mockReset();
   mockMatomoClient.getTrafficChannels.mockReset();
   mockMatomoClient.getGoalConversions.mockReset();
+  mockMatomoClient.runDiagnostics.mockReset();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
@@ -181,6 +183,26 @@ describe('tool endpoints', () => {
       segment: undefined,
       limit: 5,
     });
+  });
+
+  it('returns diagnostics result from Matomo client', async () => {
+    const app = await createApp();
+    const diagnostics = {
+      checks: [
+        { id: 'base-url', label: 'Matomo base URL reachability', status: 'ok', details: { version: '5.0.0' } },
+      ],
+    };
+    mockMatomoClient.runDiagnostics.mockResolvedValue(diagnostics);
+
+    const response = await invoke(app, {
+      url: '/tools/diagnose-matomo',
+      headers: { authorization: 'Bearer change-me' },
+      body: { parameters: { siteId: '7' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(diagnostics);
+    expect(mockMatomoClient.runDiagnostics).toHaveBeenCalledWith({ siteId: 7 });
   });
 
   it('forwards referrer requests with defaults when omitted', async () => {

@@ -148,6 +148,106 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('date')).toBe('last2');
   });
 
+  it('runs diagnostics and reports successful checks', async () => {
+    const fetchMock = createSequencedFetchMock([
+      '5.0.0',
+      { login: 'superuser' },
+      { idsite: '1', name: 'Demo Site' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks).toEqual([
+      {
+        id: 'base-url',
+        label: 'Matomo base URL reachability',
+        status: 'ok',
+        details: { version: '5.0.0' },
+      },
+      {
+        id: 'token-auth',
+        label: 'Token authentication',
+        status: 'ok',
+        details: { login: 'superuser' },
+      },
+      {
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'ok',
+        details: { idsite: '1', name: 'Demo Site' },
+      },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('SitesManager.getSiteFromId');
+  });
+
+  it('reports token failures and skips site diagnostics', async () => {
+    const fetchMock = createSequencedFetchMock([
+      '5.0.0',
+      { result: 'error', message: 'Invalid token' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks).toEqual([
+      {
+        id: 'base-url',
+        label: 'Matomo base URL reachability',
+        status: 'ok',
+        details: { version: '5.0.0' },
+      },
+      {
+        id: 'token-auth',
+        label: 'Token authentication',
+        status: 'error',
+        error: { type: 'matomo', message: 'Invalid token' },
+      },
+      {
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'skipped',
+        skippedReason: 'Authentication failed, unable to verify site permissions.',
+      },
+    ]);
+  });
+
+  it('flags base URL errors and stops further checks', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('fetch failed'));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 9 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks).toEqual([
+      {
+        id: 'base-url',
+        label: 'Matomo base URL reachability',
+        status: 'error',
+        error: { type: 'network', message: 'fetch failed' },
+      },
+      {
+        id: 'token-auth',
+        label: 'Token authentication',
+        status: 'skipped',
+        skippedReason: 'Matomo base URL could not be reached.',
+      },
+      {
+        id: 'site-access',
+        label: 'Site access permissions',
+        status: 'skipped',
+        skippedReason: 'Matomo base URL could not be reached.',
+      },
+    ]);
+  });
+
   it('caches repeated reporting calls within TTL', async () => {
     const responses = [[{ label: '/home' }], [{ label: '/other' }]];
     const fetchMock = createSequencedFetchMock(responses);

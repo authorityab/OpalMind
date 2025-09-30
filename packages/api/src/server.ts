@@ -139,6 +139,17 @@ export function buildServer() {
   );
 
   toolsService.registerTool(
+    'DiagnoseMatomo',
+    'Runs connectivity and permission checks against the configured Matomo instance.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      return matomoClient.runDiagnostics({ siteId });
+    },
+    [siteIdParam],
+    '/tools/diagnose-matomo'
+  );
+
+  toolsService.registerTool(
     'GetKeyNumbersHistorical',
     'Returns key metrics broken down per period for multi-day comparisons.',
     async (parameters: Record<string, unknown>) => {

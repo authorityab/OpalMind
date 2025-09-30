@@ -85,6 +85,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `GetKeyNumbersHistorical` | `POST /tools/get-key-numbers-historical` | Returns per-period key metrics for historical comparisons. |
 | `GetMostPopularUrls` | `POST /tools/get-most-popular-urls` | Lists the most visited URLs for a period/date. |
 | `GetTopReferrers` | `POST /tools/get-top-referrers` | Lists top referrer sources for a period/date. |
+| `DiagnoseMatomo` | `POST /tools/diagnose-matomo` | Runs base URL, token, and site permission diagnostics for the configured Matomo instance. |
 | `GetEntryPages` | `POST /tools/get-entry-pages` | Shows entry-page performance with bounce and exit metrics. |
 | `GetCampaigns` | `POST /tools/get-campaigns` | Aggregates referrer campaign activity and conversions. |
 | `GetEcommerceOverview` | `POST /tools/get-ecommerce-overview` | Summarizes ecommerce revenue and conversion totals. |
