@@ -67,8 +67,12 @@ export class MatomoApiError extends Error {
     this.payload = details.payload;
     this.guidance = resolveGuidance(guidanceKey, message, details.code);
 
-    if (details.cause instanceof Error && (this as any).cause === undefined) {
-      (this as any).cause = details.cause;
+    if (details.cause instanceof Error) {
+      type ErrorWithCause = Error & { cause?: unknown };
+      const self = this as ErrorWithCause;
+      if (self.cause === undefined) {
+        self.cause = details.cause;
+      }
     }
   }
 
