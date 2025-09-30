@@ -75,6 +75,7 @@ From the repo root:
 - `npm run test --workspace @matokit/sdk -- --run` — run SDK unit tests.
 - `npm run test --workspace @matokit/api -- --run` — run API integration tests.
 - `npm run dev --workspace @matokit/api` — start the API in watch mode (ts-node).
+- Error simulations: `npm run test --workspace @matokit/sdk -- --run` exercises the Matomo error classifiers (`MatomoApiError`), ensuring guidance text stays in sync.
 
 ## Tool Endpoints
 All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
@@ -98,6 +99,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `TrackPageview` | `POST /track/pageview` | Records server-side pageviews with optional `pv_id` continuity. |
 | `TrackEvent` | `POST /track/event` | Sends Matomo custom events (category/action/name/value). |
 | `TrackGoal` | `POST /track/goal` | Captures goal conversions with optional revenue. |
+| `*` | Responses surface guidance via `MatomoApiError` when Matomo rejects a request (auth, permissions, rate limits, etc.). |
 
 Sample responses and curl snippets are documented in `packages/api/docs/sample-responses.md`.
 
