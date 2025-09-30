@@ -22,6 +22,44 @@ const defaultGuidance: Record<GuidanceKey, string> = {
   unknown: 'An unexpected error occurred while calling Matomo. Inspect the details and Matomo logs.',
 };
 
+const codeGuidance: Record<string, string> = {
+  '101': 'Check the siteId value—ensure the site exists and the token can access it.',
+  '103': 'Ensure the date parameter uses a Matomo-supported format (e.g. YYYY-MM-DD or date ranges).',
+  '110': 'Review the Matomo segment expression for syntax errors and unsupported operators.',
+};
+
+const keywordGuidance: Array<{ pattern: RegExp; guidance: string }> = [
+  {
+    pattern:
+      /id\s*site|siteid|site id|no website found|unknown website|website id|idsite|site does not exist|no view access to idsite/,
+    guidance: 'Check the siteId value—ensure the site exists and the token can access it.',
+  },
+  {
+    pattern: /\bdate\b|date parameter|invalid date|date format/,
+    guidance: 'Ensure the date parameter matches Matomo formats (YYYY-MM-DD or a date range) for the chosen period.',
+  },
+  {
+    pattern: /\bperiod\b|unknown period|invalid period|unsupported period/,
+    guidance: 'Use Matomo-supported periods (day, week, month, year, range) and align with the requested date.',
+  },
+  {
+    pattern: /\bsegment\b|invalid segment|segment .* does not exist/,
+    guidance: 'Review the Matomo segment expression for syntax errors and test it in Matomo’s segment builder.',
+  },
+  {
+    pattern: /unknown method|invalid method|method .* does not exist|report .* not found|requested report/,
+    guidance: 'Verify the Matomo API method/module name and enable the required plugin if necessary.',
+  },
+  {
+    pattern: /\bgoal\b|goal id|unknown goal/,
+    guidance: 'Confirm the Matomo goal ID exists for the site and matches the request parameters.',
+  },
+  {
+    pattern: /\bformat\b|invalid format|unsupported format/,
+    guidance: 'Request the report in JSON format and confirm the Matomo plugin supports the chosen format.',
+  },
+];
+
 function resolveGuidance(key: GuidanceKey, message?: string, code?: MatomoErrorCode): string {
   if (!message && !code) {
     return defaultGuidance[key];
@@ -42,8 +80,15 @@ function resolveGuidance(key: GuidanceKey, message?: string, code?: MatomoErrorC
     return 'Matomo rate limits were hit. Pause briefly or stagger requests before retrying.';
   }
 
-  if (key === 'client' && normalized.includes('site id')) {
-    return 'Check the siteId value—ensure the site exists and the token can access it.';
+  const codeKey = code !== undefined && code !== null ? String(code) : undefined;
+  if (codeKey && codeGuidance[codeKey]) {
+    return codeGuidance[codeKey];
+  }
+
+  for (const { pattern, guidance } of keywordGuidance) {
+    if (pattern.test(normalized)) {
+      return guidance;
+    }
   }
 
   return defaultGuidance[key];
