@@ -216,6 +216,15 @@ function sumSeriesValues(series: unknown): number | undefined {
   return seen ? total : undefined;
 }
 
+function normalizeKeyNumbersPayload(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object') {
+    return { ...(raw as Record<string, unknown>) };
+  }
+
+  const nb_visits = toFiniteNumber(raw) ?? 0;
+  return { nb_visits };
+}
+
 function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = { ...raw };
 
@@ -322,7 +331,7 @@ export class MatomoClient {
   async getKeyNumbers(input: GetKeyNumbersInput = {}): Promise<KeyNumbers> {
     const siteId = this.resolveSiteId(input.siteId);
 
-    const data = await matomoGet<KeyNumbers>(this.http, {
+    const raw = await matomoGet<unknown>(this.http, {
       method: 'VisitsSummary.get',
       params: {
         idSite: siteId,
@@ -331,6 +340,8 @@ export class MatomoClient {
         segment: input.segment,
       },
     });
+
+    const source = normalizeKeyNumbersPayload(raw);
 
     let pageviewSummary: Partial<Pick<KeyNumbers, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
 
@@ -360,7 +371,7 @@ export class MatomoClient {
       }
     }
 
-    const payload = sanitizeKeyNumbers({ ...data, ...pageviewSummary });
+    const payload = sanitizeKeyNumbers({ ...source, ...pageviewSummary });
     const parsed = keyNumbersSchema.parse(payload);
 
     const normalized: KeyNumbers = { ...parsed };
@@ -392,7 +403,7 @@ export class MatomoClient {
     const period = input.period ?? 'day';
     const date = input.date ?? 'last7';
 
-    const response = await matomoGet<Record<string, KeyNumbers>>(this.http, {
+    const response = await matomoGet<Record<string, unknown>>(this.http, {
       method: 'VisitsSummary.get',
       params: {
         idSite: siteId,
@@ -402,7 +413,18 @@ export class MatomoClient {
       },
     });
 
-    const parsed = keyNumbersSeriesSchema.parse(response ?? {});
+    const normalizedResponse = Object.fromEntries(
+      Object.entries(response ?? {}).map(([label, value]) => {
+        if (value && typeof value === 'object') {
+          return [label, value as Record<string, unknown>];
+        }
+
+        const visits = toFiniteNumber(value) ?? 0;
+        return [label, { nb_visits: visits } as Record<string, unknown>];
+      })
+    );
+
+    const parsed = keyNumbersSeriesSchema.parse(normalizedResponse);
 
     return Object.entries(parsed)
       .map(([label, value]) => ({ date: label, ...value }))
