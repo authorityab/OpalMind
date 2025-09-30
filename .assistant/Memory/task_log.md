@@ -33,6 +33,8 @@
 | 2025-09-27 | codex | Enhanced Matomo error handling | done | Introduced typed `MatomoApiError` classes with guidance surfaced through Opal responses |
 | 2025-09-27 | codex | Fixed key numbers scalar/array bugs | done | Unwrapped scalar/array Matomo responses in `getKeyNumbers` + series with regression coverage |
 | 2025-09-27 | codex | Logged key numbers array bug | done | Documented `BUG-003` to track Matomo array payload handling (resolved alongside BUG-002) |
+| 2025-09-27 | codex | Logged daily ecommerce conversions task | pending | Added `SDK-018` to surface per-day ecommerce purchases for questions like "vilket datum hade flest köp" |
+| 2025-09-27 | codex | Added stack.env for repo deployments | done | Introduced `stack.env` and updated compose/README so Portainer stacks have default configuration |
 
 ## Pending Updates
 - Fill in concrete dates once work starts on each milestone.

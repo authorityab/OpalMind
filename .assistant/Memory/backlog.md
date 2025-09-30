@@ -48,6 +48,7 @@
 | SDK-015 | Funnel analytics support | Wrap Matomo Funnels API (or goal/event composition) into an Opal tool for step-wise drop-off summaries |
 | SDK-016 | Site search keyword insights | Add `getInternalSearchKeywords` helper wrapping `Actions.getSiteSearchKeywords` with optional filters and expose via Opal tool |
 | SDK-017 | Page transitions reporting | Wrap `Transitions.getTransitionsForPage` into a structured Opal tool highlighting previous/next pages, exits, and loops |
+| SDK-018 | Daily ecommerce conversions | Add helper/tool to fetch per-day ecommerce conversion metrics (e.g., via `Goals.getItems` or `Ecommerce.getEcommerceConversions`) |
 
 ## Parking Lot
 - Potential Redis cache layer for reporting responses.

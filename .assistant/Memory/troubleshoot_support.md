@@ -44,3 +44,5 @@
 - `SDK-015` will deliver funnel analytics support once SDK-010 reliability work is underway.
 - `SDK-016` captures internal site-search keyword reporting via `Actions.getSiteSearchKeywords`.
 - `SDK-017` will add page transitions reporting based on `Transitions.getTransitionsForPage`.
+- `SDK-018` targets daily ecommerce conversion metrics for date-by-date purchase questions.
+- Support console plan lives separately in `.assistant/Planning/matokit_support_console_plan.md`; not part of the Matokit codebase yet.
