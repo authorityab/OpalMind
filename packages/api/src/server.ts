@@ -149,6 +149,20 @@ export function buildServer() {
     '/tools/diagnose-matomo'
   );
 
+  const includeDetailsParam = new Parameter('includeDetails', ParameterType.Boolean, 'Include detailed site access checks', false);
+
+  toolsService.registerTool(
+    'GetHealthStatus',
+    'Returns comprehensive health status for Matomo API, cache, and dependencies.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const includeDetails = Boolean(parameters?.['includeDetails']);
+      return matomoClient.getHealthStatus({ siteId, includeDetails });
+    },
+    [siteIdParam, includeDetailsParam],
+    '/tools/get-health-status'
+  );
+
   toolsService.registerTool(
     'GetKeyNumbersHistorical',
     'Returns key metrics broken down per period for multi-day comparisons.',

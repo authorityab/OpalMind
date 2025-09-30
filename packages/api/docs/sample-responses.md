@@ -416,7 +416,6 @@ curl -X POST http://localhost:4000/tools/get-key-numbers-historical \
 
 **Example Response**
 ```json
-[
   {
     "date": "2024-02-01",
     "nb_visits": 120,
@@ -432,4 +431,143 @@ curl -X POST http://localhost:4000/tools/get-key-numbers-historical \
     "nb_uniq_pageviews": 250
   }
 ]
+```
+
+## GetHealthStatus
+
+**Request**
+```bash
+curl -X POST http://localhost:3000/tools/get-health-status \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{}}'
+```
+
+**Response (Healthy)**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-09-30T15:30:00.000Z",
+  "checks": [
+    {
+      "name": "matomo-api",
+      "status": "pass",
+      "componentType": "service",
+      "observedValue": 145,
+      "observedUnit": "ms",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "API responded in 145ms"
+    },
+    {
+      "name": "reports-cache",
+      "status": "pass",
+      "componentType": "cache",
+      "observedValue": 85.5,
+      "observedUnit": "%",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Hit rate: 85.5% (342/400 requests)"
+    },
+    {
+      "name": "tracking-queue",
+      "status": "pass",
+      "componentType": "queue",
+      "observedValue": 0,
+      "observedUnit": "pending",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Queue processing normally"
+    }
+  ]
+}
+```
+
+**Request with Details**
+```bash
+curl -X POST http://localhost:3000/tools/get-health-status \
+  -H 'Authorization: Bearer change-me' \
+  -H 'Content-Type: application/json' \
+  -d '{"parameters":{"includeDetails":true,"siteId":1}}'
+```
+
+**Response (with Site Check)**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-09-30T15:30:00.000Z",
+  "checks": [
+    {
+      "name": "matomo-api",
+      "status": "pass",
+      "componentType": "service",
+      "observedValue": 145,
+      "observedUnit": "ms",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "API responded in 145ms"
+    },
+    {
+      "name": "reports-cache",
+      "status": "pass",
+      "componentType": "cache",
+      "observedValue": 85.5,
+      "observedUnit": "%",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Hit rate: 85.5% (342/400 requests)"
+    },
+    {
+      "name": "tracking-queue",
+      "status": "pass",
+      "componentType": "queue",
+      "observedValue": 0,
+      "observedUnit": "pending",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Queue processing normally"
+    },
+    {
+      "name": "site-access",
+      "status": "pass",
+      "componentType": "service",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Site ID 1 accessible"
+    }
+  ]
+}
+```
+
+**Response (Degraded)**
+```json
+{
+  "status": "degraded",
+  "timestamp": "2025-09-30T15:30:00.000Z",
+  "checks": [
+    {
+      "name": "matomo-api",
+      "status": "pass",
+      "componentType": "service",
+      "observedValue": 145,
+      "observedUnit": "ms",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "API responded in 145ms"
+    },
+    {
+      "name": "reports-cache",
+      "status": "warn",
+      "componentType": "cache",
+      "observedValue": 15.2,
+      "observedUnit": "%",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Hit rate: 15.2% (76/500 requests)"
+    },
+    {
+      "name": "tracking-queue",
+      "status": "pass",
+      "componentType": "queue",
+      "observedValue": 0,
+      "observedUnit": "pending",
+      "time": "2025-09-30T15:30:00.000Z",
+      "output": "Queue processing normally"
+    }
+  ]
+}
+```
+
+````
 ```

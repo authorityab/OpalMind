@@ -10,12 +10,16 @@ This project provides a lightweight SDK and Express-based tool service that make
 - [Available Scripts](#available-scripts)
 - [Tool Endpoints](#tool-endpoints)
 - [Development Workflow](#development-workflow)
+- [Cache Monitoring](#cache-monitoring)
+- [Health Monitoring & Observability](#health-monitoring--observability)
 - [Testing](#testing)
+- [Docker Deployment](#docker-deployment)
 - [Next Steps](#next-steps)
 
 ## Features
 - Typed Matomo SDK with convenience methods for key metrics, most popular URLs, and top referrers.
 - Expanded reporting helpers covering ecommerce revenue, event categories, campaigns, entry pages, and device breakdowns.
+- **Service health monitoring** with comprehensive checks for Matomo API connectivity, cache performance, and dependency status.
 - In-memory reporting cache with observable hit/miss metrics and optional event hooks.
 - Opal Tools SDK integration exposing `/tools/*` endpoints plus discovery metadata.
 - Bearer-token authenticated Express service ready for Opal integration.
@@ -87,6 +91,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `GetMostPopularUrls` | `POST /tools/get-most-popular-urls` | Lists the most visited URLs for a period/date. |
 | `GetTopReferrers` | `POST /tools/get-top-referrers` | Lists top referrer sources for a period/date. |
 | `DiagnoseMatomo` | `POST /tools/diagnose-matomo` | Runs base URL, token, and site permission diagnostics for the configured Matomo instance. |
+| `GetHealthStatus` | `POST /tools/get-health-status` | Returns comprehensive health status for Matomo API, cache performance, and service dependencies. |
 | `GetEntryPages` | `POST /tools/get-entry-pages` | Shows entry-page performance with bounce and exit metrics. |
 | `GetCampaigns` | `POST /tools/get-campaigns` | Aggregates referrer campaign activity and conversions. |
 | `GetEcommerceOverview` | `POST /tools/get-ecommerce-overview` | Summarizes ecommerce revenue and conversion totals. |
@@ -115,6 +120,56 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
   - `cache.onEvent` receives `{ type, feature, key, expiresAt }` notifications for hits, misses, sets, and stale evictions—pipe these into your metrics system.
 - Call `client.getCacheStats()` to retrieve cumulative hit/miss/set counts and current entry totals per feature.
 
+## Health Monitoring & Observability
+The service provides comprehensive health monitoring for production deployments:
+
+### Health Status Endpoint
+Use `GET /tools/get-health-status` to monitor service health:
+
+```bash
+curl -H "Authorization: Bearer your-token" \
+  "http://localhost:3000/tools/get-health-status"
+```
+
+**Response:**
+```json
+{
+  "status": "healthy|degraded|unhealthy",
+  "timestamp": "2025-09-30T15:30:00.000Z",
+  "checks": [
+    {
+      "name": "matomo-api",
+      "status": "pass",
+      "componentType": "service",
+      "observedValue": 145,
+      "observedUnit": "ms",
+      "output": "API responded in 145ms"
+    },
+    {
+      "name": "reports-cache",
+      "status": "pass",
+      "componentType": "cache", 
+      "observedValue": 85.5,
+      "observedUnit": "%",
+      "output": "Hit rate: 85.5% (342/400 requests)"
+    }
+  ]
+}
+```
+
+### Health Check Components
+- **Matomo API Connectivity**: Response time and reachability
+- **Reports Cache Performance**: Hit rates with warning thresholds (warn <20%, fail <5%)
+- **Tracking Queue Status**: Queue processing health
+- **Site Access** *(optional)*: Site-specific permission verification
+
+### Integration
+- **Load Balancers**: Use for upstream health checks
+- **Monitoring Systems**: Parse JSON for alerting (Grafana, Prometheus, etc.)
+- **CI/CD**: Verify deployment health post-deployment
+
+See `packages/api/docs/health-monitoring.md` for detailed documentation.
+
 ## Testing
 - SDK tests rely on mocked `fetch` and validate request construction and response parsing.
 - API tests mock the Matomo client and simulate Express requests via `node-mocks-http`, covering happy paths and error branches.
@@ -127,8 +182,9 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 
 ## Next Steps
 - Replace the default bearer token with a secure secret before deploying.
+- **Set up monitoring**: Integrate the health status endpoint with your monitoring stack for production alerting.
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
 - Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
 - Tune caching defaults based on traffic patterns and monitor Matomo load.
-- Ship cache stats to your preferred observability stack (Grafana/Prometheus/etc.) once production traffic is available.
+- Ship cache stats and health metrics to your preferred observability stack (Grafana/Prometheus/etc.) once production traffic is available.

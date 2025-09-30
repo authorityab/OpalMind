@@ -21,18 +21,18 @@
 | SDK-008 | Traffic channel flexibility | Added traffic channel helper + API tool with filtering + docs/tests |
 | SDK-010A | Matomo error diagnostics | SDK `runDiagnostics` helper + `/tools/diagnose-matomo` Opal endpoint |
 | SDK-010B | Enhanced API error handling | Classified Matomo errors with guidance-rich `MatomoApiError` subclasses |
+| SDK-010C | Service health monitoring | Added `getHealthStatus()` method with proactive health checks for Matomo/externals and `/tools/get-health-status` endpoint |
 | BUG-002 | Key numbers scalar parsing | Coerce scalar Matomo responses into key-number objects to avoid Zod failures |
 | BUG-003 | Key numbers array parsing | Ensure array-wrapped Matomo responses (single & series) are unwrapped before Zod validation |
+| BUG-001 | Handle NaN key metrics | `getKeyNumbers` NaN handling implemented alongside BUG-002/BUG-003 with `toFiniteNumber()` guards and series fallbacks |
 
 ## Todo
 | ID | Title | Notes |
 |----|-------|-------|
-| SDK-010C | Service health monitoring | Add proactive health checks for Matomo/externals and surface status in tooling |
 | SDK-010D | Contextual error guidance | Map common Matomo errors to actionable remediation tips within responses |
 | SDK-010E | Rate limit awareness | Detect API quota limits, throttle requests, and inform users when limits are hit |
 | SDK-010F | Idempotent request support | Ensure repeatable write operations avoid duplicate effects during retries |
 | INF-004 | Structured logging | Replace console with Pino/Winston in production and restrict stdout to warn/error levels |
-| BUG-001 | Handle NaN key metrics | `getKeyNumbers` returns `NaN` for `nb_visits` on week/long ranges; guard parsing + add fallback |
 | SDK-011 | Analyze historical key numbers | Derive peak values across key metrics from GetKeyNumbersHistorical data and present results |
 | SDK-012A | Clarify ambiguous analytics requests | Add follow-up prompts/default periods when time range is missing |
 | SDK-012B | Long-running request feedback | Surface progress indicators for expensive Matomo data fetches |

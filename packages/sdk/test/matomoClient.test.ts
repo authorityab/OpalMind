@@ -660,4 +660,54 @@ describe('MatomoClient', () => {
     expect(body).toContain('idsite=11');
     expect(body).toContain('e_c=cta');
   });
+
+  describe('getHealthStatus', () => {
+    it('returns healthy status when all checks pass', async () => {
+      const fetchMock = createSequencedFetchMock(['3.14.0']);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+      const result = await client.getHealthStatus();
+
+      expect(result.status).toBe('healthy');
+      expect(result.timestamp).toBeDefined();
+      expect(result.checks).toHaveLength(3); // matomo-api, reports-cache, tracking-queue
+      
+      const matomoCheck = result.checks.find(c => c.name === 'matomo-api');
+      expect(matomoCheck?.status).toBe('pass');
+      expect(matomoCheck?.componentType).toBe('service');
+      expect(matomoCheck?.observedUnit).toBe('ms');
+    });
+
+    it('returns unhealthy status when API fails', async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+      const result = await client.getHealthStatus();
+
+      expect(result.status).toBe('unhealthy');
+      
+      const matomoCheck = result.checks.find(c => c.name === 'matomo-api');
+      expect(matomoCheck?.status).toBe('fail');
+      expect(matomoCheck?.output).toContain('Failed to reach Matomo instance');
+    });
+
+    it('includes site access check when requested', async () => {
+      const fetchMock = createSequencedFetchMock([
+        '3.14.0', // API.getVersion
+        { idsite: '5', name: 'Test Site' } // SitesManager.getSiteFromId
+      ]);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
+      const result = await client.getHealthStatus({ includeDetails: true });
+
+      expect(result.checks).toHaveLength(4); // includes site-access check
+      
+      const siteCheck = result.checks.find(c => c.name === 'site-access');
+      expect(siteCheck?.status).toBe('pass');
+      expect(siteCheck?.output).toContain('Site ID 5 accessible');
+    });
+  });
 });
