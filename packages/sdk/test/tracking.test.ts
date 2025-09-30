@@ -85,4 +85,28 @@ describe('TrackingService', () => {
     expect(body).toContain('revenue=19.95');
     expect(body).toContain('url=https%3A%2F%2Fexample.com%2Fthank-you');
   });
+
+  it('dedupes tracking requests that share an idempotency key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(successResponse);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const idempotencyKey = 'event-dedupe-key';
+
+    const [first, second] = await Promise.all([
+      client.trackEvent({ category: 'cta', action: 'click', idempotencyKey }),
+      client.trackEvent({ category: 'cta', action: 'click', idempotencyKey }),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first).toBe(second);
+
+    const metadata = await client.getTrackingRequestMetadata(idempotencyKey);
+    expect(metadata?.attempts).toBe(1);
+    expect(metadata?.result.ok).toBe(true);
+
+    const replay = await client.trackEvent({ category: 'cta', action: 'click', idempotencyKey });
+    expect(replay).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
