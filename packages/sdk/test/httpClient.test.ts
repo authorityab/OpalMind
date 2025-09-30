@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MatomoHttpClient } from '../src/httpClient.js';
+import {
+  MatomoAuthError,
+  MatomoClientError,
+  MatomoNetworkError,
+  MatomoParseError,
+} from '../src/errors.js';
 
 const createFetchMock = <T>(data: T, ok = true, status = 200) =>
   vi.fn().mockResolvedValue({
@@ -62,14 +68,53 @@ describe('MatomoHttpClient', () => {
     expect(requestUrl.searchParams.get('segment')).toBe('browser==Chrome');
   });
 
-  it('throws when Matomo responds with an error', async () => {
-    const fetchMock = createFetchMock({ error: 'Oops' }, false, 400);
+  it('throws a client error when Matomo responds with a 4xx payload', async () => {
+    const fetchMock = createFetchMock({ result: 'error', message: 'Oops' }, false, 400);
     vi.stubGlobal('fetch', fetchMock);
 
     const client = new MatomoHttpClient(baseUrl, token);
 
     await expect(
       client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
-    ).rejects.toThrow(/Matomo request failed/);
+    ).rejects.toBeInstanceOf(MatomoClientError);
+  });
+
+  it('throws an auth error when Matomo rejects the token', async () => {
+    const fetchMock = createFetchMock({ result: 'error', message: 'Invalid token' }, true, 200);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token);
+
+    await expect(
+      client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
+    ).rejects.toBeInstanceOf(MatomoAuthError);
+  });
+
+  it('throws a parse error when Matomo returns invalid JSON on success', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => '<html>oops</html>',
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token);
+
+    await expect(
+      client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
+    ).rejects.toBeInstanceOf(MatomoParseError);
+  });
+
+  it('throws a network error when fetch fails', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token);
+
+    await expect(
+      client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
+    ).rejects.toBeInstanceOf(MatomoNetworkError);
   });
 });

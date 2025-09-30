@@ -1,5 +1,13 @@
 import { URL } from 'node:url';
 
+import {
+  MatomoNetworkError,
+  MatomoParseError,
+  classifyMatomoError,
+  classifyMatomoResultError,
+  extractMatomoError,
+} from './errors.js';
+
 export interface MatomoRequestOptions {
   method: string;
   params?: Record<string, string | number | boolean | undefined>;
@@ -53,17 +61,66 @@ export class MatomoHttpClient {
       url.searchParams.set(key, String(value));
     }
 
-    const res = await fetch(url.toString());
+    const endpoint = url.toString();
+    let res: Awaited<ReturnType<typeof fetch>>;
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Matomo request failed: ${res.status} ${res.statusText} ${body}`.trim());
+    try {
+      res = await fetch(endpoint);
+    } catch (error) {
+      throw new MatomoNetworkError('Failed to reach Matomo instance.', {
+        endpoint,
+        cause: error,
+      });
     }
 
-    const data = (await res.json()) as T;
+    let bodyText: string | undefined;
+    try {
+      bodyText = await res.text();
+    } catch (error) {
+      throw new MatomoNetworkError('Failed to read Matomo response.', {
+        endpoint,
+        cause: error,
+        status: res.status,
+      });
+    }
+
+    let payload: unknown = undefined;
+    const trimmedBody = bodyText?.trim() ?? '';
+
+    if (trimmedBody.length > 0) {
+      try {
+        payload = JSON.parse(trimmedBody);
+      } catch (error) {
+        if (res.ok) {
+          throw new MatomoParseError('Failed to parse Matomo JSON response.', {
+            endpoint,
+            status: res.status,
+            body: bodyText,
+            cause: error,
+          });
+        }
+      }
+    }
+
+    if (!res.ok) {
+      throw classifyMatomoError({
+        status: res.status,
+        statusText: res.statusText,
+        endpoint,
+        bodyText,
+        payload,
+      });
+    }
+
+    if (payload && typeof payload === 'object') {
+      const extracted = extractMatomoError(payload);
+      if (extracted) {
+        throw classifyMatomoResultError(endpoint, payload);
+      }
+    }
 
     return {
-      data,
+      data: payload as T,
       status: res.status,
       ok: res.ok,
     };

@@ -31,6 +31,7 @@ import {
   type TrackPageviewResult,
   type TrackResult,
 } from './tracking.js';
+import { MatomoApiError, MatomoNetworkError } from './errors.js';
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -136,6 +137,7 @@ export interface MatomoDiagnosticError {
   type: 'matomo' | 'network' | 'unknown';
   message: string;
   code?: string | number;
+  guidance?: string;
 }
 
 export interface MatomoDiagnosticCheck {
@@ -238,56 +240,21 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
   return sanitized;
 }
 
-interface MatomoErrorPayload {
-  result?: unknown;
-  message?: unknown;
-  code?: unknown;
-  [key: string]: unknown;
-}
-
-class DiagnosticMatomoError extends Error {
-  readonly code?: string | number;
-
-  constructor(message: string, code?: string | number) {
-    super(message);
-    this.name = 'DiagnosticMatomoError';
-    this.code = code;
-  }
-}
-
-function extractMatomoError(payload: unknown): { message: string; code?: string | number } | undefined {
-  if (!payload || typeof payload !== 'object') return undefined;
-
-  const cast = payload as MatomoErrorPayload;
-  const result = typeof cast.result === 'string' ? cast.result.toLowerCase() : undefined;
-
-  if (result === 'error') {
-    const message = typeof cast.message === 'string' ? cast.message : 'Matomo reported an error.';
-    const codeValue = cast.code;
-    const code = typeof codeValue === 'string' || typeof codeValue === 'number' ? codeValue : undefined;
-    return { message, code };
-  }
-
-  if ('error' in cast && typeof cast.error === 'string') {
-    return { message: cast.error };
-  }
-
-  return undefined;
-}
-
 function toDiagnosticError(error: unknown): MatomoDiagnosticError {
-  if (error instanceof DiagnosticMatomoError) {
+  if (error instanceof MatomoApiError) {
     return {
-      type: 'matomo',
+      type: error instanceof MatomoNetworkError ? 'network' : 'matomo',
       message: error.message,
       code: error.code,
+      guidance: error.guidance,
     };
   }
 
   if (error instanceof Error) {
-    const message = error.message || 'Unknown error';
-    const type = message.toLowerCase().includes('fetch failed') ? 'network' : 'unknown';
-    return { type, message };
+    return {
+      type: 'unknown',
+      message: error.message || 'Unknown error',
+    };
   }
 
   return { type: 'unknown', message: String(error) };
@@ -595,11 +562,6 @@ export class MatomoClient {
         method: 'API.getVersion',
       });
 
-      const errorInfo = extractMatomoError(payload);
-      if (errorInfo) {
-        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
-      }
-
       if (typeof payload === 'string') {
         return { version: payload };
       }
@@ -637,11 +599,6 @@ export class MatomoClient {
       const payload = await matomoGet<unknown>(this.http, {
         method: 'API.getLoggedInUser',
       });
-
-      const errorInfo = extractMatomoError(payload);
-      if (errorInfo) {
-        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
-      }
 
       if (payload && typeof payload === 'object') {
         const login = (payload as Record<string, unknown>)['login'];
@@ -694,11 +651,6 @@ export class MatomoClient {
         params: { idSite: siteIdForCheck },
       });
 
-      const errorInfo = extractMatomoError(payload);
-      if (errorInfo) {
-        throw new DiagnosticMatomoError(errorInfo.message, errorInfo.code);
-      }
-
       if (payload && typeof payload === 'object') {
         const data = payload as Record<string, unknown>;
         const idsite = typeof data.idsite === 'string' || typeof data.idsite === 'number' ? data.idsite : undefined;
@@ -750,3 +702,13 @@ export type {
 };
 
 export { TrackingService } from './tracking.js';
+export {
+  MatomoApiError,
+  MatomoAuthError,
+  MatomoPermissionError,
+  MatomoRateLimitError,
+  MatomoClientError,
+  MatomoServerError,
+  MatomoNetworkError,
+  MatomoParseError,
+} from './errors.js';

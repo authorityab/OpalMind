@@ -196,26 +196,25 @@ describe('MatomoClient', () => {
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
     const result = await client.runDiagnostics();
 
-    expect(result.checks).toEqual([
-      {
-        id: 'base-url',
-        label: 'Matomo base URL reachability',
-        status: 'ok',
-        details: { version: '5.0.0' },
+    expect(result.checks[0]).toMatchObject({
+      id: 'base-url',
+      status: 'ok',
+      details: { version: '5.0.0' },
+    });
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'error',
+      error: {
+        type: 'matomo',
+        message: expect.stringContaining('Matomo authentication failed'),
+        guidance: expect.stringContaining('token'),
       },
-      {
-        id: 'token-auth',
-        label: 'Token authentication',
-        status: 'error',
-        error: { type: 'matomo', message: 'Invalid token' },
-      },
-      {
-        id: 'site-access',
-        label: 'Site access permissions',
-        status: 'skipped',
-        skippedReason: 'Authentication failed, unable to verify site permissions.',
-      },
-    ]);
+    });
+    expect(result.checks[2]).toMatchObject({
+      id: 'site-access',
+      status: 'skipped',
+      skippedReason: 'Authentication failed, unable to verify site permissions.',
+    });
   });
 
   it('flags base URL errors and stops further checks', async () => {
@@ -226,26 +225,24 @@ describe('MatomoClient', () => {
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 9 });
     const result = await client.runDiagnostics();
 
-    expect(result.checks).toEqual([
-      {
-        id: 'base-url',
-        label: 'Matomo base URL reachability',
-        status: 'error',
-        error: { type: 'network', message: 'fetch failed' },
+    expect(result.checks[0]).toMatchObject({
+      id: 'base-url',
+      status: 'error',
+      error: {
+        type: 'network',
+        message: 'Failed to reach Matomo instance.',
       },
-      {
-        id: 'token-auth',
-        label: 'Token authentication',
-        status: 'skipped',
-        skippedReason: 'Matomo base URL could not be reached.',
-      },
-      {
-        id: 'site-access',
-        label: 'Site access permissions',
-        status: 'skipped',
-        skippedReason: 'Matomo base URL could not be reached.',
-      },
-    ]);
+    });
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'skipped',
+      skippedReason: 'Matomo base URL could not be reached.',
+    });
+    expect(result.checks[2]).toMatchObject({
+      id: 'site-access',
+      status: 'skipped',
+      skippedReason: 'Matomo base URL could not be reached.',
+    });
   });
 
   it('caches repeated reporting calls within TTL', async () => {
