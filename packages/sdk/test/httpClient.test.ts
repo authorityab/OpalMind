@@ -6,6 +6,7 @@ import {
   MatomoClientError,
   MatomoNetworkError,
   MatomoParseError,
+  MatomoRateLimitError,
 } from '../src/errors.js';
 
 const createFetchMock = <T>(data: T, ok = true, status = 200) =>
@@ -15,6 +16,7 @@ const createFetchMock = <T>(data: T, ok = true, status = 200) =>
     statusText: ok ? 'OK' : 'Bad Request',
     json: async () => data,
     text: async () => JSON.stringify(data),
+    headers: new Headers(),
   });
 
 describe('MatomoHttpClient', () => {
@@ -23,6 +25,7 @@ describe('MatomoHttpClient', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('normalizes the base URL when missing index.php', async () => {
@@ -116,5 +119,86 @@ describe('MatomoHttpClient', () => {
     await expect(
       client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
     ).rejects.toBeInstanceOf(MatomoNetworkError);
+  });
+
+  it('throttles subsequent requests when rate limit headers indicate depletion', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+
+    const firstHeaders = new Headers({
+      'X-Matomo-Rate-Limit-Remaining': '0',
+      'X-Matomo-Rate-Limit-Reset': String(Math.floor((Date.now() + 5000) / 1000)),
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => JSON.stringify({ visits: 10 }),
+        headers: firstHeaders,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => JSON.stringify({ visits: 12 }),
+        headers: new Headers(),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token, { rateLimit: { minThrottleMs: 0 } });
+
+    await client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } });
+
+    const secondRequest = client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } });
+
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await secondRequest;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('invokes rate limit callback and surfaces details on 429 responses', async () => {
+    const onLimit = vi.fn();
+    const headers = new Headers({
+      'Retry-After': '3',
+      'X-Matomo-Rate-Limit-Limit': '100',
+      'X-Matomo-Rate-Limit-Remaining': '0',
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      text: async () => JSON.stringify({ result: 'error', message: 'Rate limit exceeded' }),
+      headers,
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token, {
+      rateLimit: { onLimit },
+    });
+
+    await expect(
+      client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
+    ).rejects.toBeInstanceOf(MatomoRateLimitError);
+
+    expect(onLimit).toHaveBeenCalledTimes(1);
+    expect(onLimit.mock.calls[0][0]).toMatchObject({
+      source: 'http-status',
+      status: 429,
+      remaining: 0,
+      limit: 100,
+    });
+
+    const event = client.getLastRateLimitEvent();
+    expect(event?.retryAfterMs).toBe(3000);
   });
 });

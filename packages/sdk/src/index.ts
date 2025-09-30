@@ -1,4 +1,9 @@
-import { MatomoHttpClient, matomoGet } from './httpClient.js';
+import {
+  MatomoHttpClient,
+  matomoGet,
+  type MatomoRateLimitEvent,
+  type MatomoRateLimitOptions,
+} from './httpClient.js';
 import {
   ReportsService,
   type CacheStatsSnapshot,
@@ -49,6 +54,7 @@ export interface MatomoClientConfig {
   };
   cacheTtlMs?: number;
   cache?: CacheConfig;
+  rateLimit?: MatomoRateLimitOptions;
 }
 
 export interface GetKeyNumbersInput {
@@ -345,7 +351,9 @@ export class MatomoClient {
   private readonly defaultSiteId?: number;
 
   constructor(config: MatomoClientConfig) {
-    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth);
+    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
+      rateLimit: config.rateLimit,
+    });
     const reportsOptions: ReportsServiceOptions = {
       cacheTtlMs: config.cache?.ttlMs ?? config.cacheTtlMs,
       onCacheEvent: config.cache?.onEvent,
@@ -595,6 +603,10 @@ export class MatomoClient {
 
   getCacheStats(): CacheStatsSnapshot {
     return this.reports.getCacheStats();
+  }
+
+  getLastRateLimitEvent(): MatomoRateLimitEvent | undefined {
+    return this.http.getLastRateLimitEvent();
   }
 
   async trackPageview(
@@ -873,7 +885,10 @@ export type {
   EcommerceRevenueTotalsInput,
   TrafficChannel,
   GoalConversion,
+  MatomoRateLimitEvent,
 };
+
+export type { MatomoRateLimitOptions } from './httpClient.js';
 
 export { TrackingService } from './tracking.js';
 export {
