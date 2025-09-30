@@ -41,7 +41,7 @@ describe('MatomoApiError guidance', () => {
 
   it('guides when methods are unknown', () => {
     const error = new MatomoClientError(
-      'Matomo request failed (400): Unknown method \"Actions.getFoo\"'
+      'Matomo request failed (400): Unknown method "Actions.getFoo"'
     );
 
     expect(error.guidance).toContain('method/module name');
