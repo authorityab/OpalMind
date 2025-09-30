@@ -58,6 +58,74 @@ describe('MatomoClient', () => {
     expect(secondUrl.searchParams.get('idSite')).toBe('5');
   });
 
+  it('guards against NaN responses from Matomo key numbers', async () => {
+    const fetchMock = createSequencedFetchMock([
+      {
+        nb_visits: 'NaN',
+        nb_actions: 'NaN',
+        nb_visits_converted: false,
+        sum_visit_length: '',
+      },
+      { nb_pageviews: 'NaN', nb_uniq_pageviews: 'NaN' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 8 });
+    const result = await client.getKeyNumbers();
+
+    expect(result.nb_visits).toBe(0);
+    expect(result.nb_actions).toBeUndefined();
+    expect(result.nb_visits_converted).toBeUndefined();
+    expect(result.nb_pageviews).toBeUndefined();
+  });
+
+  it('falls back to nb_visits_series totals when aggregate visits are NaN', async () => {
+    const fetchMock = createSequencedFetchMock([
+      {
+        nb_visits: 'NaN',
+        nb_visits_series: {
+          '2024-01-01': '12',
+          '2024-01-02': 8,
+        },
+        nb_actions: 'NaN',
+      },
+      { nb_pageviews: 'NaN', nb_uniq_pageviews: 'NaN' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.getKeyNumbers({ period: 'week', date: 'last2' });
+
+    expect(result.nb_visits).toBe(20);
+  });
+
+  it('normalizes non-finite visit totals for longer ranges and parses pageview strings', async () => {
+    const fetchMock = createSequencedFetchMock([
+      {
+        nb_visits: 'NaN',
+        nb_actions: '12',
+        nb_uniq_visitors: '0',
+      },
+      { nb_pageviews: '450', nb_uniq_pageviews: '325' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
+    const result = await client.getKeyNumbers({ period: 'week', date: 'last4' });
+
+    expect(result.nb_visits).toBe(0);
+    expect(result.nb_pageviews).toBe(450);
+    expect(result.nb_uniq_pageviews).toBe(325);
+    expect(result.nb_actions).toBe(12);
+
+    const firstRequest = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(firstRequest.searchParams.get('period')).toBe('week');
+    expect(firstRequest.searchParams.get('date')).toBe('last4');
+  });
+
   it('returns key number series sorted by date', async () => {
     const seriesData = {
       '2024-01-02': { nb_visits: 2, nb_pageviews: 5 },

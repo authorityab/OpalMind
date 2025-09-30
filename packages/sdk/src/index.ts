@@ -128,6 +128,89 @@ export interface KeyNumbersSeriesPoint extends KeyNumbers {
   date: string;
 }
 
+const keyNumberNumericFields: Array<keyof KeyNumbers> = [
+  'nb_visits',
+  'nb_uniq_visitors',
+  'nb_actions',
+  'nb_users',
+  'nb_visits_converted',
+  'sum_visit_length',
+  'max_actions',
+  'nb_pageviews',
+  'nb_uniq_pageviews',
+];
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.toLowerCase() === 'nan') return undefined;
+    const normalized = Number(trimmed.replace(/,/g, ''));
+    return Number.isFinite(normalized) ? normalized : undefined;
+  }
+  return undefined;
+}
+
+function sumSeriesValues(series: unknown): number | undefined {
+  if (!series || (typeof series !== 'object' && !Array.isArray(series))) {
+    return undefined;
+  }
+
+  const values = Array.isArray(series)
+    ? series
+    : Object.values(series as Record<string, unknown>);
+
+  let total = 0;
+  let seen = false;
+
+  for (const value of values) {
+    if (value && typeof value === 'object') {
+      const nested = sumSeriesValues(value);
+      if (nested !== undefined) {
+        total += nested;
+        seen = true;
+        continue;
+      }
+    }
+
+    const numeric = toFiniteNumber(value);
+    if (numeric !== undefined) {
+      total += numeric;
+      seen = true;
+    }
+  }
+
+  return seen ? total : undefined;
+}
+
+function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = { ...raw };
+
+  for (const field of keyNumberNumericFields) {
+    const current = sanitized[field as string];
+    const coerced = toFiniteNumber(current);
+
+    if (coerced !== undefined) {
+      sanitized[field as string] = coerced;
+      continue;
+    }
+
+    if (field === 'nb_visits') {
+      const fromSeries =
+        sumSeriesValues(raw?.['nb_visits_series']) ?? sumSeriesValues(raw?.['nb_visits']);
+      sanitized[field as string] = fromSeries ?? 0;
+    } else {
+      delete sanitized[field as string];
+    }
+  }
+
+  return sanitized;
+}
+
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
   if (typeof siteId !== 'number' || Number.isNaN(siteId)) {
     throw new Error('siteId is required');
@@ -188,13 +271,12 @@ export class MatomoClient {
         },
       });
 
-      const nb_pageviews = actionsSummary?.['nb_pageviews'];
-      const nb_uniq_pageviews = actionsSummary?.['nb_uniq_pageviews'];
+      const nb_pageviews = toFiniteNumber(actionsSummary?.['nb_pageviews']);
+      const nb_uniq_pageviews = toFiniteNumber(actionsSummary?.['nb_uniq_pageviews']);
 
       pageviewSummary = {
-        nb_pageviews: typeof nb_pageviews === 'number' ? nb_pageviews : undefined,
-        nb_uniq_pageviews:
-          typeof nb_uniq_pageviews === 'number' ? nb_uniq_pageviews : undefined,
+        nb_pageviews: nb_pageviews ?? undefined,
+        nb_uniq_pageviews: nb_uniq_pageviews ?? undefined,
       };
     } catch (error) {
       // swallow errors; nb_actions will still be returned
@@ -204,7 +286,31 @@ export class MatomoClient {
       }
     }
 
-    return keyNumbersSchema.parse({ ...data, ...pageviewSummary });
+    const payload = sanitizeKeyNumbers({ ...data, ...pageviewSummary });
+    const parsed = keyNumbersSchema.parse(payload);
+
+    const normalized: KeyNumbers = { ...parsed };
+
+    for (const field of keyNumberNumericFields) {
+      const value = normalized[field];
+
+      if (typeof value !== 'number') {
+        continue;
+      }
+
+      if (Number.isFinite(value)) {
+        continue;
+      }
+
+      if (field === 'nb_visits') {
+        normalized.nb_visits = 0;
+        continue;
+      }
+
+      normalized[field] = undefined;
+    }
+
+    return normalized;
   }
 
   async getKeyNumbersSeries(input: GetKeyNumbersSeriesInput = {}): Promise<KeyNumbersSeriesPoint[]> {
