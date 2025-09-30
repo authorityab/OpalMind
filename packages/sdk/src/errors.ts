@@ -1,5 +1,12 @@
 export type MatomoErrorCode = string | number | undefined;
 
+export interface MatomoRateLimitInfo {
+  limit?: number;
+  remaining?: number;
+  resetAt?: number;
+  retryAfterMs?: number;
+}
+
 export interface MatomoErrorDetails {
   status?: number;
   code?: MatomoErrorCode;
@@ -7,6 +14,7 @@ export interface MatomoErrorDetails {
   endpoint?: string;
   payload?: unknown;
   cause?: unknown;
+  rateLimit?: MatomoRateLimitInfo;
 }
 
 type GuidanceKey = 'auth' | 'permission' | 'rate-limit' | 'client' | 'server' | 'parse' | 'network' | 'unknown';
@@ -56,6 +64,7 @@ export class MatomoApiError extends Error {
   readonly endpoint?: string;
   readonly payload?: unknown;
   readonly guidance: string;
+  readonly rateLimit?: MatomoRateLimitInfo;
 
   constructor(message: string, guidanceKey: GuidanceKey, details: MatomoErrorDetails = {}) {
     super(message);
@@ -66,6 +75,7 @@ export class MatomoApiError extends Error {
     this.endpoint = details.endpoint;
     this.payload = details.payload;
     this.guidance = resolveGuidance(guidanceKey, message, details.code);
+    this.rateLimit = details.rateLimit;
 
     if (details.cause instanceof Error) {
       type ErrorWithCause = Error & { cause?: unknown };
@@ -84,6 +94,7 @@ export class MatomoApiError extends Error {
       code: this.code,
       guidance: this.guidance,
       endpoint: this.endpoint,
+      rateLimit: this.rateLimit,
     };
   }
 }
@@ -161,6 +172,7 @@ export interface MatomoHttpErrorContext {
   endpoint: string;
   bodyText?: string;
   payload?: unknown;
+  rateLimit?: MatomoRateLimitInfo;
 }
 
 export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiError {
@@ -176,6 +188,7 @@ export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiE
     body: bodyText,
     endpoint,
     payload,
+    rateLimit: context.rateLimit,
   };
 
   if (status === 401) {
@@ -197,13 +210,18 @@ export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiE
   return new MatomoClientError(`Matomo request failed (${status}): ${defaultMessage}`, details);
 }
 
-export function classifyMatomoResultError(endpoint: string, payload: unknown): MatomoApiError {
+export function classifyMatomoResultError(
+  endpoint: string,
+  payload: unknown,
+  rateLimit?: MatomoRateLimitInfo
+): MatomoApiError {
   const extracted = extractMatomoError(payload);
   const message = extracted?.message ?? 'Matomo reported an error result.';
   const details: MatomoErrorDetails = {
     endpoint,
     payload,
     code: extracted?.code,
+    rateLimit,
   };
 
   const normalized = message.toLowerCase();
