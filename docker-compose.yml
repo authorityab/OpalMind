@@ -5,7 +5,6 @@ services:
     image: ${MATOKIT_IMAGE:-ghcr.io/puttrix/matokit-api:latest}
     env_file:
       - stack.env
-      - .env
     environment:
       - NODE_ENV=production
       - MATOMO_BASE_URL=${MATOMO_BASE_URL:-https://matomo.example.com}
