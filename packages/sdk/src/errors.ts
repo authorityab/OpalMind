@@ -1,5 +1,12 @@
 export type MatomoErrorCode = string | number | undefined;
 
+export interface MatomoRateLimitInfo {
+  limit?: number;
+  remaining?: number;
+  resetAt?: number;
+  retryAfterMs?: number;
+}
+
 export interface MatomoErrorDetails {
   status?: number;
   code?: MatomoErrorCode;
@@ -7,6 +14,7 @@ export interface MatomoErrorDetails {
   endpoint?: string;
   payload?: unknown;
   cause?: unknown;
+  rateLimit?: MatomoRateLimitInfo;
 }
 
 type GuidanceKey = 'auth' | 'permission' | 'rate-limit' | 'client' | 'server' | 'parse' | 'network' | 'unknown';
@@ -21,6 +29,44 @@ const defaultGuidance: Record<GuidanceKey, string> = {
   network: 'Could not reach Matomo. Check connectivity, base URL, and DNS configuration.',
   unknown: 'An unexpected error occurred while calling Matomo. Inspect the details and Matomo logs.',
 };
+
+const codeGuidance: Record<string, string> = {
+  '101': 'Check the siteId value—ensure the site exists and the token can access it.',
+  '103': 'Ensure the date parameter uses a Matomo-supported format (e.g. YYYY-MM-DD or date ranges).',
+  '110': 'Review the Matomo segment expression for syntax errors and unsupported operators.',
+};
+
+const keywordGuidance: Array<{ pattern: RegExp; guidance: string }> = [
+  {
+    pattern:
+      /id\s*site|siteid|site id|no website found|unknown website|website id|idsite|site does not exist|no view access to idsite/,
+    guidance: 'Check the siteId value—ensure the site exists and the token can access it.',
+  },
+  {
+    pattern: /\bdate\b|date parameter|invalid date|date format/,
+    guidance: 'Ensure the date parameter matches Matomo formats (YYYY-MM-DD or a date range) for the chosen period.',
+  },
+  {
+    pattern: /\bperiod\b|unknown period|invalid period|unsupported period/,
+    guidance: 'Use Matomo-supported periods (day, week, month, year, range) and align with the requested date.',
+  },
+  {
+    pattern: /\bsegment\b|invalid segment|segment .* does not exist/,
+    guidance: 'Review the Matomo segment expression for syntax errors and test it in Matomo’s segment builder.',
+  },
+  {
+    pattern: /unknown method|invalid method|method .* does not exist|report .* not found|requested report/,
+    guidance: 'Verify the Matomo API method/module name and enable the required plugin if necessary.',
+  },
+  {
+    pattern: /\bgoal\b|goal id|unknown goal/,
+    guidance: 'Confirm the Matomo goal ID exists for the site and matches the request parameters.',
+  },
+  {
+    pattern: /\bformat\b|invalid format|unsupported format/,
+    guidance: 'Request the report in JSON format and confirm the Matomo plugin supports the chosen format.',
+  },
+];
 
 function resolveGuidance(key: GuidanceKey, message?: string, code?: MatomoErrorCode): string {
   if (!message && !code) {
@@ -42,8 +88,15 @@ function resolveGuidance(key: GuidanceKey, message?: string, code?: MatomoErrorC
     return 'Matomo rate limits were hit. Pause briefly or stagger requests before retrying.';
   }
 
-  if (key === 'client' && normalized.includes('site id')) {
-    return 'Check the siteId value—ensure the site exists and the token can access it.';
+  const codeKey = code !== undefined && code !== null ? String(code) : undefined;
+  if (codeKey && codeGuidance[codeKey]) {
+    return codeGuidance[codeKey];
+  }
+
+  for (const { pattern, guidance } of keywordGuidance) {
+    if (pattern.test(normalized)) {
+      return guidance;
+    }
   }
 
   return defaultGuidance[key];
@@ -56,6 +109,7 @@ export class MatomoApiError extends Error {
   readonly endpoint?: string;
   readonly payload?: unknown;
   readonly guidance: string;
+  readonly rateLimit?: MatomoRateLimitInfo;
 
   constructor(message: string, guidanceKey: GuidanceKey, details: MatomoErrorDetails = {}) {
     super(message);
@@ -66,6 +120,7 @@ export class MatomoApiError extends Error {
     this.endpoint = details.endpoint;
     this.payload = details.payload;
     this.guidance = resolveGuidance(guidanceKey, message, details.code);
+    this.rateLimit = details.rateLimit;
 
     if (details.cause instanceof Error) {
       type ErrorWithCause = Error & { cause?: unknown };
@@ -84,6 +139,7 @@ export class MatomoApiError extends Error {
       code: this.code,
       guidance: this.guidance,
       endpoint: this.endpoint,
+      rateLimit: this.rateLimit,
     };
   }
 }
@@ -161,6 +217,7 @@ export interface MatomoHttpErrorContext {
   endpoint: string;
   bodyText?: string;
   payload?: unknown;
+  rateLimit?: MatomoRateLimitInfo;
 }
 
 export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiError {
@@ -176,6 +233,7 @@ export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiE
     body: bodyText,
     endpoint,
     payload,
+    rateLimit: context.rateLimit,
   };
 
   if (status === 401) {
@@ -197,13 +255,18 @@ export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiE
   return new MatomoClientError(`Matomo request failed (${status}): ${defaultMessage}`, details);
 }
 
-export function classifyMatomoResultError(endpoint: string, payload: unknown): MatomoApiError {
+export function classifyMatomoResultError(
+  endpoint: string,
+  payload: unknown,
+  rateLimit?: MatomoRateLimitInfo
+): MatomoApiError {
   const extracted = extractMatomoError(payload);
   const message = extracted?.message ?? 'Matomo reported an error result.';
   const details: MatomoErrorDetails = {
     endpoint,
     payload,
     code: extracted?.code,
+    rateLimit,
   };
 
   const normalized = message.toLowerCase();

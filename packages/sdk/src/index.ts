@@ -1,4 +1,9 @@
-import { MatomoHttpClient, matomoGet } from './httpClient.js';
+import {
+  MatomoHttpClient,
+  matomoGet,
+  type MatomoRateLimitEvent,
+  type MatomoRateLimitOptions,
+} from './httpClient.js';
 import {
   ReportsService,
   type CacheStatsSnapshot,
@@ -30,6 +35,8 @@ import {
   type TrackPageviewInput,
   type TrackPageviewResult,
   type TrackResult,
+  type TrackingIdempotencyRecord,
+  type TrackingIdempotencyStore,
 } from './tracking.js';
 import { MatomoApiError, MatomoNetworkError } from './errors.js';
 
@@ -46,9 +53,11 @@ export interface MatomoClientConfig {
     baseUrl?: string;
     maxRetries?: number;
     retryDelayMs?: number;
+    idempotencyStore?: TrackingIdempotencyStore;
   };
   cacheTtlMs?: number;
   cache?: CacheConfig;
+  rateLimit?: MatomoRateLimitOptions;
 }
 
 export interface GetKeyNumbersInput {
@@ -345,7 +354,9 @@ export class MatomoClient {
   private readonly defaultSiteId?: number;
 
   constructor(config: MatomoClientConfig) {
-    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth);
+    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
+      rateLimit: config.rateLimit,
+    });
     const reportsOptions: ReportsServiceOptions = {
       cacheTtlMs: config.cache?.ttlMs ?? config.cacheTtlMs,
       onCacheEvent: config.cache?.onEvent,
@@ -356,6 +367,7 @@ export class MatomoClient {
       tokenAuth: config.tokenAuth,
       maxRetries: config.tracking?.maxRetries,
       retryDelayMs: config.tracking?.retryDelayMs,
+      idempotencyStore: config.tracking?.idempotencyStore,
     });
     this.defaultSiteId = config.defaultSiteId;
   }
@@ -597,6 +609,10 @@ export class MatomoClient {
     return this.reports.getCacheStats();
   }
 
+  getLastRateLimitEvent(): MatomoRateLimitEvent | undefined {
+    return this.http.getLastRateLimitEvent();
+  }
+
   async trackPageview(
     input: Omit<TrackPageviewInput, 'siteId'> & { siteId?: number }
   ): Promise<TrackPageviewResult> {
@@ -616,6 +632,10 @@ export class MatomoClient {
   ): Promise<TrackResult> {
     const siteId = this.resolveSiteId(input.siteId);
     return this.tracking.trackGoal({ ...input, siteId });
+  }
+
+  async getTrackingRequestMetadata(key: string): Promise<TrackingIdempotencyRecord | undefined> {
+    return this.tracking.getIdempotencyRecord(key);
   }
 
   async runDiagnostics(input: RunDiagnosticsInput = {}): Promise<RunDiagnosticsResult> {
@@ -866,6 +886,8 @@ export type {
   TrackPageviewInput,
   TrackPageviewResult,
   TrackResult,
+  TrackingIdempotencyRecord,
+  TrackingIdempotencyStore,
   CacheStatsSnapshot,
   CacheEvent,
   EcommerceRevenueTotals,
@@ -873,7 +895,10 @@ export type {
   EcommerceRevenueTotalsInput,
   TrafficChannel,
   GoalConversion,
+  MatomoRateLimitEvent,
 };
+
+export type { MatomoRateLimitOptions } from './httpClient.js';
 
 export { TrackingService } from './tracking.js';
 export {
