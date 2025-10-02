@@ -46,7 +46,11 @@ export function buildServer() {
   const app = express();
   app.use(express.json());
 
-  const bearerToken = process.env.OPAL_BEARER_TOKEN || 'change-me';
+  const bearerToken = process.env.OPAL_BEARER_TOKEN?.trim();
+
+  if (!bearerToken || bearerToken === 'change-me') {
+    throw new Error('OPAL_BEARER_TOKEN must be set to a non-default value before starting the service.');
+  }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (!req.path.startsWith('/tools')) {

@@ -1,13 +1,13 @@
 # Sample Tool Responses
 
-These examples assume the service is running locally on `http://localhost:4000` with the default bearer token `change-me`.
+These examples assume the service is running locally on `http://localhost:4000` with a valid bearer token injected via `OPAL_BEARER_TOKEN`.
 
 ## GetKeyNumbers
 
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-key-numbers \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"day","date":"today"}}'
 ```
@@ -36,7 +36,7 @@ curl -X POST http://localhost:4000/tools/get-key-numbers \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-most-popular-urls \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"week","date":"today","limit":5}}'
 ```
@@ -68,7 +68,7 @@ curl -X POST http://localhost:4000/tools/get-most-popular-urls \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-top-referrers \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"week","date":"today","limit":5}}'
 ```
@@ -96,7 +96,7 @@ curl -X POST http://localhost:4000/tools/get-top-referrers \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-entry-pages \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"day","date":"2025-09-01","limit":5}}'
 ```
@@ -138,7 +138,7 @@ curl -X POST http://localhost:4000/tools/get-entry-pages \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-campaigns \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"month","date":"2025-01-01","limit":5}}'
 ```
@@ -168,7 +168,7 @@ curl -X POST http://localhost:4000/tools/get-campaigns \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-traffic-channels \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"week","date":"today","channelType":"search"}}'
 ```
@@ -198,7 +198,7 @@ curl -X POST http://localhost:4000/tools/get-traffic-channels \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-goal-conversions \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"month","date":"2025-01","goalType":"ecommerce"}}'
 ```
@@ -229,7 +229,7 @@ curl -X POST http://localhost:4000/tools/get-goal-conversions \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-ecommerce-overview \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"day","date":"yesterday"}}'
 ```
@@ -255,7 +255,7 @@ curl -X POST http://localhost:4000/tools/get-ecommerce-overview \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-ecommerce-revenue \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"day","date":"last7","includeSeries":true}}'
 ```
@@ -293,7 +293,7 @@ curl -X POST http://localhost:4000/tools/get-ecommerce-revenue \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-event-categories \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"week","date":"today","limit":5}}'
 ```
@@ -322,7 +322,7 @@ curl -X POST http://localhost:4000/tools/get-event-categories \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-device-types \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"month","date":"2025-01","limit":5}}'
 ```
@@ -352,7 +352,7 @@ curl -X POST http://localhost:4000/tools/get-device-types \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/track/pageview \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"url":"https://example.com/","actionName":"Homepage"}}'
 ```
@@ -371,7 +371,7 @@ curl -X POST http://localhost:4000/track/pageview \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/track/event \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"category":"CTA","action":"click","value":1}}'
 ```
@@ -389,7 +389,7 @@ curl -X POST http://localhost:4000/track/event \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/track/goal \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"goalId":5,"revenue":10.5}}'
 ```
@@ -409,7 +409,7 @@ curl -X POST http://localhost:4000/track/goal \
 **Request**
 ```bash
 curl -X POST http://localhost:4000/tools/get-key-numbers-historical \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"period":"day","date":"last7"}}'
 ```
@@ -438,7 +438,7 @@ curl -X POST http://localhost:4000/tools/get-key-numbers-historical \
 **Request**
 ```bash
 curl -X POST http://localhost:3000/tools/get-health-status \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{}}'
 ```
@@ -483,7 +483,7 @@ curl -X POST http://localhost:3000/tools/get-health-status \
 **Request with Details**
 ```bash
 curl -X POST http://localhost:3000/tools/get-health-status \
-  -H 'Authorization: Bearer change-me' \
+  -H 'Authorization: Bearer <OPAL_BEARER_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"parameters":{"includeDetails":true,"siteId":1}}'
 ```

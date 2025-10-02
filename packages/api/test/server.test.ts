@@ -94,7 +94,7 @@ beforeEach(() => {
   process.env.MATOMO_BASE_URL = 'https://matomo.example.com';
   process.env.MATOMO_TOKEN = 'token';
   process.env.MATOMO_DEFAULT_SITE_ID = '1';
-  process.env.OPAL_BEARER_TOKEN = 'change-me';
+  process.env.OPAL_BEARER_TOKEN = 'test-token';
 });
 
 afterEach(() => {
@@ -125,7 +125,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-key-numbers',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { period: 'week', date: '2024-01-01', segment: 'country==SE' } },
     });
 
@@ -149,7 +149,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-key-numbers-historical',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -170,7 +170,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-most-popular-urls',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { limit: '5', period: 'month', date: 'yesterday' } },
     });
 
@@ -196,7 +196,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/diagnose-matomo',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { siteId: '7' } },
     });
 
@@ -212,7 +212,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-top-referrers',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -234,7 +234,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-entry-pages',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { period: 'week', date: 'yesterday', limit: '15' } },
     });
 
@@ -256,7 +256,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-campaigns',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -278,7 +278,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-ecommerce-overview',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -302,7 +302,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-ecommerce-revenue',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { period: 'day', date: 'last2', includeSeries: 'true' } },
     });
 
@@ -327,7 +327,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-traffic-channels',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { channelType: 'search', period: 'week', date: '2025-09-01', limit: '10' } },
     });
 
@@ -350,7 +350,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-goal-conversions',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { goalType: 'ecommerce', period: 'month', date: '2025-01' } },
     });
 
@@ -374,7 +374,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-events',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: {
         parameters: {
           period: 'month',
@@ -409,7 +409,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-event-categories',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { limit: '25', period: 'week', date: '2024-03-01' } },
     });
 
@@ -431,7 +431,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-device-types',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { segment: 'country==SE', limit: '10' } },
     });
 
@@ -453,7 +453,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-key-numbers',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -469,7 +469,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/tools/get-key-numbers',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { period: 'day', date: 'today' } },
     });
 
@@ -483,7 +483,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/track/pageview',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { url: 'https://example.com/', actionName: 'Home' } },
     });
 
@@ -506,7 +506,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/track/pageview',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: {} },
     });
 
@@ -521,7 +521,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/track/event',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { category: 'CTA', action: 'click', value: 2 } },
     });
 
@@ -547,7 +547,7 @@ describe('tool endpoints', () => {
 
     const response = await invoke(app, {
       url: '/track/goal',
-      headers: { authorization: 'Bearer change-me' },
+      headers: { authorization: 'Bearer test-token' },
       body: { parameters: { goalId: 5, revenue: 10.5 } },
     });
 

@@ -46,11 +46,11 @@ This project provides a lightweight SDK and Express-based tool service that make
 2. **Configure environment**
    Copy the `.env` template or adjust the provided defaults for local development:
    ```ini
-   MATOMO_BASE_URL=https://matomo.example.com
-   MATOMO_TOKEN=your-matomo-token
-   MATOMO_DEFAULT_SITE_ID=1
-   OPAL_BEARER_TOKEN=change-me
-   PORT=4000
+MATOMO_BASE_URL=https://matomo.example.com
+MATOMO_TOKEN=your-matomo-token
+MATOMO_DEFAULT_SITE_ID=1
+OPAL_BEARER_TOKEN=<generate-with-openssl-rand-hex-32>
+PORT=4000
    ```
 
 3. **Build packages**
@@ -70,7 +70,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 | `MATOMO_BASE_URL` | Base URL to your Matomo instance (should include host, optional path). |
 | `MATOMO_TOKEN` | Matomo `token_auth` used for Reporting API calls. |
 | `MATOMO_DEFAULT_SITE_ID` | Default `idSite` used when tool requests omit `siteId`. |
-| `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints. |
+| `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints (generate securely, e.g., `openssl rand -hex 32`). |
 | `PORT` | Listener port for the API service (default `4000`). |
 
 ## Available Scripts
@@ -181,7 +181,7 @@ See `packages/api/docs/health-monitoring.md` for detailed documentation.
 - Repo-based deploys (e.g., Portainer stacks) can rely on `stack.env` in the repo; override values through Portainer’s UI or commit a `.env` for environment-specific secrets. Make sure `docker-compose.yml` can see any additional env files you provide.
 
 ## Next Steps
-- Replace the default bearer token with a secure secret before deploying.
+- Generate a bearer token (e.g., `openssl rand -hex 32`), store it in your secret manager, and document the rotation procedure for each environment.
 - **Set up monitoring**: Integrate the health status endpoint with your monitoring stack for production alerting.
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
 - Persist tracking queue and add durability/caching as traffic increases.

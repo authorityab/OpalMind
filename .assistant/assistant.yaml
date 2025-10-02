@@ -1,0 +1,26 @@
+version: 1
+entrypoints:
+  status: .assistant/status.md
+  plan: .assistant/plan.md
+  backlog: .assistant/backlog.md
+  task_log: .assistant/task_log.md
+  history: .assistant/history.md
+  adr_dir: .assistant/adr
+  troubleshoot: .assistant/troubleshoot/runbook.md
+  mcp_playbook: .assistant/mcp/playbook.md
+  canvas:
+    vision: .assistant/canvas/vision.md
+    goals: .assistant/canvas/goals.md
+    stakeholders: .assistant/canvas/stakeholders.md
+    ideas: .assistant/canvas/ideas.md
+    questions: .assistant/canvas/questions.md
+    notes: .assistant/canvas/notes.md
+llm_rules:
+  - "Always read status.md first."
+  - "If status.md is stale, regenerate it from plan/backlog/task_log."
+  - "Keep status.md short (<200 lines)."
+  - "Prefer MCP tools when available; plan → execute → log."
+  - "Log work in task_log.md (tool, args, result, artifacts/links)."
+  - "Update backlog.md when tasks complete."
+  - "Draft ADRs for major decisions; link in status.md Artifacts."
+  - "If outputs are large, summarize and link the full artifact path."
