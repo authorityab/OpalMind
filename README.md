@@ -179,6 +179,7 @@ See `packages/api/docs/health-monitoring.md` for detailed documentation.
 - Pull the published container: `docker compose pull` (override `MATOKIT_IMAGE` to pin a specific tag if needed, defaults to `ghcr.io/puttrix/matokit-api:latest`). The `Docker Image` GitHub Action automatically builds and pushes fresh images on every `main` push.
 - Launch locally: `docker compose up -d` (reads `.env` for Matomo/Opal secrets and exposes port `3000`).
 - Repo-based deploys (e.g., Portainer stacks) can rely on `stack.env` in the repo; override values through Portainer’s UI or commit a `.env` for environment-specific secrets. Make sure `docker-compose.yml` can see any additional env files you provide.
+- The API refuses to start if `OPAL_BEARER_TOKEN` is unset or still equal to the scaffold value—generate a unique token per environment and inject it via your secret manager.
 
 ## Next Steps
 - Generate a bearer token (e.g., `openssl rand -hex 32`), store it in your secret manager, and document the rotation procedure for each environment.

@@ -1,5 +1,5 @@
 # Backlog
-- [ ] P-001 Harden secret management for MatoKit deployments
+- [x] P-001 Harden secret management for MatoKit deployments
       tags: security,ops  priority: high  est: 0.5d
       deps: ADR-0001
       accepts: Replace placeholder bearer token, document rotation strategy, and ensure env templates reference secure secret storage.
@@ -7,11 +7,11 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
-- [ ] P-003 Add Matomo rate-limit awareness to SDK
+- [x] P-003 Add Matomo rate-limit awareness to SDK
       tags: reliability,sdk  priority: high  est: 1.5d
       deps: ADR-0001
       accepts: Detect limit responses, throttle retries, and surface actionable guidance to API consumers with test coverage.
-- [ ] P-004 Make tracking retries idempotent
+- [x] P-004 Make tracking retries idempotent
       tags: reliability,api  priority: medium  est: 1d
       deps: ADR-0003
       accepts: Tracking queue deduplicates retried events/goals and documents caller requirements for idempotency keys.

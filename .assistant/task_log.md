@@ -28,3 +28,11 @@
   args: npm run test --workspace @matokit/api -- --run
   result: Failed (vitest missing in current environment; npm exit code 127). Tests need local deps installed before rerun.
   artifacts: none
+- tool: none
+  args: Documented bearer-token startup requirement
+  result: Added Docker deployment note in README and troubleshooting entry for the Portainer error.
+  artifacts: README.md, .assistant/troubleshoot/runbook.md
+- tool: none
+  args: Synced history/backlog/plan/status with upstream changes
+  result: Recorded rate-limit and idempotency milestones, marked completed backlog items, and refreshed priorities.
+  artifacts: .assistant/history.md, .assistant/backlog.md, .assistant/plan.md, .assistant/status.md

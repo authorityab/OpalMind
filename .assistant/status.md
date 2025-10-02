@@ -1,18 +1,18 @@
 # Status
 
 ## Focus
-Integrate the existing MatoKit project into the refreshed `.assistant/` workflow while prioritizing secret management and observability follow-ups from the reliability roadmap.
+Integrate the existing MatoKit project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
 
 ## Now / Next / Later
 See `.assistant/plan.md` for details.
-- Now: P-001 Harden secret management; P-002 Integrate health endpoint with monitoring.
-- Next: P-003 Add Matomo rate-limit awareness; P-004 Make tracking retries idempotent.
-- Later: P-005 Persist retry queue/cache; P-006 Extend analytics coverage; P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline.
+- Now: P-002 Integrate health endpoint with monitoring.
+- Next: P-005 Persist retry queue/cache; P-006 Extend analytics coverage.
+- Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
 ## Risks
 - Monitoring platform undecided, leaving P-002 blocked until owners align on tooling.
-- Retry queue persistence choice unresolved; impacts P-005 scope and deployment expectations.
-- Current in-memory cache/queue approach limits horizontal scaling and may require rapid adjustments once traffic grows.
+- Persistence backend for cache/queue still undecided; impacts P-005 scope and deployment expectations.
+- Rate-limit handling now exists, but alerting hooks remain manual until monitoring plan lands.
 
 ## Artifacts
 - Vision & mission: `.assistant/canvas/vision.md`
@@ -23,9 +23,9 @@ See `.assistant/plan.md` for details.
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
-- Rebuilt canvas files to capture vision, architecture, goals, and open questions.
-- Normalized backlog, plan, history, and status to reflect current priorities and risks.
-- Drafted ADRs summarizing API framework, caching, and retry-queue decisions.
+- Documented secure bearer token requirement in deployment docs and troubleshooting playbook.
+- Marked P-001, P-003, and P-004 complete after enforcing secrets, adding rate-limit handling, and introducing idempotent tracking.
+- Updated history/backlog/plan to reflect the latest reliability milestones.
 
 ## Open Questions
 - Q1: Which monitoring platform (Grafana, DataDog, other) will poll `/tools/get-health-status` so we can tailor payload parsing and alert thresholds?
