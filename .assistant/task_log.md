@@ -36,3 +36,8 @@
   args: Synced history/backlog/plan/status with upstream changes
   result: Recorded rate-limit and idempotency milestones, marked completed backlog items, and refreshed priorities.
   artifacts: .assistant/history.md, .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
+- tool: python3
+  args: Added P-010 backlog item for multi-site indexing support
+  result: Backlog now tracks user story for mapping multiple website siteIds to metadata.
+  artifacts: .assistant/backlog.md
+
