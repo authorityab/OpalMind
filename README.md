@@ -46,11 +46,11 @@ This project provides a lightweight SDK and Express-based tool service that make
 2. **Configure environment**
    Copy the `.env` template or adjust the provided defaults for local development:
    ```ini
-  MATOMO_BASE_URL=https://matomo.example.com
-  MATOMO_TOKEN=your-matomo-token
-  MATOMO_DEFAULT_SITE_ID=1
-  OPAL_BEARER_TOKEN=<generate-with-openssl-rand-hex-32>
-  PORT=4000
+   MATOMO_BASE_URL=https://matomo.example.com
+   MATOMO_TOKEN=your-matomo-token
+   MATOMO_DEFAULT_SITE_ID=1
+   OPAL_BEARER_TOKEN=<generate-with-openssl-rand-hex-32>
+   PORT=4000
    ```
 
 3. **Build packages**
