@@ -7,6 +7,10 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
+- [ ] B-001 Fix traffic channel response parsing
+      tags: bug,analytics  priority: high  est: 1d
+      deps: ADR-0001
+      accepts: Month-period traffic channel and most-popular URL requests succeed when Matomo Cloud returns objects instead of arrays (while on-prem works); schema updated or responses normalized; tests cover the regression scenario.
 - [x] P-003 Add Matomo rate-limit awareness to SDK
       tags: reliability,sdk  priority: high  est: 1.5d
       deps: ADR-0001

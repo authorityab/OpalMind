@@ -44,4 +44,12 @@
   args: Refined P-010 backlog acceptance criteria for single-instance multi-site env vars
   result: Clarified requirement to configure siteId/site name pairs via environment variables for container deployments.
   artifacts: .assistant/backlog.md
+- tool: python3
+  args: Logged bug B-001 for traffic channel schema mismatch
+  result: Backlog now tracks Matomo object-vs-array error affecting channel and URL reports.
+  artifacts: .assistant/backlog.md
+- tool: python3
+  args: Documented Matomo Cloud context for bug B-001
+  result: Acceptance criteria now highlight that the object-vs-array parsing issue reproduces on Matomo Cloud deployments only.
+  artifacts: .assistant/backlog.md
 
