@@ -26,7 +26,7 @@
 - [ ] P-010 Support multi-site indexing and configuration
       tags: feature,config,multi-tenant  priority: high  est: 2d
       deps: ADR-0001
-      accepts: As a deployment operator, I can create multiple website entries with a source-of-truth index mapping `siteId` values to site metadata so assistants and APIs route events correctly, and documentation covers managing the index.
+      accepts: As a deployment operator, I can configure multiple websites within one Matomo instance by defining environment-variable pairs for each siteId and site name (shared base URL) so the containerized app routes events correctly, with docs covering the env schema and limits.
 - [ ] P-007 Publish Opal discovery integration guide
       tags: docs,dx  priority: low  est: 1d
       deps: ADR-0001

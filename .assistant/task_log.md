@@ -40,4 +40,8 @@
   args: Added P-010 backlog item for multi-site indexing support
   result: Backlog now tracks user story for mapping multiple website siteIds to metadata.
   artifacts: .assistant/backlog.md
+- tool: python3
+  args: Refined P-010 backlog acceptance criteria for single-instance multi-site env vars
+  result: Clarified requirement to configure siteId/site name pairs via environment variables for container deployments.
+  artifacts: .assistant/backlog.md
 
