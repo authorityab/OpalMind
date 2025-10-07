@@ -26,7 +26,7 @@ const mockMatomoClient = {
 
 const createMatomoClientMock = vi.fn(() => mockMatomoClient);
 
-vi.mock('@matokit/sdk', () => ({
+vi.mock('@opalytics/sdk', () => ({
   createMatomoClient: createMatomoClientMock,
 }));
 

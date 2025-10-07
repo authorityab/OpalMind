@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      '@matokit/sdk': resolve(__dirname, '../sdk/src'),
+      '@opalytics/sdk': resolve(__dirname, '../sdk/src'),
     },
   },
   test: {

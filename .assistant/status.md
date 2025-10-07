@@ -1,7 +1,7 @@
 # Status
 
 ## Focus
-Integrate the existing MatoKit project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
+Integrate the existing Opalytics project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
 
 ## Now / Next / Later
 See `.assistant/plan.md` for details.

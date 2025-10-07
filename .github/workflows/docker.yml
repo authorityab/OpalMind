@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: puttrix/matokit-api
+  IMAGE_NAME: authorityab/opalytics-api
 
 jobs:
   build-and-push:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The health monitoring feature provides comprehensive status checks for Matomo API connectivity, cache performance, and service dependencies. This enables proactive monitoring and troubleshooting of the MatoKit service.
+The health monitoring feature provides comprehensive status checks for Matomo API connectivity, cache performance, and service dependencies. This enables proactive monitoring and troubleshooting of the Opalytics service.
 
 ## API Endpoint
 
@@ -89,7 +89,7 @@ Returns real-time health status with individual component checks.
 ## SDK Usage
 
 ```typescript
-import { createMatomoClient } from '@matokit/sdk';
+import { createMatomoClient } from '@opalytics/sdk';
 
 const client = createMatomoClient({
   baseUrl: 'https://matomo.example.com',

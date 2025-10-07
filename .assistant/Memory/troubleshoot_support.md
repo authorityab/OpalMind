@@ -1,9 +1,9 @@
 # Troubleshooting & Support Playbook
 
 ## Quick Access
-- **Container logs (today):** `docker logs --since "$(date -I)" matokit-api` or `docker compose logs -f --since "$(date -I)" matokit-api`; in Portainer, open the container → Logs → set “Since” to today.
+- **Container logs (today):** `docker logs --since "$(date -I)" opalytics-api` or `docker compose logs -f --since "$(date -I)" opalytics-api`; in Portainer, open the container → Logs → set “Since” to today.
 - **Live logs inside container:** attach with `/bin/sh`, then `tail -f /proc/1/fd/1` (stdout) and `tail -f /proc/1/fd/2` (stderr); keep the tail running while reproducing the issue.
-- **Local dev server:** `npm run dev --workspace @matokit/api` (Express + Opal service with ts-node loader). For fewer logs in prod, plan to move to structured logging (`INF-004`).
+- **Local dev server:** `npm run dev --workspace @opalytics/api` (Express + Opal service with ts-node loader). For fewer logs in prod, plan to move to structured logging (`INF-004`).
 
 ## Current Troubleshooting Steps
 - Verify Matomo connectivity manually with curl: `curl "$MATOMO_BASE_URL/index.php?module=API&method=API.getVersion&token_auth=$MATOMO_TOKEN"`.
@@ -45,4 +45,4 @@
 - `SDK-016` captures internal site-search keyword reporting via `Actions.getSiteSearchKeywords`.
 - `SDK-017` will add page transitions reporting based on `Transitions.getTransitionsForPage`.
 - `SDK-018` targets daily ecommerce conversion metrics for date-by-date purchase questions.
-- Support console plan lives separately in `.assistant/Planning/matokit_support_console_plan.md`; not part of the Matokit codebase yet.
+- Support console plan lives separately in `.assistant/Planning/opalytics_support_console_plan.md`; not part of the Matokit codebase yet.

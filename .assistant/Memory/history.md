@@ -22,7 +22,7 @@
 - **SDK Design**: Centralized HTTP handling via `matomoGet`, mandating Zod parsing for every response to catch schema drift early.
 - **Tool Exposure**: Embraced Opal Tools SDK for `/discovery` generation, ensuring new helpers are surfaced with minimal boilerplate.
 - **Tracking Reliability**: Added an in-memory retry queue to keep `pv_id` continuity and avoid data loss on transient errors.
-- **Delivery Pipeline**: CI builds cover lint, typecheck, tests, and bundle; Docker images publish to `ghcr.io/puttrix/matokit-api`, and compose defaults to the published tag.
+- **Delivery Pipeline**: CI builds cover lint, typecheck, tests, and bundle; Docker images publish to `ghcr.io/authorityab/opalytics-api`, and compose defaults to the published tag.
 - **Runtime Defaults**: Shifted service port to `3000` for container parity and updated docs, stack files, and env templates accordingly.
 
 ## Completed Work Highlights

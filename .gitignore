@@ -7,5 +7,5 @@ coverage
 .env.*
 packages/*/dist
 *.tsbuildinfo
-deploy/matokit.env
+deploy/opalytics.env
 docker-compose.override.yml

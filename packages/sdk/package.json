@@ -1,5 +1,5 @@
 {
-  "name": "@matokit/sdk",
+  "name": "@opalytics/sdk",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",

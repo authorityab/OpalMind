@@ -23,9 +23,9 @@
 - tool: none
   args: Implemented P-001 hardening changes (require bearer token, update configs/docs)
   result: Updated API startup check, tests, deployment templates, and docs to eliminate default tokens; sample responses now reference placeholder secrets.
-  artifacts: packages/api/src/server.ts, packages/api/test/server.test.ts, README.md, docker-compose.yml, stack.env, deploy/matokit.env.example, packages/api/docs/sample-responses.md
+  artifacts: packages/api/src/server.ts, packages/api/test/server.test.ts, README.md, docker-compose.yml, stack.env, deploy/opalytics.env.example, packages/api/docs/sample-responses.md
 - tool: npm
-  args: npm run test --workspace @matokit/api -- --run
+  args: npm run test --workspace @opalytics/api -- --run
   result: Failed (vitest missing in current environment; npm exit code 127). Tests need local deps installed before rerun.
   artifacts: none
 - tool: none

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
 import { Parameter, ParameterType, ToolsService } from '@optimizely-opal/opal-tools-sdk';
-import { createMatomoClient } from '@matokit/sdk';
+import { createMatomoClient } from '@opalytics/sdk';
 
 function parseOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {

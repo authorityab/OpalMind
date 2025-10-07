@@ -1,8 +1,8 @@
 version: '3.9'
 
 services:
-  matokit-api:
-    image: ${MATOKIT_IMAGE:-ghcr.io/puttrix/matokit-api:latest}
+  opalytics-api:
+    image: ${OPALYTICS_IMAGE:-ghcr.io/authorityab/opalytics-api:latest}
     env_file:
       - stack.env
     environment:
