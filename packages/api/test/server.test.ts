@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { fileURLToPath } from 'node:url';
 
 import type { Express } from 'express';
 import httpMocks from 'node-mocks-http';
@@ -29,6 +30,8 @@ const createMatomoClientMock = vi.fn(() => mockMatomoClient);
 vi.mock('@opalytics/sdk', () => ({
   createMatomoClient: createMatomoClientMock,
 }));
+
+const fixtureSiteMappingPath = fileURLToPath(new URL('../../../config/site-mapping.example.json', import.meta.url));
 
 async function createApp(): Promise<Express> {
   const module = await import('../src/server.js');
@@ -95,6 +98,7 @@ beforeEach(() => {
   process.env.MATOMO_TOKEN = 'token';
   process.env.MATOMO_DEFAULT_SITE_ID = '1';
   process.env.OPAL_BEARER_TOKEN = 'test-token';
+  process.env.SITE_MAPPING_PATH = fixtureSiteMappingPath;
 });
 
 afterEach(() => {
@@ -102,6 +106,7 @@ afterEach(() => {
   delete process.env.MATOMO_TOKEN;
   delete process.env.MATOMO_DEFAULT_SITE_ID;
   delete process.env.OPAL_BEARER_TOKEN;
+  delete process.env.SITE_MAPPING_PATH;
 });
 
 describe('tool endpoints', () => {
@@ -137,6 +142,74 @@ describe('tool endpoints', () => {
       date: '2024-01-01',
       segment: 'country==SE',
     });
+  });
+
+  it('maps a site name to its configured siteId', async () => {
+    const app = await createApp();
+    const payload = { nb_visits: 21 };
+    mockMatomoClient.getKeyNumbers.mockResolvedValue(payload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { site: 'puttski.com', period: 'day' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(payload);
+    expect(mockMatomoClient.getKeyNumbers).toHaveBeenCalledWith({
+      siteId: 1,
+      period: 'day',
+      date: undefined,
+      segment: undefined,
+    });
+  });
+
+  it('returns comparisons for multiple site names', async () => {
+    const app = await createApp();
+    mockMatomoClient.getKeyNumbers
+      .mockResolvedValueOnce({ nb_visits: 12 })
+      .mockResolvedValueOnce({ nb_visits: 9 });
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { site: ['puttski.com', 'load test'], period: 'week', date: '2024-02-01' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockMatomoClient.getKeyNumbers).toHaveBeenNthCalledWith(1, {
+      siteId: 1,
+      period: 'week',
+      date: '2024-02-01',
+      segment: undefined,
+    });
+    expect(mockMatomoClient.getKeyNumbers).toHaveBeenNthCalledWith(2, {
+      siteId: 2,
+      period: 'week',
+      date: '2024-02-01',
+      segment: undefined,
+    });
+    expect(response.body).toEqual({
+      comparisons: [
+        { site: 'puttski.com', siteId: 1, metrics: { nb_visits: 12 } },
+        { site: 'load test', siteId: 2, metrics: { nb_visits: 9 } },
+      ],
+    });
+  });
+
+  it('surfaces an error when a site name is not in the mapping', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { site: 'unknown-site.example' } },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: expect.stringContaining('Unknown site name') });
+    expect(mockMatomoClient.getKeyNumbers).not.toHaveBeenCalled();
   });
 
   it('returns historical key numbers with defaults', async () => {

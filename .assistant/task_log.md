@@ -73,3 +73,7 @@
   args: Added config/site-mapping.example.json stub for multi-site name→siteId mapping
   result: Tracking config now has template entries for puttski.com, Load test, and another-site.com
   artifacts: config/site-mapping.example.json
+- tool: none
+  args: Implemented P-010 site mapping helper and multi-site comparisons
+  result: Added a validated site mapping loader, updated GetKeyNumbers to translate site names (including multi-site comparisons), expanded tests, and documented env usage; follow-up: extend name resolution to remaining analytics tools if needed.
+  artifacts: packages/api/src/siteMapping.ts, packages/api/src/server.ts, packages/api/test/siteMapping.test.ts, packages/api/test/server.test.ts, README.md

@@ -74,8 +74,34 @@ This project provides a lightweight SDK and Express-based tool service that make
 | `MATOMO_BASE_URL` | Base URL to your Matomo instance (should include host, optional path). |
 | `MATOMO_TOKEN` | Matomo `token_auth` used for Reporting API calls. |
 | `MATOMO_DEFAULT_SITE_ID` | Default `idSite` used when tool requests omit `siteId`. |
+| `SITE_MAPPING_PATH` | Path to a JSON file mapping site names to Matomo site IDs (defaults to `config/site-mapping.example.json`). |
 | `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints (generate securely, e.g., `openssl rand -hex 32`). |
 | `PORT` | Listener port for the API service (default `4000`). |
+
+## Site Mapping
+
+The analytics tools can resolve human-friendly site names to Matomo `idSite` values. Copy `config/site-mapping.example.json` to a
+location managed with your infrastructure tooling and point `SITE_MAPPING_PATH` at the new file. The loader falls back to the
+example file for local development.
+
+```json
+{
+  "puttski.com": 1,
+  "load test": 2,
+  "another-site.com": 3
+}
+```
+
+- **Updating the roster**: edit the mapping file whenever Matomo site IDs change or new sites are added. Site names are
+  case-insensitive and trimmed before lookup.
+- **Supplying names to tools**: pass a single name via the `site` parameter (or continue using numeric `siteId`). Provide
+  comma/semicolon/`vs`-separated values or an array to compare multiple sites—the `GetKeyNumbers` tool will return a
+  `comparisons` array with metrics per site.
+- **Failure modes**:
+  - Missing mapping file → startup throws `Site mapping file not found …`.
+  - Invalid JSON or non-numeric values → startup throws with a schema validation message.
+  - Unknown site name in a request → the API responds with a `500` error describing the unknown site and listing available
+    names.
 
 ## Available Scripts
 From the repo root:

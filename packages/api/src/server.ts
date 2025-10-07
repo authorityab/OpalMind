@@ -7,6 +7,8 @@ import express from 'express';
 import { Parameter, ParameterType, ToolsService } from '@optimizely-opal/opal-tools-sdk';
 import { createMatomoClient } from '@opalytics/sdk';
 
+import { loadSiteMapping, type SiteMapping } from './siteMapping.js';
+
 function parseOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -42,6 +44,98 @@ function requireString(value: unknown, field: string): string {
   return parsed;
 }
 
+type SiteToken =
+  | { type: 'number'; value: number }
+  | { type: 'name'; value: string };
+
+interface SiteSelection {
+  siteId: number;
+  label: string;
+}
+
+const SITE_LIST_SEPARATOR = /[,|;\n]|\s+vs\s+/i;
+const NUMERIC_SITE_PATTERN = /^[+-]?\d+$/;
+
+function splitSiteList(value: string): string[] {
+  return value
+    .split(SITE_LIST_SEPARATOR)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function collectSiteTokens(value: unknown, treatNumericStringsAsNumbers: boolean): SiteToken[] {
+  const tokens: SiteToken[] = [];
+
+  const visit = (input: unknown) => {
+    if (input === undefined || input === null) {
+      return;
+    }
+
+    if (typeof input === 'number') {
+      if (Number.isInteger(input)) {
+        tokens.push({ type: 'number', value: input });
+      }
+      return;
+    }
+
+    if (typeof input === 'string') {
+      for (const part of splitSiteList(input)) {
+        if (treatNumericStringsAsNumbers && NUMERIC_SITE_PATTERN.test(part)) {
+          const parsed = Number.parseInt(part, 10);
+          if (!Number.isNaN(parsed)) {
+            tokens.push({ type: 'number', value: parsed });
+            continue;
+          }
+        }
+        tokens.push({ type: 'name', value: part });
+      }
+      return;
+    }
+
+    if (Array.isArray(input)) {
+      for (const nested of input) {
+        visit(nested);
+      }
+    }
+  };
+
+  visit(value);
+  return tokens;
+}
+
+function resolveSiteSelections(parameters: Record<string, unknown> | undefined, mapping: SiteMapping): SiteSelection[] {
+  const tokens: SiteToken[] = [];
+  if (parameters) {
+    tokens.push(...collectSiteTokens(parameters['siteId'], true));
+    tokens.push(...collectSiteTokens(parameters['site'], false));
+    tokens.push(...collectSiteTokens(parameters['sites'], false));
+  }
+
+  const selections: SiteSelection[] = [];
+  const seen = new Set<number>();
+
+  for (const token of tokens) {
+    if (token.type === 'number') {
+      const siteId = token.value;
+      if (!Number.isInteger(siteId) || seen.has(siteId)) {
+        continue;
+      }
+      selections.push({ siteId, label: `siteId:${siteId}` });
+      seen.add(siteId);
+      continue;
+    }
+
+    const entry = mapping.getEntry(token.value);
+    if (seen.has(entry.siteId)) {
+      continue;
+    }
+    selections.push({ siteId: entry.siteId, label: entry.name });
+    seen.add(entry.siteId);
+  }
+
+  return selections;
+}
+
 export function buildServer() {
   const app = express();
   app.use(express.json());
@@ -75,9 +169,22 @@ export function buildServer() {
     defaultSiteId: Number.isNaN(defaultSiteId) ? undefined : defaultSiteId,
   });
 
+  const siteMapping = loadSiteMapping();
+
   const toolsService = new ToolsService(app);
 
-  const siteIdParam = new Parameter('siteId', ParameterType.Integer, 'Override site ID (defaults to MATOMO_DEFAULT_SITE_ID)', false);
+  const siteIdParam = new Parameter(
+    'siteId',
+    ParameterType.Integer,
+    'Override site ID (defaults to MATOMO_DEFAULT_SITE_ID). Use "site" for friendly names.',
+    false
+  );
+  const siteNameParam = new Parameter(
+    'site',
+    ParameterType.String,
+    'Site name from the configured mapping (comma-separated for comparisons)',
+    false
+  );
   const periodParam = new Parameter('period', ParameterType.String, 'Matomo period (day, week, month, year, range)', false);
   const dateParam = new Parameter('date', ParameterType.String, 'Date or range (YYYY-MM-DD, today, yesterday, last7, etc.)', false);
   const segmentParam = new Parameter('segment', ParameterType.String, 'Matomo segment expression', false);
@@ -128,7 +235,8 @@ export function buildServer() {
     'GetKeyNumbers',
     'Returns Matomo key metrics for the selected period and date.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const selections = resolveSiteSelections(parameters, siteMapping);
+      const fallbackSiteId = parseOptionalNumber(parameters?.['siteId']);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -136,9 +244,21 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getKeyNumbers({ siteId, period, date, segment });
+      if (selections.length <= 1) {
+        const siteId = selections[0]?.siteId ?? fallbackSiteId;
+        return matomoClient.getKeyNumbers({ siteId, period, date, segment });
+      }
+
+      const comparisons = await Promise.all(
+        selections.map(async ({ siteId, label }) => {
+          const metrics = await matomoClient.getKeyNumbers({ siteId, period, date, segment });
+          return { site: label, siteId, metrics };
+        })
+      );
+
+      return { comparisons };
     },
-    [siteIdParam, periodParam, dateParam, segmentParam],
+    [siteIdParam, siteNameParam, periodParam, dateParam, segmentParam],
     '/tools/get-key-numbers'
   );
 
