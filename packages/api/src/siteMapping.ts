@@ -43,7 +43,7 @@ export class SiteMapping {
   tryGetSiteId(siteName: string): number | undefined {
     try {
       return this.getEntry(siteName).siteId;
-    } catch (error) {
+    } catch {
       return undefined;
     }
   }
