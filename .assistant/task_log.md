@@ -53,3 +53,11 @@
   result: Acceptance criteria now highlight that the object-vs-array parsing issue reproduces on Matomo Cloud deployments only.
   artifacts: .assistant/backlog.md
 
+- tool: shell
+  args: Reviewed .assistant status.md, plan.md, and backlog.md via cat commands
+  result: Reconfirmed P-002 monitoring integration as top priority with associated risks still open
+  artifacts: none
+- tool: apply_patch
+  args: Added project logo reference to README.md via Markdown image
+  result: README now displays img/logo.png above the main title
+  artifacts: README.md

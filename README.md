@@ -1,3 +1,5 @@
+![Opalytics logo](img/logo.png)
+
 # Matomo LLM Tooling
 
 This project provides a lightweight SDK and Express-based tool service that makes Matomo analytics accessible to LLMs through Opal-compatible endpoints. It includes typed reporting helpers, HTTP wrappers, and ready-to-call tool definitions for key analytics workflows.
