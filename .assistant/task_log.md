@@ -61,3 +61,15 @@
   args: Added project logo reference to README.md via Markdown image
   result: README now displays img/logo.png above the main title
   artifacts: README.md
+- tool: apply_patch
+  args: Expanded P-010 backlog item with mapping and tooling implementation notes
+  result: Backlog now documents concrete steps for multi-site siteId resolution and analytics comparison
+  artifacts: .assistant/backlog.md
+- tool: shell
+  args: Added config/site-mapping.example.json stub for multi-site name→siteId mapping
+  result: Tracking config now has template entries for puttski.com, Load test, and another-site.com
+  artifacts: config/site-mapping.example.json
+- tool: shell
+  args: Added config/site-mapping.example.json stub for multi-site name→siteId mapping
+  result: Tracking config now has template entries for puttski.com, Load test, and another-site.com
+  artifacts: config/site-mapping.example.json
