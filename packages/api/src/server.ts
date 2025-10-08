@@ -123,6 +123,7 @@ export function buildServer() {
     'Filter goal conversions by Matomo goal type (ecommerce, manual, etc.)',
     false
   );
+  const funnelIdParam = new Parameter('funnelId', ParameterType.String, 'Matomo funnel identifier', true);
 
   toolsService.registerTool(
     'GetKeyNumbers',
@@ -390,6 +391,39 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, goalFilterIdParam, goalTypeFilterParam],
     '/tools/get-goal-conversions'
+  );
+
+  toolsService.registerTool(
+    'GetFunnelAnalytics',
+    'Returns funnel conversion metrics and step breakdown for a Matomo funnel.',
+    async (parameters: Record<string, unknown>) => {
+      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const periodValue = parameters?.['period'];
+      const dateValue = parameters?.['date'];
+      const segmentValue = parameters?.['segment'];
+      const funnelIdValue = parameters?.['funnelId'];
+      const period = typeof periodValue === 'string' ? periodValue : undefined;
+      const date = typeof dateValue === 'string' ? dateValue : undefined;
+      const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
+
+      const funnelIdString = parseOptionalString(funnelIdValue);
+      const funnelIdNumeric = parseOptionalNumber(funnelIdValue);
+      const funnelId = funnelIdString ?? (funnelIdNumeric !== undefined ? String(funnelIdNumeric) : undefined);
+
+      if (!funnelId) {
+        throw new Error('funnelId is required');
+      }
+
+      return matomoClient.getFunnelSummary({
+        siteId,
+        funnelId,
+        period: period ?? 'day',
+        date: date ?? 'today',
+        segment,
+      });
+    },
+    [siteIdParam, funnelIdParam, periodParam, dateParam, segmentParam],
+    '/tools/get-funnel-analytics'
   );
 
   toolsService.registerTool(

@@ -104,6 +104,18 @@
   result: Backlog and plan now include P-012–P-015 for additional analytics insights
   artifacts: .assistant/backlog.md, .assistant/plan.md
 - tool: apply_patch
+  args: Implemented funnel analytics helpers and API tooling
+  result: Added Matomo funnel schemas, reports service method, client wrapper, new `/tools/get-funnel-analytics` endpoint, docs, and tests
+  artifacts: packages/sdk/src/schemas.ts, packages/sdk/src/reports.ts, packages/sdk/src/index.ts, packages/api/src/server.ts, packages/api/test/server.test.ts, packages/sdk/test/matomoClient.test.ts, README.md
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (54 tests) covering SDK funnel helper additions
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (22 tests) verifying API funnel analytics endpoint
+  artifacts: none
+- tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
   artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json

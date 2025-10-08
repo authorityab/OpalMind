@@ -4,6 +4,7 @@ import {
   deviceTypesSchema,
   ecommerceSummarySchema,
   entryPagesSchema,
+  funnelResponseSchema,
   eventCategoriesSchema,
   eventsSchema,
   mostPopularUrlsSchema,
@@ -18,6 +19,8 @@ import type {
   EntryPage,
   EventCategory,
   EventSummary,
+  RawFunnelSummary,
+  RawFunnelStep,
   MostPopularUrl,
   TopReferrer,
   TrafficChannel,
@@ -129,6 +132,40 @@ export interface GoalConversion {
   nb_conversions?: number;
   nb_visits_converted?: number;
   revenue?: number;
+}
+
+export interface FunnelSummaryInput {
+  siteId: number;
+  funnelId: string;
+  period: string;
+  date: string;
+  segment?: string;
+}
+
+export interface FunnelStepSummary {
+  id: string;
+  label: string;
+  visits?: number;
+  conversions?: number;
+  totalConversions?: number;
+  conversionRate?: number;
+  abandonmentRate?: number;
+  overallConversionRate?: number;
+  avgTimeToConvert?: number;
+  medianTimeToConvert?: number;
+}
+
+export interface FunnelSummary {
+  id: string;
+  label: string;
+  period: string;
+  date: string;
+  segment?: string;
+  overallConversionRate?: number;
+  abandonmentRate?: number;
+  totalConversions?: number;
+  totalVisits?: number;
+  steps: FunnelStepSummary[];
 }
 
 export interface CacheEvent {
@@ -523,6 +560,31 @@ export class ReportsService {
     this.setCache(feature, cacheKey, filtered);
     return filtered;
   }
+
+  async getFunnelSummary(input: FunnelSummaryInput): Promise<FunnelSummary> {
+    const feature = 'funnelSummary';
+    const cacheKey = this.makeCacheKey(feature, input);
+    const cached = this.getFromCache<FunnelSummary>(feature, cacheKey);
+    if (cached) return cached;
+
+    const response = await matomoGet<unknown>(this.http, {
+      method: 'Funnels.getFunnel',
+      params: {
+        idSite: input.siteId,
+        idFunnel: input.funnelId,
+        period: input.period,
+        date: input.date,
+        segment: input.segment,
+      },
+    });
+
+    const parsed = funnelResponseSchema.parse(response ?? {});
+    const summaryRecord = extractFunnelSummary(parsed);
+    const normalized = normalizeFunnelSummary(summaryRecord, input);
+
+    this.setCache(feature, cacheKey, normalized);
+    return normalized;
+  }
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {
@@ -678,4 +740,123 @@ function formatGoalLabel(id: string): string {
     return 'Abandoned Cart';
   }
   return id;
+}
+
+function parseNumeric(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const normalized = Number(trimmed.replace(/,/g, ''));
+    return Number.isFinite(normalized) ? normalized : undefined;
+  }
+
+  return undefined;
+}
+
+function parsePercentage(value: unknown): number | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const withoutPercent = trimmed.endsWith('%') ? trimmed.slice(0, -1) : trimmed;
+    return parseNumeric(withoutPercent);
+  }
+
+  return parseNumeric(value);
+}
+
+function normalizeIdentifier(value: unknown, fallback: string): string {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : fallback;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return fallback;
+}
+
+function normalizeFunnelSummary(raw: RawFunnelSummary | undefined, context: FunnelSummaryInput): FunnelSummary {
+  const id = normalizeIdentifier(raw?.idfunnel, context.funnelId);
+  const labelCandidate = raw?.label ?? raw?.name;
+  const label = typeof labelCandidate === 'string' && labelCandidate.trim().length > 0 ? labelCandidate.trim() : `Funnel ${id}`;
+
+  const steps = normalizeFunnelSteps(raw?.steps);
+
+  return {
+    id,
+    label,
+    period: context.period,
+    date: context.date,
+    segment: context.segment,
+    overallConversionRate: parsePercentage(raw?.overall_conversion_rate),
+    abandonmentRate: parsePercentage(raw?.overall_abandonment_rate),
+    totalConversions: parseNumeric(raw?.nb_conversions_total),
+    totalVisits: parseNumeric(raw?.nb_visits_total),
+    steps,
+  };
+}
+
+function normalizeFunnelSteps(rawSteps: RawFunnelSummary['steps']): FunnelStepSummary[] {
+  if (!rawSteps) {
+    return [];
+  }
+
+  const records: RawFunnelStep[] = Array.isArray(rawSteps)
+    ? rawSteps
+    : Object.entries(rawSteps)
+        .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+        .map(([, value]) => value);
+
+  return records
+    .map((candidate, index) => normalizeFunnelStep(candidate, index))
+    .filter((step): step is FunnelStepSummary => step !== undefined);
+}
+
+function normalizeFunnelStep(raw: RawFunnelStep | undefined, index: number): FunnelStepSummary | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const id = normalizeIdentifier(raw.idstep, String(index + 1));
+  const labelCandidate = raw.label ?? raw.name;
+  const label =
+    typeof labelCandidate === 'string' && labelCandidate.trim().length > 0 ? labelCandidate.trim() : `Step ${index + 1}`;
+
+  return {
+    id,
+    label,
+    visits: parseNumeric(raw.nb_visits_total ?? raw.nb_users),
+    conversions: parseNumeric(raw.nb_conversions),
+    totalConversions: parseNumeric(raw.nb_conversions_total ?? raw.nb_targets),
+    conversionRate: parsePercentage(raw.step_conversion_rate),
+    abandonmentRate: parsePercentage(raw.step_abandonment_rate),
+    overallConversionRate: parsePercentage(raw.overall_conversion_rate),
+    avgTimeToConvert: parseNumeric(raw.avg_time_to_convert),
+    medianTimeToConvert: parseNumeric(raw.median_time_to_convert),
+  };
+}
+
+type ParsedFunnelResponse = ReturnType<typeof funnelResponseSchema.parse>;
+
+function extractFunnelSummary(response: ParsedFunnelResponse): RawFunnelSummary | undefined {
+  if (Array.isArray(response)) {
+    return response[0];
+  }
+
+  if (response && typeof response === 'object' && 'steps' in response) {
+    return response as RawFunnelSummary;
+  }
+
+  if (response && typeof response === 'object') {
+    const values = Object.values(response as Record<string, RawFunnelSummary>);
+    return values.length > 0 ? values[0] : undefined;
+  }
+
+  return undefined;
 }

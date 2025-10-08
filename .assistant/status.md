@@ -6,7 +6,7 @@ Integrate the existing OpalMind project into the refreshed `.assistant/` workflo
 ## Now / Next / Later
 See `.assistant/plan.md` for details.
 - Now: P-002 Integrate health endpoint with monitoring.
-- Next: P-005 Persist retry queue/cache; P-006 Extend analytics coverage.
+- Next: P-005 Persist retry queue/cache; P-011–P-015 analytics expansion.
 - Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
 ## Risks
@@ -27,6 +27,7 @@ See `.assistant/plan.md` for details.
 - Documented secure bearer token requirement in deployment docs and troubleshooting playbook.
 - Marked P-001, P-003, and P-004 complete after enforcing secrets, adding rate-limit handling, and introducing idempotent tracking.
 - Updated history/backlog/plan to reflect the latest reliability milestones.
+- Completed P-006 by shipping funnel analytics helpers in the SDK and new `/tools/get-funnel-analytics` API endpoint with docs/tests.
 
 ## Open Questions
 - Q1: Which monitoring platform (Grafana, DataDog, other) will poll `/tools/get-health-status` so we can tailor payload parsing and alert thresholds?

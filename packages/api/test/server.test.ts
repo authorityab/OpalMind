@@ -18,6 +18,7 @@ const mockMatomoClient = {
   getDeviceTypes: vi.fn(),
   getTrafficChannels: vi.fn(),
   getGoalConversions: vi.fn(),
+  getFunnelSummary: vi.fn(),
   runDiagnostics: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
@@ -86,6 +87,7 @@ beforeEach(() => {
   mockMatomoClient.getDeviceTypes.mockReset();
   mockMatomoClient.getTrafficChannels.mockReset();
   mockMatomoClient.getGoalConversions.mockReset();
+  mockMatomoClient.getFunnelSummary.mockReset();
   mockMatomoClient.runDiagnostics.mockReset();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
@@ -182,6 +184,43 @@ describe('tool endpoints', () => {
       date: 'yesterday',
       segment: undefined,
       limit: 5,
+    });
+  });
+
+  it('returns funnel analytics for the requested funnel', async () => {
+    const app = await createApp();
+    const funnelPayload = {
+      id: 'signup',
+      label: 'Signup Funnel',
+      period: 'month',
+      date: '2024-01-01',
+      steps: [{ id: '1', label: 'Landing', conversions: 120 }],
+    };
+
+    mockMatomoClient.getFunnelSummary.mockResolvedValue(funnelPayload);
+
+    const response = await invoke(app, {
+      url: '/tools/get-funnel-analytics',
+      headers: { authorization: 'Bearer test-token' },
+      body: {
+        parameters: {
+          siteId: 3,
+          funnelId: 'signup',
+          period: 'month',
+          date: '2024-01-01',
+          segment: 'country==SE',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(funnelPayload);
+    expect(mockMatomoClient.getFunnelSummary).toHaveBeenCalledWith({
+      siteId: 3,
+      funnelId: 'signup',
+      period: 'month',
+      date: '2024-01-01',
+      segment: 'country==SE',
     });
   });
 

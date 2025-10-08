@@ -625,6 +625,39 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('5');
   });
 
+  it('fetches funnel summary and normalizes step metrics', async () => {
+    const fetchMock = createFetchMock({
+      label: 'Checkout Funnel',
+      overall_conversion_rate: '32.5%',
+      nb_conversions_total: '48',
+      nb_visits_total: '120',
+      steps: [
+        { idstep: 1, label: 'Cart', nb_visits_total: '120', nb_conversions: '80', step_conversion_rate: '66.7%' },
+        { label: 'Payment', nb_visits_total: '80', nb_conversions_total: '48', overall_conversion_rate: '40%' },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
+    const result = await client.getFunnelSummary({ funnelId: 'checkout' });
+
+    expect(result.id).toBe('checkout');
+    expect(result.label).toBe('Checkout Funnel');
+    expect(result.overallConversionRate).toBe(32.5);
+    expect(result.totalConversions).toBe(48);
+    expect(result.totalVisits).toBe(120);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ id: '1', conversions: 80, conversionRate: 66.7 });
+    expect(result.steps[1]).toMatchObject({ id: '2', overallConversionRate: 40 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Funnels.getFunnel');
+    expect(url.searchParams.get('idFunnel')).toBe('checkout');
+    expect(url.searchParams.get('idSite')).toBe('5');
+    expect(url.searchParams.get('period')).toBe('day');
+    expect(url.searchParams.get('date')).toBe('today');
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -195,3 +195,49 @@ export const goalConversionsSchema = z.array(
 );
 
 export type RawGoalConversion = z.infer<typeof goalConversionsSchema>[number];
+
+export const funnelStepSchema = z
+  .object({
+    idstep: z.union([z.string(), numeric]).optional(),
+    label: z.string().optional(),
+    name: z.string().optional(),
+    overall_conversion_rate: z.union([numeric, z.string()]).optional(),
+    step_conversion_rate: z.union([numeric, z.string()]).optional(),
+    step_abandonment_rate: z.union([numeric, z.string()]).optional(),
+    nb_conversions: numeric.optional(),
+    nb_conversions_total: numeric.optional(),
+    nb_visits_total: numeric.optional(),
+    nb_users: numeric.optional(),
+    nb_targets: numeric.optional(),
+    avg_time_to_convert: numeric.optional(),
+    median_time_to_convert: numeric.optional(),
+  })
+  .passthrough();
+
+export type RawFunnelStep = z.infer<typeof funnelStepSchema>;
+
+export const funnelSummarySchema = z
+  .object({
+    idfunnel: z.union([z.string(), numeric]).optional(),
+    label: z.string().optional(),
+    name: z.string().optional(),
+    overall_conversion_rate: z.union([numeric, z.string()]).optional(),
+    overall_abandonment_rate: z.union([numeric, z.string()]).optional(),
+    nb_conversions_total: numeric.optional(),
+    nb_visits_total: numeric.optional(),
+    steps: z
+      .union([
+        z.array(funnelStepSchema),
+        z.record(funnelStepSchema),
+      ])
+      .optional(),
+  })
+  .passthrough();
+
+export type RawFunnelSummary = z.infer<typeof funnelSummarySchema>;
+
+export const funnelResponseSchema = z.union([
+  funnelSummarySchema,
+  z.array(funnelSummarySchema),
+  z.record(funnelSummarySchema),
+]);
