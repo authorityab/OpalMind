@@ -83,6 +83,18 @@
   args: Reviewed `.assistant/plan.md` to ensure alignment with current priorities
   result: Confirmed P-002 as active focus with queue persistence and analytics expansion staged next
   artifacts: none
+- tool: shell
+  args: `cat .assistant/plan.md` and `cat .assistant/backlog.md`
+  result: Verified plan/backlog remain consistent with status focus on P-002 and no stale items detected
+  artifacts: none
+- tool: apply_patch
+  args: Documented GHCR authentication troubleshooting for Portainer deployments
+  result: Added runbook entry covering PAT creation and registry configuration for ghcr.io pulls
+  artifacts: .assistant/troubleshoot/runbook.md
+- tool: apply_patch
+  args: Updated Docker workflow to publish `ghcr.io/authorityab/opalmind-api`
+  result: CI now pushes images under the renamed OpalMind registry path
+  artifacts: .github/workflows/docker.yml
 - tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
