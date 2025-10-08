@@ -625,6 +625,23 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('5');
   });
 
+  it('handles goal conversions returned as an object map', async () => {
+    const fetchMock = createFetchMock({
+      donation: { idgoal: '1', goal: 'Donation', nb_conversions: '4', type: 'manually' },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'today', goalId: '1' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '1', label: 'Donation', nb_conversions: 4 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Goals.get');
+    expect(url.searchParams.get('idGoal')).toBe('1');
+  });
+
   it('fetches funnel summary and normalizes step metrics', async () => {
     const fetchMock = createFetchMock({
       label: 'Checkout Funnel',

@@ -538,7 +538,7 @@ export class ReportsService {
     const cached = this.getFromCache<GoalConversion[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<GoalConversion[]>(this.http, {
+    const data = await matomoGet<unknown>(this.http, {
       method: 'Goals.get',
       params: {
         idSite: input.siteId,
@@ -550,7 +550,8 @@ export class ReportsService {
       },
     });
 
-    const parsed = goalConversionsSchema.parse(data ?? []);
+    const normalizedResponse = normalizeGoalConversionResponse(data);
+    const parsed = goalConversionsSchema.parse(normalizedResponse);
     const normalized = parsed.map(entry => normalizeGoalConversion(entry));
 
     const filtered = input.goalType
@@ -859,4 +860,20 @@ function extractFunnelSummary(response: ParsedFunnelResponse): RawFunnelSummary 
   }
 
   return undefined;
+}
+
+function normalizeGoalConversionResponse(data: unknown): unknown[] {
+  if (!data) {
+    return [];
+  }
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (typeof data === 'object') {
+    return Object.values(data as Record<string, unknown>);
+  }
+
+  return [];
 }

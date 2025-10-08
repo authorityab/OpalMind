@@ -116,6 +116,18 @@
   result: Passed (22 tests) verifying API funnel analytics endpoint
   artifacts: none
 - tool: apply_patch
+  args: Allow goal conversion responses returned as objects and cover with tests
+  result: Normalized Matomo goal data when returned as keyed object maps and added regression coverage
+  artifacts: packages/sdk/src/reports.ts, packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Failed (read-only filesystem prevented Vitest from writing config timestamp)
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (55 tests) confirming goal conversion normalization fix
+  artifacts: none
+- tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
   artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json
