@@ -95,3 +95,7 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: Passed (21 tests) confirming API package health after rename
   artifacts: none
+- tool: gh
+  args: gh repo rename OpalMind --yes
+  result: Repository renamed on GitHub; local `origin` remote now points to `authorityab/OpalMind`
+  artifacts: https://github.com/authorityab/OpalMind
