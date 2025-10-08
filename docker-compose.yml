@@ -1,8 +1,8 @@
 version: '3.9'
 
 services:
-  opalytics-api:
-    image: ${OPALYTICS_IMAGE:-ghcr.io/authorityab/opalytics-api:latest}
+  opalmind-api:
+    image: ${OPALMIND_IMAGE:-ghcr.io/authorityab/opalmind-api:latest}
     env_file:
       - stack.env
     environment:

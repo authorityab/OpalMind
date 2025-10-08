@@ -1,5 +1,5 @@
 # Project Overview
-Build an SDK + lightweight “tool” API that makes Matomo analytics and tracking LLM-friendly. Inspired by CodeArt’s Opalytics post, but targeting Matomo’s Reporting API (read) and HTTP Tracking API (write).
+Build an SDK + lightweight “tool” API that makes Matomo analytics and tracking LLM-friendly. Inspired by CodeArt’s OpalMind post, but targeting Matomo’s Reporting API (read) and HTTP Tracking API (write).
 
 ---
 

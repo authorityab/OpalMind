@@ -18,7 +18,7 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@opalytics/sdk": [
+      "@opalmind/sdk": [
         "packages/sdk/src/index.ts"
       ]
     },

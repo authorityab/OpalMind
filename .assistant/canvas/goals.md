@@ -8,7 +8,7 @@
 ## Mid-term (1–2 months)
 - Introduce persistent storage for the tracking retry queue and shared caches to support horizontal scaling.
 - Expand analytics coverage (events, funnels, segments) and keep Opal tool definitions in sync.
-- Publish discovery and integration docs so teams can self-serve Opalytics adoption.
+- Publish discovery and integration docs so teams can self-serve OpalMind adoption.
 
 ## Long-term (quarter+)
 - Stream health/cache metrics into the central observability platform with dashboards and alerts.

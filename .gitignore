@@ -9,3 +9,4 @@ packages/*/dist
 *.tsbuildinfo
 deploy/opalytics.env
 docker-compose.override.yml
+Opal Agent

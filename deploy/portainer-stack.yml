@@ -1,10 +1,10 @@
 version: '3.9'
 
 services:
-  opalytics-api:
-    image: ghcr.io/authorityab/opalytics-api:latest
+  opalmind-api:
+    image: ghcr.io/authorityab/opalmind-api:latest
     env_file:
-      - opalytics.env
+      - opalmind.env
     environment:
       - NODE_ENV=production
     ports:

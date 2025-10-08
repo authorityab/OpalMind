@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      '@opalytics/sdk': resolve(__dirname, '../sdk/src'),
+      '@opalmind/sdk': resolve(__dirname, '../sdk/src'),
     },
   },
   test: {

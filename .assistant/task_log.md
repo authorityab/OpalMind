@@ -23,9 +23,9 @@
 - tool: none
   args: Implemented P-001 hardening changes (require bearer token, update configs/docs)
   result: Updated API startup check, tests, deployment templates, and docs to eliminate default tokens; sample responses now reference placeholder secrets.
-  artifacts: packages/api/src/server.ts, packages/api/test/server.test.ts, README.md, docker-compose.yml, stack.env, deploy/opalytics.env.example, packages/api/docs/sample-responses.md
+  artifacts: packages/api/src/server.ts, packages/api/test/server.test.ts, README.md, docker-compose.yml, stack.env, deploy/opalmind.env.example, packages/api/docs/sample-responses.md
 - tool: npm
-  args: npm run test --workspace @opalytics/api -- --run
+  args: npm run test --workspace @opalmind/api -- --run
   result: Failed (vitest missing in current environment; npm exit code 127). Tests need local deps installed before rerun.
   artifacts: none
 - tool: none
@@ -69,7 +69,29 @@
   args: Added config/site-mapping.example.json stub for multi-site name→siteId mapping
   result: Tracking config now has template entries for puttski.com, Load test, and another-site.com
   artifacts: config/site-mapping.example.json
+## 2025-10-07
+- tool: shell
+  args: Inspected health endpoint by running `rg "get-health"` and `sed` on `packages/api/src/server.ts` plus `packages/sdk/src/index.ts`
+  result: Captured current GetHealthStatus checks covering Matomo latency, cache hit rate thresholds, queue stub, and optional site access lookup
+  artifacts: none
 - tool: shell
   args: Added config/site-mapping.example.json stub for multi-site name→siteId mapping
   result: Tracking config now has template entries for puttski.com, Load test, and another-site.com
   artifacts: config/site-mapping.example.json
+## 2025-10-08
+- tool: shell
+  args: Reviewed `.assistant/plan.md` to ensure alignment with current priorities
+  result: Confirmed P-002 as active focus with queue persistence and analytics expansion staged next
+  artifacts: none
+- tool: apply_patch
+  args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
+  result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
+  artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json
+- tool: python3
+  args: Rebranded documentation and assistant collateral to OpalMind
+  result: Updated `README.md`, `CONTRIBUTING.md`, `packages/api/docs/health-monitoring.md`, `.assistant/*`, and `package-lock.json` with new naming, registry links, and workspace commands
+  artifacts: README.md, CONTRIBUTING.md, packages/api/docs/health-monitoring.md, .assistant, package-lock.json
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (21 tests) confirming API package health after rename
+  artifacts: none

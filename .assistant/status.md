@@ -1,7 +1,7 @@
 # Status
 
 ## Focus
-Integrate the existing Opalytics project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
+Integrate the existing OpalMind project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
 
 ## Now / Next / Later
 See `.assistant/plan.md` for details.
@@ -23,6 +23,7 @@ See `.assistant/plan.md` for details.
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Rebranded the codebase, packages, and deployment assets from Opalytics to OpalMind.
 - Documented secure bearer token requirement in deployment docs and troubleshooting playbook.
 - Marked P-001, P-003, and P-004 complete after enforcing secrets, adding rate-limit handling, and introducing idempotent tracking.
 - Updated history/backlog/plan to reflect the latest reliability milestones.

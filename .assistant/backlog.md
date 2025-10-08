@@ -1,5 +1,5 @@
 # Backlog
-- [x] P-001 Harden secret management for Opalytics deployments
+- [x] P-001 Harden secret management for OpalMind deployments
       tags: security,ops  priority: high  est: 0.5d
       deps: ADR-0001
       accepts: Replace placeholder bearer token, document rotation strategy, and ensure env templates reference secure secret storage.

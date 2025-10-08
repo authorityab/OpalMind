@@ -24,9 +24,9 @@
 | 2025-09-26 | codex | Added container deployment assets | done | Dockerfile, docker-compose, Portainer stack, and docs |
 | 2025-09-26 | codex | Hardened CI workflow | done | npm ci, lint/type/test/build steps in GitHub Actions |
 | 2025-09-26 | codex | Fixed CI typecheck for API | done | Added dedicated tsconfig without project references |
-| 2025-09-26 | codex | Switched compose to pull remote image | done | docker-compose now references published OPALYTICS_IMAGE |
-| 2025-09-26 | codex | Pointed artifacts to Authority AB registry | done | docker-compose and Portainer stack use ghcr.io/authorityab/opalytics-api |
-| 2025-09-26 | codex | Added Docker publish workflow | done | GH Actions builds & pushes image to ghcr.io/authorityab/opalytics-api |
+| 2025-09-26 | codex | Switched compose to pull remote image | done | docker-compose now references published OPALMIND_IMAGE |
+| 2025-09-26 | codex | Pointed artifacts to Authority AB registry | done | docker-compose and Portainer stack use ghcr.io/authorityab/opalmind-api |
+| 2025-09-26 | codex | Added Docker publish workflow | done | GH Actions builds & pushes image to ghcr.io/authorityab/opalmind-api |
 | 2025-09-26 | codex | Changed default port to 3000 | done | Updated Dockerfile, compose, Portainer stack, README, and env template |
 | 2025-09-26 | codex | Added pageview metrics to key numbers | done | Actions.get merged so tools expose nb_pageviews/nb_uniq_pageviews |
 | 2025-09-26 | codex | Added historical key numbers tool | done | SDK series helper + `GetKeyNumbersHistorical` API tool + docs/tests |
