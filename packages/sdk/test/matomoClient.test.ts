@@ -642,6 +642,21 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('idGoal')).toBe('1');
   });
 
+  it('handles goal conversion summaries returned as a single object', async () => {
+    const fetchMock = createFetchMock({
+      nb_conversions: '7',
+      nb_visits_converted: '3',
+      revenue: '0',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'today', goalId: 2 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '2', nb_conversions: 7 });
+  });
+
   it('fetches funnel summary and normalizes step metrics', async () => {
     const fetchMock = createFetchMock({
       label: 'Checkout Funnel',

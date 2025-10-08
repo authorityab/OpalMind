@@ -550,7 +550,7 @@ export class ReportsService {
       },
     });
 
-    const normalizedResponse = normalizeGoalConversionResponse(data);
+    const normalizedResponse = normalizeGoalConversionResponse(data, input);
     const parsed = goalConversionsSchema.parse(normalizedResponse);
     const normalized = parsed.map(entry => normalizeGoalConversion(entry));
 
@@ -862,7 +862,7 @@ function extractFunnelSummary(response: ParsedFunnelResponse): RawFunnelSummary 
   return undefined;
 }
 
-function normalizeGoalConversionResponse(data: unknown): unknown[] {
+function normalizeGoalConversionResponse(data: unknown, context: GoalConversionsInput): unknown[] {
   if (!data) {
     return [];
   }
@@ -872,8 +872,61 @@ function normalizeGoalConversionResponse(data: unknown): unknown[] {
   }
 
   if (typeof data === 'object') {
-    return Object.values(data as Record<string, unknown>);
+    const record = data as Record<string, unknown>;
+
+    if (isGoalConversionRecord(record)) {
+      const ensured = ensureGoalRecord(record, context);
+      return ensured ? [ensured] : [];
+    }
+
+    const normalizedValues = Object.values(record)
+      .map(value => ensureGoalRecord(value, context))
+      .filter((value): value is Record<string, unknown> => value !== undefined);
+
+    if (normalizedValues.length > 0) {
+      return normalizedValues;
+    }
+
+    const ensured = ensureGoalRecord(record, context);
+    return ensured ? [ensured] : [];
+  }
+
+  const ensured = ensureGoalRecord(data, context);
+  if (ensured) {
+    return [ensured];
   }
 
   return [];
+}
+
+function ensureGoalRecord(value: unknown, context: GoalConversionsInput): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object') {
+    const record = { ...(value as Record<string, unknown>) };
+    if (record.idgoal === undefined && context.goalId !== undefined) {
+      record.idgoal = context.goalId;
+    }
+    return record;
+  }
+
+  const conversions = parseNumeric(value);
+  if (conversions === undefined) {
+    return undefined;
+  }
+
+  const idgoal =
+    context.goalId !== undefined
+      ? typeof context.goalId === 'number'
+        ? context.goalId
+        : context.goalId
+      : 'unknown';
+
+  return {
+    idgoal,
+    nb_conversions: conversions,
+  };
+}
+
+function isGoalConversionRecord(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  return keys.some(key => key === 'goal' || key === 'name' || key === 'idgoal' || key === 'nb_conversions');
 }
