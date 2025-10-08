@@ -96,6 +96,14 @@
   result: CI now pushes images under the renamed OpalMind registry path
   artifacts: .github/workflows/docker.yml
 - tool: apply_patch
+  args: Split P-006 analytics work into funnel and goal helper tasks
+  result: Backlog and plan now track P-006 (funnels) and P-011 (goals) separately
+  artifacts: .assistant/backlog.md, .assistant/plan.md
+- tool: apply_patch
+  args: Added cohort, campaign, event flow, and site search analytics tasks
+  result: Backlog and plan now include P-012–P-015 for additional analytics insights
+  artifacts: .assistant/backlog.md, .assistant/plan.md
+- tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
   artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json

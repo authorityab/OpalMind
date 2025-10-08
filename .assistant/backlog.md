@@ -23,10 +23,10 @@
       tags: infrastructure,reliability  priority: medium  est: 2d
       deps: ADR-0003
       accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
-- [ ] P-006 Extend analytics coverage for assistants
-      tags: feature,sdk  priority: medium  est: 3d
+- [ ] P-006 Add funnel analytics helpers
+      tags: feature,sdk  priority: medium  est: 1.5d
       deps: ADR-0001
-      accepts: Additional helpers (funnels, segments, trend analysis) exposed through API tools with docs/tests updated.
+      accepts: Provide funnel analytics helpers surfaced through the API tools, covering data retrieval, normalization, and documentation/tests for usage.
 - [ ] P-010 Support multi-site indexing and configuration
       tags: feature,config,multi-tenant  priority: high  est: 2d
       deps: ADR-0001
@@ -46,3 +46,23 @@
       tags: maintenance,build  priority: medium  est: 1d
       deps: ADR-0001, ADR-0002, ADR-0003
       accepts: Remove unused code, dependencies, and build artifacts; document any deletions or exemptions to keep the codebase minimal.
+- [ ] P-011 Add goal analytics helpers
+      tags: feature,sdk  priority: medium  est: 1.5d
+      deps: ADR-0001
+      accepts: Expose goal analytics helpers via API tools with data normalization, updated docs, and test coverage for goal summaries.
+- [ ] P-012 Add cohort retention analytics
+      tags: feature,analytics  priority: medium  est: 2d
+      deps: ADR-0001
+      accepts: Provide cohort and retention analytics helpers surfacing repeat visit cadence, churn metrics, and stickiness insights with docs/tests.
+- [ ] P-013 Add campaign acquisition analytics
+      tags: feature,analytics  priority: medium  est: 1.5d
+      deps: ADR-0001
+      accepts: Deliver helpers for campaign/channel breakdowns (UTMs, conversions) available via API tools and documented with scenarios/tests.
+- [ ] P-014 Add event flow analytics
+      tags: feature,analytics  priority: medium  est: 2d
+      deps: ADR-0001
+      accepts: Implement entry→exit journey/path reports with drop-off detection, expose through assistants, and cover with docs/tests.
+- [ ] P-015 Add site search analytics helpers
+      tags: feature,analytics  priority: low  est: 1d
+      deps: ADR-0001
+      accepts: Surface internal site search terms, zero-result queries, and follow-up actions through the API tools with supporting docs/tests.

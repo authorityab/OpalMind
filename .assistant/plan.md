@@ -5,7 +5,12 @@
 
 ## Next
 - P-005 Persist retry queue and cache state
-- P-006 Extend analytics coverage for assistants
+- P-006 Add funnel analytics helpers
+- P-011 Add goal analytics helpers
+- P-012 Add cohort retention analytics
+- P-013 Add campaign acquisition analytics
+- P-014 Add event flow analytics
+- P-015 Add site search analytics helpers
 
 ## Later
 - P-007 Publish Opal discovery integration guide
