@@ -4,7 +4,6 @@ import {
   deviceTypesSchema,
   ecommerceSummarySchema,
   entryPagesSchema,
-  funnelResponseSchema,
   eventCategoriesSchema,
   eventsSchema,
   mostPopularUrlsSchema,
@@ -19,8 +18,6 @@ import type {
   EntryPage,
   EventCategory,
   EventSummary,
-  RawFunnelSummary,
-  RawFunnelStep,
   MostPopularUrl,
   TopReferrer,
   TrafficChannel,
@@ -568,23 +565,69 @@ export class ReportsService {
     const cached = this.getFromCache<FunnelSummary>(feature, cacheKey);
     if (cached) return cached;
 
-    const response = await matomoGet<unknown>(this.http, {
-      method: 'Funnels.getFunnel',
-      params: {
-        idSite: input.siteId,
-        idFunnel: input.funnelId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-      },
-    });
+    const baseParams = {
+      idSite: input.siteId,
+      idFunnel: input.funnelId,
+      period: input.period,
+      date: input.date,
+      segment: input.segment,
+    };
 
-    const parsed = funnelResponseSchema.parse(response ?? {});
-    const summaryRecord = extractFunnelSummary(parsed);
-    const normalized = normalizeFunnelSummary(summaryRecord, input);
+    const [configResult, metricsResult, flowResult] = await Promise.allSettled([
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnel',
+        params: baseParams,
+      }),
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnelMetrics',
+        params: baseParams,
+      }),
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnelFlowTable',
+        params: { ...baseParams, flat: 1 },
+      }),
+    ]);
 
-    this.setCache(feature, cacheKey, normalized);
-    return normalized;
+    const config = configResult.status === 'fulfilled' ? coerceFunnelConfig(configResult.value, input) : {};
+    const metrics = metricsResult.status === 'fulfilled' ? normalizeFunnelMetrics(metricsResult.value) : {};
+    const flowSteps = flowResult.status === 'fulfilled' ? normalizeFunnelSteps(flowResult.value) : [];
+
+    const steps = mergeFunnelSteps(config.steps ?? [], flowSteps);
+    const funnelId = config.id ?? normalizeIdentifier(undefined, input.funnelId);
+    const summary: FunnelSummary = {
+      id: funnelId,
+      label: config.label ?? `Funnel ${funnelId}`,
+      period: input.period,
+      date: input.date,
+      segment: input.segment,
+      overallConversionRate: firstDefined(metrics.overallConversionRate, config.overallConversionRate),
+      abandonmentRate: firstDefined(metrics.abandonmentRate, config.abandonmentRate),
+      totalConversions: firstDefined(metrics.totalConversions, config.totalConversions),
+      totalVisits: firstDefined(metrics.totalVisits, config.totalVisits),
+      steps: steps.length > 0 ? steps : config.steps ?? [],
+    };
+
+    if (summary.totalConversions === undefined) {
+      const total = sumDefined(summary.steps.map(step => firstDefined(step.totalConversions, step.conversions)));
+      if (total !== undefined) {
+        summary.totalConversions = total;
+      }
+    }
+
+    if (summary.totalVisits === undefined) {
+      const visits = sumDefined(summary.steps.map(step => step.visits));
+      if (visits !== undefined) {
+        summary.totalVisits = visits;
+      }
+    }
+
+    if (summary.overallConversionRate === undefined && summary.totalConversions !== undefined && summary.totalVisits !== undefined && summary.totalVisits > 0) {
+      summary.overallConversionRate = (summary.totalConversions / summary.totalVisits) * 100;
+    }
+
+    const result = summary;
+    this.setCache(feature, cacheKey, result);
+    return result;
   }
 }
 
@@ -782,84 +825,164 @@ function normalizeIdentifier(value: unknown, fallback: string): string {
   return fallback;
 }
 
-function normalizeFunnelSummary(raw: RawFunnelSummary | undefined, context: FunnelSummaryInput): FunnelSummary {
-  const id = normalizeIdentifier(raw?.idfunnel, context.funnelId);
-  const labelCandidate = raw?.label ?? raw?.name;
-  const label = typeof labelCandidate === 'string' && labelCandidate.trim().length > 0 ? labelCandidate.trim() : `Funnel ${id}`;
+type PartialFunnelSummary = Partial<Omit<FunnelSummary, 'steps'>> & { steps?: FunnelStepSummary[] };
 
-  const steps = normalizeFunnelSteps(raw?.steps);
+function coerceFunnelConfig(raw: unknown, context: FunnelSummaryInput, seen = new Set<unknown>()): PartialFunnelSummary {
+  if (!raw || typeof raw !== 'object') {
+    const conversions = parseNumeric(raw);
+    if (conversions !== undefined) {
+      return { totalConversions: conversions };
+    }
+    return {};
+  }
 
-  return {
+  if (seen.has(raw)) {
+    return {};
+  }
+  seen.add(raw);
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const result = coerceFunnelConfig(item, context, seen);
+      if (hasFunnelData(result)) {
+        return result;
+      }
+    }
+    return {};
+  }
+
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
+
+  const idCandidate = getStringFromMap(lc, ['idfunnel', 'id_funnel', 'id', 'funnelid']);
+  const id = normalizeIdentifier(idCandidate, context.funnelId);
+  const label = getStringFromMap(lc, ['label', 'name', 'funnelname', 'funnel_name', 'title']);
+
+  const totalConversions = getNumericFromMap(lc, [
+    'nb_conversions_total',
+    'nb_conversions',
+    'conversions',
+    'nbconverted',
+    'nb_targets',
+  ]);
+  const totalVisits = getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'visits', 'nb_entries', 'nb_entrances', 'entries']);
+  const overallConversionRate = getPercentageFromMap(lc, [
+    'overall_conversion_rate',
+    'conversion_rate',
+    'total_conversion_rate',
+  ]);
+  const abandonmentRate = getPercentageFromMap(lc, ['overall_abandonment_rate', 'abandonment_rate', 'dropoff_rate']);
+
+  let steps: FunnelStepSummary[] = [];
+  if (lc.has('steps')) {
+    steps = normalizeFunnelSteps(lc.get('steps'));
+  }
+
+  if (steps.length === 0) {
+    steps = normalizeFunnelSteps(record);
+  }
+
+  const summary: PartialFunnelSummary = {
     id,
     label,
-    period: context.period,
-    date: context.date,
-    segment: context.segment,
-    overallConversionRate: parsePercentage(raw?.overall_conversion_rate),
-    abandonmentRate: parsePercentage(raw?.overall_abandonment_rate),
-    totalConversions: parseNumeric(raw?.nb_conversions_total),
-    totalVisits: parseNumeric(raw?.nb_visits_total),
+    totalConversions,
+    totalVisits,
+    overallConversionRate,
+    abandonmentRate,
     steps,
   };
-}
 
-function normalizeFunnelSteps(rawSteps: RawFunnelSummary['steps']): FunnelStepSummary[] {
-  if (!rawSteps) {
-    return [];
+  if (hasFunnelData(summary)) {
+    return summary;
   }
 
-  const records: RawFunnelStep[] = Array.isArray(rawSteps)
-    ? rawSteps
-    : Object.entries(rawSteps)
-        .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
-        .map(([, value]) => value);
+  for (const value of Object.values(record)) {
+    if (typeof value === 'object') {
+      const nested = coerceFunnelConfig(value, context, seen);
+      if (hasFunnelData(nested)) {
+        return nested;
+      }
+    }
+  }
 
-  return records
-    .map((candidate, index) => normalizeFunnelStep(candidate, index))
-    .filter((step): step is FunnelStepSummary => step !== undefined);
+  return {};
 }
 
-function normalizeFunnelStep(raw: RawFunnelStep | undefined, index: number): FunnelStepSummary | undefined {
+function normalizeFunnelMetrics(raw: unknown): PartialFunnelSummary {
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const result = normalizeFunnelMetrics(item);
+      if (hasFunnelData(result)) {
+        return result;
+      }
+    }
+    return {};
+  }
+
   if (!raw || typeof raw !== 'object') {
-    return undefined;
+    const conversions = parseNumeric(raw);
+    if (conversions !== undefined) {
+      return { totalConversions: conversions };
+    }
+    return {};
   }
 
-  const id = normalizeIdentifier(raw.idstep, String(index + 1));
-  const labelCandidate = raw.label ?? raw.name;
-  const label =
-    typeof labelCandidate === 'string' && labelCandidate.trim().length > 0 ? labelCandidate.trim() : `Step ${index + 1}`;
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
 
   return {
-    id,
-    label,
-    visits: parseNumeric(raw.nb_visits_total ?? raw.nb_users),
-    conversions: parseNumeric(raw.nb_conversions),
-    totalConversions: parseNumeric(raw.nb_conversions_total ?? raw.nb_targets),
-    conversionRate: parsePercentage(raw.step_conversion_rate),
-    abandonmentRate: parsePercentage(raw.step_abandonment_rate),
-    overallConversionRate: parsePercentage(raw.overall_conversion_rate),
-    avgTimeToConvert: parseNumeric(raw.avg_time_to_convert),
-    medianTimeToConvert: parseNumeric(raw.median_time_to_convert),
+    totalConversions: getNumericFromMap(lc, [
+      'nb_conversions',
+      'nb_converted',
+      'conversions',
+      'goalconversions',
+      'nb_conversions_total',
+    ]),
+    totalVisits: getNumericFromMap(lc, ['nb_visits', 'nb_entries', 'entries', 'visits', 'nb_entrances', 'nb_visits_total']),
+    overallConversionRate: getPercentageFromMap(lc, ['conversion_rate', 'overall_conversion_rate', 'total_conversion_rate']),
+    abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'overall_abandonment_rate', 'dropoff_rate']),
+    steps: normalizeFunnelSteps(record),
   };
 }
 
-type ParsedFunnelResponse = ReturnType<typeof funnelResponseSchema.parse>;
+function normalizeFunnelSteps(raw: unknown): FunnelStepSummary[] {
+  const records = extractStepRecords(raw);
+  return normalizeFunnelStepRecords(records);
+}
 
-function extractFunnelSummary(response: ParsedFunnelResponse): RawFunnelSummary | undefined {
-  if (Array.isArray(response)) {
-    return response[0];
-  }
+function mergeFunnelSteps(baseSteps: FunnelStepSummary[], flowSteps: FunnelStepSummary[]): FunnelStepSummary[] {
+  if (baseSteps.length === 0) return flowSteps;
+  if (flowSteps.length === 0) return baseSteps;
 
-  if (response && typeof response === 'object' && 'steps' in response) {
-    return response as RawFunnelSummary;
-  }
+  const map = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
 
-  if (response && typeof response === 'object') {
-    const values = Object.values(response as Record<string, RawFunnelSummary>);
-    return values.length > 0 ? values[0] : undefined;
-  }
+  const keyFor = (step: FunnelStepSummary) => `${step.id.toLowerCase()}|${(step.label ?? '').toLowerCase()}`;
 
-  return undefined;
+  const applyStep = (step: FunnelStepSummary) => {
+    const key = keyFor(step);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...step });
+      order.push(key);
+      return;
+    }
+    map.set(key, mergeStepData(existing, step));
+  };
+
+  baseSteps.forEach(applyStep);
+  flowSteps.forEach(applyStep);
+
+  return order
+    .map(key => map.get(key)!)
+    .sort((a, b) => {
+      const aNum = Number.parseFloat(a.id);
+      const bNum = Number.parseFloat(b.id);
+      if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+        return aNum - bNum;
+      }
+      return a.label.localeCompare(b.label);
+    });
 }
 
 function normalizeGoalConversionResponse(data: unknown, context: GoalConversionsInput): unknown[] {
@@ -929,4 +1052,210 @@ function ensureGoalRecord(value: unknown, context: GoalConversionsInput): Record
 function isGoalConversionRecord(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
   return keys.some(key => key === 'goal' || key === 'name' || key === 'idgoal' || key === 'nb_conversions');
+}
+
+function hasFunnelData(summary: PartialFunnelSummary): boolean {
+  return (
+    summary.id !== undefined ||
+    summary.label !== undefined ||
+    summary.totalConversions !== undefined ||
+    summary.totalVisits !== undefined ||
+    summary.overallConversionRate !== undefined ||
+    summary.abandonmentRate !== undefined ||
+    (summary.steps !== undefined && summary.steps.length > 0)
+  );
+}
+
+function lowerCaseKeys(record: Record<string, unknown>): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(record)) {
+    map.set(key.toLowerCase(), value);
+  }
+  return map;
+}
+
+function getNumericFromMap(map: Map<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (value === undefined) {
+      continue;
+    }
+    const numeric = parseNumeric(value);
+    if (numeric !== undefined) {
+      return numeric;
+    }
+  }
+  return undefined;
+}
+
+function getPercentageFromMap(map: Map<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (value === undefined) {
+      continue;
+    }
+    const percentage = parsePercentage(value);
+    if (percentage !== undefined) {
+      return percentage;
+    }
+  }
+  return undefined;
+}
+
+function getStringFromMap(map: Map<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    if (typeof value === 'number') {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function extractStepRecords(raw: unknown, seen = new Set<unknown>()): Record<string, unknown>[] {
+  if (!raw || typeof raw !== 'object') {
+    return [];
+  }
+
+  if (seen.has(raw)) {
+    return [];
+  }
+  seen.add(raw);
+
+  if (Array.isArray(raw)) {
+    const results: Record<string, unknown>[] = [];
+    for (const item of raw) {
+      results.push(...extractStepRecords(item, seen));
+    }
+    return results;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
+  const results: Record<string, unknown>[] = [];
+
+  if (isStepRecord(lc) && !lc.has('steps')) {
+    results.push(record);
+  } else if (record.columns && typeof record.columns === 'object' && !Array.isArray(record.columns)) {
+    const merged = { label: record.label, ...(record.columns as Record<string, unknown>) };
+    results.push(merged);
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === 'object') {
+      results.push(...extractStepRecords(value, seen));
+    }
+  }
+
+  return results;
+}
+
+function isStepRecord(map: Map<string, unknown>): boolean {
+  const keys = Array.from(map.keys());
+  const labelKeys = ['label', 'name', 'step', 'step_position', 'step_name', 'title'];
+  const metricIndicators = [
+    'nb_conversions',
+    'nb_converted',
+    'nb_visits',
+    'nb_visits_total',
+    'nb_entries',
+    'nb_entrances',
+    'conversion_rate',
+    'step_conversion_rate',
+    'abandonment_rate',
+    'step_abandonment_rate',
+  ];
+  const hasLabel = keys.some(key => labelKeys.includes(key));
+  const hasMetrics = keys.some(key => metricIndicators.includes(key) || key.startsWith('nb_') || key.includes('conversion'));
+  return hasLabel && hasMetrics;
+}
+
+function normalizeFunnelStepRecords(records: Record<string, unknown>[]): FunnelStepSummary[] {
+  const map = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
+
+  records.forEach((record, index) => {
+    const lc = lowerCaseKeys(record);
+    const idCandidate = getStringFromMap(lc, ['idstep', 'step_position', 'position', 'step', 'id']);
+    const labelCandidate = getStringFromMap(lc, ['label', 'name', 'step_name', 'title']);
+
+    const id = normalizeIdentifier(idCandidate, String(index + 1));
+    const label = labelCandidate ?? `Step ${index + 1}`;
+    const key = `${id.toLowerCase()}|${label.toLowerCase()}`;
+
+    const step: FunnelStepSummary = {
+      id,
+      label,
+      visits: getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'nb_entries', 'nb_entrances', 'visits', 'entries']),
+      conversions: getNumericFromMap(lc, ['nb_conversions', 'nb_converted', 'conversions', 'nb_targets', 'nb_visits_converted']),
+      totalConversions: getNumericFromMap(lc, ['nb_conversions_total', 'total_conversions']),
+      conversionRate: getPercentageFromMap(lc, ['conversion_rate', 'step_conversion_rate']),
+      abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'step_abandonment_rate', 'dropoff_rate']),
+      overallConversionRate: getPercentageFromMap(lc, ['overall_conversion_rate', 'step_overall_conversion_rate']),
+      avgTimeToConvert: getNumericFromMap(lc, ['avg_time_to_convert', 'avg_time']),
+      medianTimeToConvert: getNumericFromMap(lc, ['median_time_to_convert', 'median_time']),
+    };
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, step);
+      order.push(key);
+      return;
+    }
+
+    map.set(key, mergeStepData(existing, step));
+  });
+
+  const steps = order.map(key => map.get(key)!);
+
+  return steps.sort((a, b) => {
+    const aNum = Number.parseFloat(a.id);
+    const bNum = Number.parseFloat(b.id);
+    if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+      return aNum - bNum;
+    }
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function mergeStepData(base: FunnelStepSummary, extra: FunnelStepSummary): FunnelStepSummary {
+  const merged: FunnelStepSummary = { ...base };
+
+  if (extra.visits !== undefined) merged.visits = extra.visits;
+  if (extra.conversions !== undefined) merged.conversions = extra.conversions;
+  if (extra.totalConversions !== undefined) merged.totalConversions = extra.totalConversions;
+  if (extra.conversionRate !== undefined) merged.conversionRate = extra.conversionRate;
+  if (extra.abandonmentRate !== undefined) merged.abandonmentRate = extra.abandonmentRate;
+  if (extra.overallConversionRate !== undefined) merged.overallConversionRate = extra.overallConversionRate;
+  if (extra.avgTimeToConvert !== undefined) merged.avgTimeToConvert = extra.avgTimeToConvert;
+  if (extra.medianTimeToConvert !== undefined) merged.medianTimeToConvert = extra.medianTimeToConvert;
+
+  return merged;
+}
+
+function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  for (const value of values) {
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function sumDefined(values: Array<number | undefined>): number | undefined {
+  let total = 0;
+  let seen = false;
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      total += value;
+      seen = true;
+    }
+  }
+  return seen ? total : undefined;
 }
