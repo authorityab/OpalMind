@@ -588,7 +588,7 @@ export class ReportsService {
       }),
     ]);
 
-    const config = configResult.status === 'fulfilled' ? coerceFunnelConfig(configResult.value, input) : {};
+  const config = configResult.status === 'fulfilled' ? coerceFunnelConfig(configResult.value, input) : {};
     const metrics = metricsResult.status === 'fulfilled' ? normalizeFunnelMetrics(metricsResult.value) : {};
     const flowSteps = flowResult.status === 'fulfilled' ? normalizeFunnelSteps(flowResult.value) : [];
 
@@ -875,7 +875,11 @@ function coerceFunnelConfig(raw: unknown, context: FunnelSummaryInput, seen = ne
 
   let steps: FunnelStepSummary[] = [];
   if (lc.has('steps')) {
-    steps = normalizeFunnelSteps(lc.get('steps'));
+    steps = normalizeFunnelDefinitionSteps(lc.get('steps'));
+  }
+
+  if (steps.length === 0) {
+    steps = normalizeFunnelDefinitionSteps(record);
   }
 
   if (steps.length === 0) {
@@ -943,6 +947,54 @@ function normalizeFunnelMetrics(raw: unknown): PartialFunnelSummary {
     abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'overall_abandonment_rate', 'dropoff_rate']),
     steps: normalizeFunnelSteps(record),
   };
+}
+
+function normalizeFunnelDefinitionSteps(raw: unknown): FunnelStepSummary[] {
+  if (!raw) {
+    return [];
+  }
+
+  const entries: Array<{ key: string; value: unknown; index: number }> = [];
+
+  if (Array.isArray(raw)) {
+    raw.forEach((value, index) => {
+      entries.push({ key: String(index + 1), value, index });
+    });
+  } else if (typeof raw === 'object') {
+    let index = 0;
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      entries.push({ key, value, index });
+      index += 1;
+    }
+  } else {
+    return [];
+  }
+
+  return entries
+    .map(({ key, value, index }) => {
+      if (!value || typeof value !== 'object') {
+        const id = normalizeIdentifier(undefined, key || String(index + 1));
+        const label =
+          typeof value === 'string' && value.trim().length > 0 ? value.trim() : `Step ${id}`;
+        return { id, label } as FunnelStepSummary;
+      }
+
+      const record = value as Record<string, unknown>;
+      const lc = lowerCaseKeys(record);
+
+      const idCandidate = getStringFromMap(lc, ['step_position', 'position', 'idstep', 'id', key]);
+      const labelCandidate = getStringFromMap(lc, ['label', 'name', 'step_name', 'title']);
+      const pattern = getStringFromMap(lc, ['pattern', 'pattern match', 'match']);
+
+      const id = normalizeIdentifier(idCandidate ?? key, String(index + 1));
+      const label = labelCandidate ?? pattern ?? `Step ${id}`;
+
+      return {
+        id,
+        label,
+      } as FunnelStepSummary;
+    })
+    .filter((step): step is FunnelStepSummary => Boolean(step));
 }
 
 function normalizeFunnelSteps(raw: unknown): FunnelStepSummary[] {

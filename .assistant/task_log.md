@@ -152,6 +152,18 @@
   result: Regenerated SDK dist after funnel helper enhancements
   artifacts: none
 - tool: apply_patch
+  args: Preserve funnel step definitions when Matomo omits metrics
+  result: Configured funnel responses now surface step labels even without conversion data
+  artifacts: packages/sdk/src/reports.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (56 tests) ensuring step definitions survive normalization tweaks
+  artifacts: none
+- tool: npm
+  args: npm run build --workspace @opalmind/sdk
+  result: Rebuilt SDK dist with step-definition handling
+  artifacts: none
+- tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
   artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json
