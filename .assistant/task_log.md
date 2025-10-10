@@ -195,3 +195,15 @@
   args: npm run test --workspace @opalmind/sdk -- --run
   result: Passed (57 tests) validating funnel step normalization and overall SDK behaviour
   artifacts: none
+- tool: apply_patch
+  args: Recursively flatten Matomo goal conversion payloads and merge duplicate goal records
+  result: Updated `packages/sdk/src/reports.ts` to harvest nested structures, sum metrics per goal, and skip metadata-only entries
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Add regression for goal conversions aggregated across multiple date buckets
+  result: Extended `packages/sdk/test/matomoClient.test.ts` with nested Matomo response coverage
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (58 tests) after goal conversion normalization updates
+  artifacts: none

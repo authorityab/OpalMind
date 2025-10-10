@@ -549,7 +549,13 @@ export class ReportsService {
 
     const normalizedResponse = normalizeGoalConversionResponse(data, input);
     const parsed = goalConversionsSchema.parse(normalizedResponse);
-    const normalized = parsed.map(entry => normalizeGoalConversion(entry));
+    const merged = mergeGoalConversionRecords(parsed).filter(
+      entry =>
+        entry.nb_conversions !== undefined ||
+        entry.nb_visits_converted !== undefined ||
+        entry.revenue !== undefined,
+    );
+    const normalized = merged.map(entry => normalizeGoalConversion(entry));
 
     const filtered = input.goalType
       ? normalized.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
@@ -1100,44 +1106,62 @@ function mergeFunnelSteps(baseSteps: FunnelStepSummary[], flowSteps: FunnelStepS
 }
 
 function normalizeGoalConversionResponse(data: unknown, context: GoalConversionsInput): unknown[] {
-  if (!data) {
+  return collectGoalConversionRecords(data, context);
+}
+
+function collectGoalConversionRecords(
+  value: unknown,
+  context: GoalConversionsInput,
+  seen = new Set<unknown>(),
+  depth = 0,
+): Record<string, unknown>[] {
+  if (value === null || value === undefined) {
     return [];
   }
 
-  if (Array.isArray(data)) {
-    return data;
+  if (typeof value === 'number' || typeof value === 'string') {
+    if (depth > 0) {
+      return [];
+    }
+    const ensured = ensureGoalRecord(value, context);
+    return ensured ? [ensured] : [];
   }
 
-  if (typeof data === 'object') {
-    const record = data as Record<string, unknown>;
+  if (typeof value !== 'object') {
+    return [];
+  }
 
-    if (isGoalConversionRecord(record)) {
-      const ensured = ensureGoalRecord(record, context);
-      return ensured ? [ensured] : [];
-    }
+  if (seen.has(value)) {
+    return [];
+  }
+  seen.add(value);
 
-    const normalizedValues = Object.values(record)
-      .map(value => ensureGoalRecord(value, context))
-      .filter((value): value is Record<string, unknown> => value !== undefined);
+  if (Array.isArray(value)) {
+    return value.flatMap(entry => collectGoalConversionRecords(entry, context, seen, depth + 1));
+  }
 
-    if (normalizedValues.length > 0) {
-      return normalizedValues;
-    }
+  const record = value as Record<string, unknown>;
 
+  if (isGoalConversionRecord(record)) {
     const ensured = ensureGoalRecord(record, context);
     return ensured ? [ensured] : [];
   }
 
-  const ensured = ensureGoalRecord(data, context);
-  if (ensured) {
-    return [ensured];
+  const nested = Object.values(record).flatMap(entry => collectGoalConversionRecords(entry, context, seen, depth + 1));
+  if (nested.length > 0) {
+    return nested;
   }
 
-  return [];
+  const ensured = ensureGoalRecord(record, context);
+  return ensured ? [ensured] : [];
 }
 
 function ensureGoalRecord(value: unknown, context: GoalConversionsInput): Record<string, unknown> | undefined {
   if (value && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      return undefined;
+    }
+
     const record = { ...(value as Record<string, unknown>) };
     if (record.idgoal === undefined && context.goalId !== undefined) {
       record.idgoal = context.goalId;
@@ -1166,6 +1190,48 @@ function ensureGoalRecord(value: unknown, context: GoalConversionsInput): Record
 function isGoalConversionRecord(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
   return keys.some(key => key === 'goal' || key === 'name' || key === 'idgoal' || key === 'nb_conversions');
+}
+
+function mergeGoalConversionRecords(records: RawGoalConversion[]): RawGoalConversion[] {
+  const grouped = new Map<string, RawGoalConversion>();
+
+  const mergeNumeric = (a?: number, b?: number): number | undefined => {
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return a + b;
+  };
+
+  for (const record of records) {
+    const id = normalizeGoalId(record.idgoal);
+    const label = record.goal ?? record.name ?? formatGoalLabel(id);
+    const key = `${id}|${label.toLowerCase()}`;
+
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        ...record,
+        idgoal: id,
+        goal: label,
+      });
+      continue;
+    }
+
+    existing.nb_conversions = mergeNumeric(existing.nb_conversions, record.nb_conversions);
+    existing.nb_visits_converted = mergeNumeric(existing.nb_visits_converted, record.nb_visits_converted);
+    existing.revenue = mergeNumeric(existing.revenue, record.revenue);
+
+    if (!existing.goal && record.goal) {
+      existing.goal = record.goal;
+    }
+    if (!existing.name && record.name) {
+      existing.name = record.name;
+    }
+    if (!existing.type && record.type) {
+      existing.type = record.type;
+    }
+  }
+
+  return Array.from(grouped.values());
 }
 
 function hasFunnelData(summary: PartialFunnelSummary): boolean {

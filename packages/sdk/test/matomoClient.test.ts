@@ -657,6 +657,36 @@ describe('MatomoClient', () => {
     expect(results[0]).toMatchObject({ id: '2', nb_conversions: 7 });
   });
 
+  it('aggregates goal conversions across nested date buckets', async () => {
+    const fetchMock = createFetchMock({
+      '2025-10-01': [
+        { idgoal: 1, goal: 'Donation g n f', nb_conversions: '1', nb_visits_converted: '1', revenue: '0' },
+      ],
+      '2025-10-02': {
+        goals: [
+          { idgoal: '1', name: 'Donation g n f', nb_conversions: '1', nb_visits_converted: '0', revenue: '0' },
+          { reportMetadata: { something: 'else' } },
+        ],
+      },
+      reportMetadata: {
+        idSites: ['12'],
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 12 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'last7', goalId: '1' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: '1',
+      label: 'Donation g n f',
+      nb_conversions: 2,
+      nb_visits_converted: 1,
+      revenue: 0,
+    });
+  });
+
   it('fetches funnel summary and normalizes step metrics', async () => {
     const fetchMock = createFetchMock({
       label: 'Checkout Funnel',

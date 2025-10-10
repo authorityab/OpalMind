@@ -10,3 +10,4 @@ packages/*/dist
 deploy/opalytics.env
 docker-compose.override.yml
 Opal Agent
+.tests

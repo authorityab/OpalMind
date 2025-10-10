@@ -29,6 +29,7 @@ See `.assistant/plan.md` for details.
 - Updated history/backlog/plan to reflect the latest reliability milestones.
 - Completed P-006 by shipping funnel analytics helpers in the SDK and new `/tools/get-funnel-analytics` API endpoint with docs/tests.
 - Patched funnel step normalization to read nested Matomo `definition.steps` containers and added regression coverage for missing flow metrics.
+- Hardened goal conversion normalization to flatten nested Matomo buckets, merge duplicate goals, and reject metadata-only records.
 
 ## Open Questions
 - Q1: Which monitoring platform (Grafana, DataDog, other) will poll `/tools/get-health-status` so we can tailor payload parsing and alert thresholds?
