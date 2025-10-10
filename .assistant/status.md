@@ -6,7 +6,7 @@ Integrate the existing OpalMind project into the refreshed `.assistant/` workflo
 ## Now / Next / Later
 See `.assistant/plan.md` for details.
 - Now: P-002 Integrate health endpoint with monitoring.
-- Next: P-005 Persist retry queue/cache; P-011–P-015 analytics expansion.
+- Next: P-005 Persist retry queue/cache; P-006a Harden funnel analytics flow outputs; P-011–P-015 analytics expansion.
 - Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
 ## Risks
@@ -30,6 +30,7 @@ See `.assistant/plan.md` for details.
 - Completed P-006 by shipping funnel analytics helpers in the SDK and new `/tools/get-funnel-analytics` API endpoint with docs/tests.
 - Patched funnel step normalization to read nested Matomo `definition.steps` containers and added regression coverage for missing flow metrics.
 - Hardened goal conversion normalization to flatten nested Matomo buckets, merge duplicate goals, reject metadata-only records, and allow label-based lookups alongside Matomo special IDs.
+- Logged follow-up backlog item P-006a to finish funnel analytics hardening and mirrored it in the active plan.
 
 ## Open Questions
 - Q1: Which monitoring platform (Grafana, DataDog, other) will poll `/tools/get-health-status` so we can tailor payload parsing and alert thresholds?

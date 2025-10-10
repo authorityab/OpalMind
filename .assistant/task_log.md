@@ -219,3 +219,7 @@
   args: npm run test --workspace @opalmind/sdk -- --run
   result: Passed (60 tests) validating goal lookup enhancements
   artifacts: none
+- tool: apply_patch
+  args: Mark P-006 complete and add P-006a follow-up to backlog and plan
+  result: Updated `.assistant/backlog.md`, `.assistant/plan.md`, and `.assistant/status.md` to capture new funnel analytics subtask
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md

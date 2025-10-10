@@ -5,6 +5,7 @@
 
 ## Next
 - P-005 Persist retry queue and cache state
+- P-006a Harden funnel analytics flow outputs
 - P-011 Add goal analytics helpers
 - P-012 Add cohort retention analytics
 - P-013 Add campaign acquisition analytics

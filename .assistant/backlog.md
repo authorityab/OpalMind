@@ -27,6 +27,10 @@
       tags: feature,sdk  priority: medium  est: 1.5d
       deps: ADR-0001
       accepts: Provide funnel analytics helpers surfaced through the API tools, covering data retrieval, normalization, and documentation/tests for usage.
+- [ ] P-006a Harden funnel analytics flow outputs
+      tags: feature,sdk  priority: medium  est: 1d
+      deps: P-006
+      accepts: Ensure funnel helpers expose consistent step definitions/metrics across Matomo variants, document known limitations, and add tests exercising multi-step flows and degraded responses.
 - [ ] P-010 Support multi-site indexing and configuration
       tags: feature,config,multi-tenant  priority: high  est: 2d
       deps: ADR-0001
