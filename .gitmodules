@@ -1,0 +1,3 @@
+[submodule "docs/matomo"]
+	path = docs/matomo
+	url = https://github.com/matomo-org/developer-documentation.git

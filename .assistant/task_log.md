@@ -104,6 +104,66 @@
   result: Backlog and plan now include P-012–P-015 for additional analytics insights
   artifacts: .assistant/backlog.md, .assistant/plan.md
 - tool: apply_patch
+  args: Implemented funnel analytics helpers and API tooling
+  result: Added Matomo funnel schemas, reports service method, client wrapper, new `/tools/get-funnel-analytics` endpoint, docs, and tests
+  artifacts: packages/sdk/src/schemas.ts, packages/sdk/src/reports.ts, packages/sdk/src/index.ts, packages/api/src/server.ts, packages/api/test/server.test.ts, packages/sdk/test/matomoClient.test.ts, README.md
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (54 tests) covering SDK funnel helper additions
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (22 tests) verifying API funnel analytics endpoint
+  artifacts: none
+- tool: apply_patch
+  args: Allow goal conversion responses returned as objects and cover with tests
+  result: Normalized Matomo goal data when returned as keyed object maps and added regression coverage
+  artifacts: packages/sdk/src/reports.ts, packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Failed (read-only filesystem prevented Vitest from writing config timestamp)
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (55 tests) confirming goal conversion normalization fix
+  artifacts: none
+- tool: apply_patch
+  args: Hardened goal conversion normalization for scalar summaries and added regression test
+  result: Handle Matomo responses returning single-goal objects or scalar metrics alongside goal maps
+  artifacts: packages/sdk/src/reports.ts, packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (56 tests) covering scalar goal summary scenarios
+  artifacts: none
+- tool: npm
+  args: npm run build --workspace @opalmind/sdk
+  result: Rebuilt SDK dist outputs with updated goal conversion handling
+  artifacts: none
+- tool: apply_patch
+  args: Refactored funnel analytics helper to use Matomo metrics/flow endpoints with tolerant parsing
+  result: Combined `Funnels.getFunnel`, `getFunnelMetrics`, and `getFunnelFlowTable` with resilient normalization for varied responses
+  artifacts: packages/sdk/src/reports.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (56 tests) verifying funnel parsing updates
+  artifacts: none
+- tool: npm
+  args: npm run build --workspace @opalmind/sdk
+  result: Regenerated SDK dist after funnel helper enhancements
+  artifacts: none
+- tool: apply_patch
+  args: Preserve funnel step definitions when Matomo omits metrics
+  result: Configured funnel responses now surface step labels even without conversion data
+  artifacts: packages/sdk/src/reports.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (56 tests) ensuring step definitions survive normalization tweaks
+  artifacts: none
+- tool: npm
+  args: npm run build --workspace @opalmind/sdk
+  result: Rebuilt SDK dist with step-definition handling
+  artifacts: none
+- tool: apply_patch
   args: Renamed docker services, env templates, and workspace packages from Opalytics to OpalMind
   result: Updated `docker-compose.yml`, `deploy/portainer-stack.yml`, `deploy/opalmind.env.example`, `packages/api/package.json`, `packages/sdk/package.json`, `packages/api/src/server.ts`, `packages/api/vitest.config.ts`, `packages/api/test/server.test.ts`, and `tsconfig.base.json`
   artifacts: docker-compose.yml, deploy/portainer-stack.yml, deploy/opalmind.env.example, packages/api/package.json, packages/sdk/package.json, packages/api/src/server.ts, packages/api/vitest.config.ts, packages/api/test/server.test.ts, tsconfig.base.json
@@ -119,3 +179,43 @@
   args: gh repo rename OpalMind --yes
   result: Repository renamed on GitHub; local `origin` remote now points to `authorityab/OpalMind`
   artifacts: https://github.com/authorityab/OpalMind
+- tool: shell
+  args: bash -lc 'cat .assistant/plan.md'
+  result: Reviewed the current roadmap to confirm monitoring and analytics priorities
+  artifacts: none
+- tool: apply_patch
+  args: Normalize Matomo funnel definition parsing to harvest nested `definition.steps` containers
+  result: Updated `packages/sdk/src/reports.ts` to recurse through container keys, dedupe results, and keep fallback labels predictable
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Add regression coverage for funnels missing flow step metrics
+  result: Added `uses funnel definition steps when Matomo omits flow step metrics` case in `packages/sdk/test/matomoClient.test.ts`
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (57 tests) validating funnel step normalization and overall SDK behaviour
+  artifacts: none
+- tool: apply_patch
+  args: Recursively flatten Matomo goal conversion payloads and merge duplicate goal records
+  result: Updated `packages/sdk/src/reports.ts` to harvest nested structures, sum metrics per goal, and skip metadata-only entries
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Add regression for goal conversions aggregated across multiple date buckets
+  result: Extended `packages/sdk/test/matomoClient.test.ts` with nested Matomo response coverage
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (58 tests) after goal conversion normalization updates
+  artifacts: none
+- tool: apply_patch
+  args: Support goal lookups by label and preserve Matomo special identifiers
+  result: Enhanced `packages/sdk/src/reports.ts` to resolve string goal filters, apply label matching, and keep ecommerce IDs intact
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Cover label-based goal queries and special IDs in SDK tests
+  result: Added targeted cases to `packages/sdk/test/matomoClient.test.ts` for label filtering and ecommerce goal passthrough
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (60 tests) validating goal lookup enhancements
+  artifacts: none

@@ -131,6 +131,40 @@ export interface GoalConversion {
   revenue?: number;
 }
 
+export interface FunnelSummaryInput {
+  siteId: number;
+  funnelId: string;
+  period: string;
+  date: string;
+  segment?: string;
+}
+
+export interface FunnelStepSummary {
+  id: string;
+  label: string;
+  visits?: number;
+  conversions?: number;
+  totalConversions?: number;
+  conversionRate?: number;
+  abandonmentRate?: number;
+  overallConversionRate?: number;
+  avgTimeToConvert?: number;
+  medianTimeToConvert?: number;
+}
+
+export interface FunnelSummary {
+  id: string;
+  label: string;
+  period: string;
+  date: string;
+  segment?: string;
+  overallConversionRate?: number;
+  abandonmentRate?: number;
+  totalConversions?: number;
+  totalVisits?: number;
+  steps: FunnelStepSummary[];
+}
+
 export interface CacheEvent {
   type: 'hit' | 'miss' | 'set' | 'stale-eviction';
   feature: string;
@@ -501,7 +535,9 @@ export class ReportsService {
     const cached = this.getFromCache<GoalConversion[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<GoalConversion[]>(this.http, {
+    const goalQuery = resolveGoalLookup(input.goalId);
+
+    const data = await matomoGet<unknown>(this.http, {
       method: 'Goals.get',
       params: {
         idSite: input.siteId,
@@ -509,19 +545,103 @@ export class ReportsService {
         date: input.date,
         segment: input.segment,
         filter_limit: input.limit ?? 10,
-        idGoal: input.goalId,
+        idGoal: goalQuery.idGoalParam,
       },
     });
 
-    const parsed = goalConversionsSchema.parse(data ?? []);
-    const normalized = parsed.map(entry => normalizeGoalConversion(entry));
+    const normalizedResponse = normalizeGoalConversionResponse(data, input);
+    const parsed = goalConversionsSchema.parse(normalizedResponse);
+    const merged = mergeGoalConversionRecords(parsed).filter(
+      entry =>
+        entry.nb_conversions !== undefined ||
+        entry.nb_visits_converted !== undefined ||
+        entry.revenue !== undefined,
+    );
+    const normalized = merged.map(entry => normalizeGoalConversion(entry));
+
+    const withLabelFilter = goalQuery.labelFilter
+      ? normalized.filter(goal =>
+        goal.label.toLowerCase() === goalQuery.labelFilter ||
+        goal.id.toLowerCase() === goalQuery.labelFilter)
+      : normalized;
 
     const filtered = input.goalType
-      ? normalized.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
-      : normalized;
+      ? withLabelFilter.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
+      : withLabelFilter;
 
     this.setCache(feature, cacheKey, filtered);
     return filtered;
+  }
+
+  async getFunnelSummary(input: FunnelSummaryInput): Promise<FunnelSummary> {
+    const feature = 'funnelSummary';
+    const cacheKey = this.makeCacheKey(feature, input);
+    const cached = this.getFromCache<FunnelSummary>(feature, cacheKey);
+    if (cached) return cached;
+
+    const baseParams = {
+      idSite: input.siteId,
+      idFunnel: input.funnelId,
+      period: input.period,
+      date: input.date,
+      segment: input.segment,
+    };
+
+    const [configResult, metricsResult, flowResult] = await Promise.allSettled([
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnel',
+        params: baseParams,
+      }),
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnelMetrics',
+        params: baseParams,
+      }),
+      matomoGet<unknown>(this.http, {
+        method: 'Funnels.getFunnelFlowTable',
+        params: { ...baseParams, flat: 1 },
+      }),
+    ]);
+
+  const config = configResult.status === 'fulfilled' ? coerceFunnelConfig(configResult.value, input) : {};
+    const metrics = metricsResult.status === 'fulfilled' ? normalizeFunnelMetrics(metricsResult.value) : {};
+    const flowSteps = flowResult.status === 'fulfilled' ? normalizeFunnelSteps(flowResult.value) : [];
+
+    const steps = mergeFunnelSteps(config.steps ?? [], flowSteps);
+    const funnelId = config.id ?? normalizeIdentifier(undefined, input.funnelId);
+    const summary: FunnelSummary = {
+      id: funnelId,
+      label: config.label ?? `Funnel ${funnelId}`,
+      period: input.period,
+      date: input.date,
+      segment: input.segment,
+      overallConversionRate: firstDefined(metrics.overallConversionRate, config.overallConversionRate),
+      abandonmentRate: firstDefined(metrics.abandonmentRate, config.abandonmentRate),
+      totalConversions: firstDefined(metrics.totalConversions, config.totalConversions),
+      totalVisits: firstDefined(metrics.totalVisits, config.totalVisits),
+      steps: steps.length > 0 ? steps : config.steps ?? [],
+    };
+
+    if (summary.totalConversions === undefined) {
+      const total = sumDefined(summary.steps.map(step => firstDefined(step.totalConversions, step.conversions)));
+      if (total !== undefined) {
+        summary.totalConversions = total;
+      }
+    }
+
+    if (summary.totalVisits === undefined) {
+      const visits = sumDefined(summary.steps.map(step => step.visits));
+      if (visits !== undefined) {
+        summary.totalVisits = visits;
+      }
+    }
+
+    if (summary.overallConversionRate === undefined && summary.totalConversions !== undefined && summary.totalVisits !== undefined && summary.totalVisits > 0) {
+      summary.overallConversionRate = (summary.totalConversions / summary.totalVisits) * 100;
+    }
+
+    const result = summary;
+    this.setCache(feature, cacheKey, result);
+    return result;
   }
 }
 
@@ -678,4 +798,678 @@ function formatGoalLabel(id: string): string {
     return 'Abandoned Cart';
   }
   return id;
+}
+
+function parseNumeric(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const normalized = Number(trimmed.replace(/,/g, ''));
+    return Number.isFinite(normalized) ? normalized : undefined;
+  }
+
+  return undefined;
+}
+
+function parsePercentage(value: unknown): number | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const withoutPercent = trimmed.endsWith('%') ? trimmed.slice(0, -1) : trimmed;
+    return parseNumeric(withoutPercent);
+  }
+
+  return parseNumeric(value);
+}
+
+function normalizeIdentifier(value: unknown, fallback: string): string {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : fallback;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return fallback;
+}
+
+type PartialFunnelSummary = Partial<Omit<FunnelSummary, 'steps'>> & { steps?: FunnelStepSummary[] };
+
+function coerceFunnelConfig(raw: unknown, context: FunnelSummaryInput, seen = new Set<unknown>()): PartialFunnelSummary {
+  if (!raw || typeof raw !== 'object') {
+    const conversions = parseNumeric(raw);
+    if (conversions !== undefined) {
+      return { totalConversions: conversions };
+    }
+    return {};
+  }
+
+  if (seen.has(raw)) {
+    return {};
+  }
+  seen.add(raw);
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const result = coerceFunnelConfig(item, context, seen);
+      if (hasFunnelData(result)) {
+        return result;
+      }
+    }
+    return {};
+  }
+
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
+
+  const idCandidate = getStringFromMap(lc, ['idfunnel', 'id_funnel', 'id', 'funnelid']);
+  const id = normalizeIdentifier(idCandidate, context.funnelId);
+  const label = getStringFromMap(lc, ['label', 'name', 'funnelname', 'funnel_name', 'title']);
+
+  const totalConversions = getNumericFromMap(lc, [
+    'nb_conversions_total',
+    'nb_conversions',
+    'conversions',
+    'nbconverted',
+    'nb_targets',
+  ]);
+  const totalVisits = getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'visits', 'nb_entries', 'nb_entrances', 'entries']);
+  const overallConversionRate = getPercentageFromMap(lc, [
+    'overall_conversion_rate',
+    'conversion_rate',
+    'total_conversion_rate',
+  ]);
+  const abandonmentRate = getPercentageFromMap(lc, ['overall_abandonment_rate', 'abandonment_rate', 'dropoff_rate']);
+
+  let steps: FunnelStepSummary[] = [];
+  if (lc.has('steps')) {
+    steps = normalizeFunnelDefinitionSteps(lc.get('steps'));
+  }
+
+  if (steps.length === 0) {
+    steps = normalizeFunnelDefinitionSteps(record);
+  }
+
+  if (steps.length === 0) {
+    steps = normalizeFunnelSteps(record);
+  }
+
+  const summary: PartialFunnelSummary = {
+    id,
+    label,
+    totalConversions,
+    totalVisits,
+    overallConversionRate,
+    abandonmentRate,
+    steps,
+  };
+
+  if (hasFunnelData(summary)) {
+    return summary;
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === 'object') {
+      const nested = coerceFunnelConfig(value, context, seen);
+      if (hasFunnelData(nested)) {
+        return nested;
+      }
+    }
+  }
+
+  return {};
+}
+
+function normalizeFunnelMetrics(raw: unknown): PartialFunnelSummary {
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const result = normalizeFunnelMetrics(item);
+      if (hasFunnelData(result)) {
+        return result;
+      }
+    }
+    return {};
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    const conversions = parseNumeric(raw);
+    if (conversions !== undefined) {
+      return { totalConversions: conversions };
+    }
+    return {};
+  }
+
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
+
+  return {
+    totalConversions: getNumericFromMap(lc, [
+      'nb_conversions',
+      'nb_converted',
+      'conversions',
+      'goalconversions',
+      'nb_conversions_total',
+    ]),
+    totalVisits: getNumericFromMap(lc, ['nb_visits', 'nb_entries', 'entries', 'visits', 'nb_entrances', 'nb_visits_total']),
+    overallConversionRate: getPercentageFromMap(lc, ['conversion_rate', 'overall_conversion_rate', 'total_conversion_rate']),
+    abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'overall_abandonment_rate', 'dropoff_rate']),
+    steps: normalizeFunnelSteps(record),
+  };
+}
+
+function normalizeFunnelDefinitionSteps(raw: unknown, seen = new Set<unknown>()): FunnelStepSummary[] {
+  if (!raw) {
+    return [];
+  }
+
+  if (typeof raw === 'object') {
+    if (seen.has(raw)) {
+      return [];
+    }
+    seen.add(raw);
+  }
+
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const label = String(raw).trim();
+    if (label.length === 0) {
+      return [];
+    }
+    return [
+      {
+        id: normalizeIdentifier(undefined, '1'),
+        label,
+      } as FunnelStepSummary,
+    ];
+  }
+
+  const entries: Array<{ key: string; value: unknown; index: number; fromArray: boolean }> = [];
+
+  if (Array.isArray(raw)) {
+    raw.forEach((value, index) => {
+      entries.push({ key: String(index + 1), value, index, fromArray: true });
+    });
+  } else if (typeof raw === 'object') {
+    let index = 0;
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      entries.push({ key, value, index, fromArray: false });
+      index += 1;
+    }
+  } else {
+    return [];
+  }
+
+  const rawSteps = entries.flatMap(({ key, value, index, fromArray }) => {
+      if (!value || typeof value !== 'object') {
+        const shouldInclude = fromArray || /^\d+$/.test(key);
+        if (!shouldInclude) {
+          return [];
+        }
+        const id = normalizeIdentifier(undefined, key || String(index + 1));
+        const label =
+          typeof value === 'string' && value.trim().length > 0 ? value.trim() : `Step ${id}`;
+        return [{ id, label } as FunnelStepSummary];
+      }
+
+      const record = value as Record<string, unknown>;
+      const lc = lowerCaseKeys(record);
+      const keyLower = key.toLowerCase();
+
+      const nestedSteps: FunnelStepSummary[] = [];
+
+      if (lc.has('steps')) {
+        nestedSteps.push(...normalizeFunnelDefinitionSteps(lc.get('steps'), seen));
+      }
+
+      if (
+        keyLower === 'steps' ||
+        keyLower === 'definition' ||
+        keyLower.endsWith('steps') ||
+        keyLower.endsWith('definition')
+      ) {
+        const containerSteps = normalizeFunnelDefinitionSteps(record, seen);
+        if (containerSteps.length > 0) {
+          nestedSteps.push(...containerSteps);
+        }
+        return nestedSteps;
+      }
+
+      if (nestedSteps.length > 0) {
+        return nestedSteps;
+      }
+
+      const idCandidate = getStringFromMap(lc, ['step_position', 'position', 'idstep', 'id', key]);
+      const labelCandidate = getStringFromMap(lc, ['label', 'name', 'step_name', 'title']);
+      const pattern = getStringFromMap(lc, ['pattern', 'pattern match', 'match', 'url']);
+
+      const id = normalizeIdentifier(idCandidate ?? key, String(index + 1));
+      const labelSource = labelCandidate ?? pattern;
+      const label = labelSource && labelSource.trim().length > 0 ? labelSource : `Step ${id}`;
+
+      return [
+        {
+          id,
+          label,
+        } as FunnelStepSummary,
+      ];
+    });
+
+  const deduped = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
+
+  rawSteps.forEach(step => {
+    const key = `${step.id.toLowerCase()}|${(step.label ?? '').toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, step);
+      order.push(key);
+    }
+  });
+
+  return order.map(k => deduped.get(k)!);
+}
+
+function normalizeFunnelSteps(raw: unknown): FunnelStepSummary[] {
+  const records = extractStepRecords(raw);
+  return normalizeFunnelStepRecords(records);
+}
+
+function mergeFunnelSteps(baseSteps: FunnelStepSummary[], flowSteps: FunnelStepSummary[]): FunnelStepSummary[] {
+  if (baseSteps.length === 0) return flowSteps;
+  if (flowSteps.length === 0) return baseSteps;
+
+  const map = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
+
+  const keyFor = (step: FunnelStepSummary) => `${step.id.toLowerCase()}|${(step.label ?? '').toLowerCase()}`;
+
+  const applyStep = (step: FunnelStepSummary) => {
+    const key = keyFor(step);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...step });
+      order.push(key);
+      return;
+    }
+    map.set(key, mergeStepData(existing, step));
+  };
+
+  baseSteps.forEach(applyStep);
+  flowSteps.forEach(applyStep);
+
+  return order
+    .map(key => map.get(key)!)
+    .sort((a, b) => {
+      const aNum = Number.parseFloat(a.id);
+      const bNum = Number.parseFloat(b.id);
+      if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+        return aNum - bNum;
+      }
+      return a.label.localeCompare(b.label);
+    });
+}
+
+function normalizeGoalConversionResponse(data: unknown, context: GoalConversionsInput): unknown[] {
+  return collectGoalConversionRecords(data, context);
+}
+
+function resolveGoalLookup(goalId: GoalConversionsInput['goalId']): { idGoalParam?: string | number; labelFilter?: string } {
+  if (goalId === undefined || goalId === null) {
+    return {};
+  }
+
+  if (typeof goalId === 'number') {
+    return { idGoalParam: goalId };
+  }
+
+  const trimmed = goalId.trim();
+  if (trimmed.length === 0) {
+    return {};
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return { idGoalParam: trimmed };
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'ecommerceorder' || lower === 'abandonedcart') {
+    return { idGoalParam: trimmed };
+  }
+
+  return { labelFilter: lower };
+}
+
+function collectGoalConversionRecords(
+  value: unknown,
+  context: GoalConversionsInput,
+  seen = new Set<unknown>(),
+  depth = 0,
+): Record<string, unknown>[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (typeof value === 'number' || typeof value === 'string') {
+    if (depth > 0) {
+      return [];
+    }
+    const ensured = ensureGoalRecord(value, context);
+    return ensured ? [ensured] : [];
+  }
+
+  if (typeof value !== 'object') {
+    return [];
+  }
+
+  if (seen.has(value)) {
+    return [];
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.flatMap(entry => collectGoalConversionRecords(entry, context, seen, depth + 1));
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (isGoalConversionRecord(record)) {
+    const ensured = ensureGoalRecord(record, context);
+    return ensured ? [ensured] : [];
+  }
+
+  const nested = Object.values(record).flatMap(entry => collectGoalConversionRecords(entry, context, seen, depth + 1));
+  if (nested.length > 0) {
+    return nested;
+  }
+
+  const ensured = ensureGoalRecord(record, context);
+  return ensured ? [ensured] : [];
+}
+
+function ensureGoalRecord(value: unknown, context: GoalConversionsInput): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      return undefined;
+    }
+
+    const record = { ...(value as Record<string, unknown>) };
+    if (record.idgoal === undefined && context.goalId !== undefined) {
+      record.idgoal = context.goalId;
+    }
+    return record;
+  }
+
+  const conversions = parseNumeric(value);
+  if (conversions === undefined) {
+    return undefined;
+  }
+
+  const idgoal =
+    context.goalId !== undefined
+      ? typeof context.goalId === 'number'
+        ? context.goalId
+        : context.goalId
+      : 'unknown';
+
+  return {
+    idgoal,
+    nb_conversions: conversions,
+  };
+}
+
+function isGoalConversionRecord(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  return keys.some(key => key === 'goal' || key === 'name' || key === 'idgoal' || key === 'nb_conversions');
+}
+
+function mergeGoalConversionRecords(records: RawGoalConversion[]): RawGoalConversion[] {
+  const grouped = new Map<string, RawGoalConversion>();
+
+  const mergeNumeric = (a?: number, b?: number): number | undefined => {
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return a + b;
+  };
+
+  for (const record of records) {
+    const id = normalizeGoalId(record.idgoal);
+    const label = record.goal ?? record.name ?? formatGoalLabel(id);
+    const key = `${id}|${label.toLowerCase()}`;
+
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        ...record,
+        idgoal: id,
+        goal: label,
+      });
+      continue;
+    }
+
+    existing.nb_conversions = mergeNumeric(existing.nb_conversions, record.nb_conversions);
+    existing.nb_visits_converted = mergeNumeric(existing.nb_visits_converted, record.nb_visits_converted);
+    existing.revenue = mergeNumeric(existing.revenue, record.revenue);
+
+    if (!existing.goal && record.goal) {
+      existing.goal = record.goal;
+    }
+    if (!existing.name && record.name) {
+      existing.name = record.name;
+    }
+    if (!existing.type && record.type) {
+      existing.type = record.type;
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
+function hasFunnelData(summary: PartialFunnelSummary): boolean {
+  return (
+    summary.id !== undefined ||
+    summary.label !== undefined ||
+    summary.totalConversions !== undefined ||
+    summary.totalVisits !== undefined ||
+    summary.overallConversionRate !== undefined ||
+    summary.abandonmentRate !== undefined ||
+    (summary.steps !== undefined && summary.steps.length > 0)
+  );
+}
+
+function lowerCaseKeys(record: Record<string, unknown>): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(record)) {
+    map.set(key.toLowerCase(), value);
+  }
+  return map;
+}
+
+function getNumericFromMap(map: Map<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (value === undefined) {
+      continue;
+    }
+    const numeric = parseNumeric(value);
+    if (numeric !== undefined) {
+      return numeric;
+    }
+  }
+  return undefined;
+}
+
+function getPercentageFromMap(map: Map<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (value === undefined) {
+      continue;
+    }
+    const percentage = parsePercentage(value);
+    if (percentage !== undefined) {
+      return percentage;
+    }
+  }
+  return undefined;
+}
+
+function getStringFromMap(map: Map<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = map.get(key);
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    if (typeof value === 'number') {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function extractStepRecords(raw: unknown, seen = new Set<unknown>()): Record<string, unknown>[] {
+  if (!raw || typeof raw !== 'object') {
+    return [];
+  }
+
+  if (seen.has(raw)) {
+    return [];
+  }
+  seen.add(raw);
+
+  if (Array.isArray(raw)) {
+    const results: Record<string, unknown>[] = [];
+    for (const item of raw) {
+      results.push(...extractStepRecords(item, seen));
+    }
+    return results;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const lc = lowerCaseKeys(record);
+  const results: Record<string, unknown>[] = [];
+
+  if (isStepRecord(lc) && !lc.has('steps')) {
+    results.push(record);
+  } else if (record.columns && typeof record.columns === 'object' && !Array.isArray(record.columns)) {
+    const merged = { label: record.label, ...(record.columns as Record<string, unknown>) };
+    results.push(merged);
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === 'object') {
+      results.push(...extractStepRecords(value, seen));
+    }
+  }
+
+  return results;
+}
+
+function isStepRecord(map: Map<string, unknown>): boolean {
+  const keys = Array.from(map.keys());
+  const labelKeys = ['label', 'name', 'step', 'step_position', 'step_name', 'title'];
+  const metricIndicators = [
+    'nb_conversions',
+    'nb_converted',
+    'nb_visits',
+    'nb_visits_total',
+    'nb_entries',
+    'nb_entrances',
+    'conversion_rate',
+    'step_conversion_rate',
+    'abandonment_rate',
+    'step_abandonment_rate',
+  ];
+  const hasLabel = keys.some(key => labelKeys.includes(key));
+  const hasMetrics = keys.some(key => metricIndicators.includes(key) || key.startsWith('nb_') || key.includes('conversion'));
+  return hasLabel && hasMetrics;
+}
+
+function normalizeFunnelStepRecords(records: Record<string, unknown>[]): FunnelStepSummary[] {
+  const map = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
+
+  records.forEach((record, index) => {
+    const lc = lowerCaseKeys(record);
+    const idCandidate = getStringFromMap(lc, ['idstep', 'step_position', 'position', 'step', 'id']);
+    const labelCandidate = getStringFromMap(lc, ['label', 'name', 'step_name', 'title']);
+
+    const id = normalizeIdentifier(idCandidate, String(index + 1));
+    const label = labelCandidate ?? `Step ${index + 1}`;
+    const key = `${id.toLowerCase()}|${label.toLowerCase()}`;
+
+    const step: FunnelStepSummary = {
+      id,
+      label,
+      visits: getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'nb_entries', 'nb_entrances', 'visits', 'entries']),
+      conversions: getNumericFromMap(lc, ['nb_conversions', 'nb_converted', 'conversions', 'nb_targets', 'nb_visits_converted']),
+      totalConversions: getNumericFromMap(lc, ['nb_conversions_total', 'total_conversions']),
+      conversionRate: getPercentageFromMap(lc, ['conversion_rate', 'step_conversion_rate']),
+      abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'step_abandonment_rate', 'dropoff_rate']),
+      overallConversionRate: getPercentageFromMap(lc, ['overall_conversion_rate', 'step_overall_conversion_rate']),
+      avgTimeToConvert: getNumericFromMap(lc, ['avg_time_to_convert', 'avg_time']),
+      medianTimeToConvert: getNumericFromMap(lc, ['median_time_to_convert', 'median_time']),
+    };
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, step);
+      order.push(key);
+      return;
+    }
+
+    map.set(key, mergeStepData(existing, step));
+  });
+
+  const steps = order.map(key => map.get(key)!);
+
+  return steps.sort((a, b) => {
+    const aNum = Number.parseFloat(a.id);
+    const bNum = Number.parseFloat(b.id);
+    if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+      return aNum - bNum;
+    }
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function mergeStepData(base: FunnelStepSummary, extra: FunnelStepSummary): FunnelStepSummary {
+  const merged: FunnelStepSummary = { ...base };
+
+  if (extra.visits !== undefined) merged.visits = extra.visits;
+  if (extra.conversions !== undefined) merged.conversions = extra.conversions;
+  if (extra.totalConversions !== undefined) merged.totalConversions = extra.totalConversions;
+  if (extra.conversionRate !== undefined) merged.conversionRate = extra.conversionRate;
+  if (extra.abandonmentRate !== undefined) merged.abandonmentRate = extra.abandonmentRate;
+  if (extra.overallConversionRate !== undefined) merged.overallConversionRate = extra.overallConversionRate;
+  if (extra.avgTimeToConvert !== undefined) merged.avgTimeToConvert = extra.avgTimeToConvert;
+  if (extra.medianTimeToConvert !== undefined) merged.medianTimeToConvert = extra.medianTimeToConvert;
+
+  return merged;
+}
+
+function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  for (const value of values) {
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function sumDefined(values: Array<number | undefined>): number | undefined {
+  let total = 0;
+  let seen = false;
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      total += value;
+      seen = true;
+    }
+  }
+  return seen ? total : undefined;
 }

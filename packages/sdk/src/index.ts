@@ -14,6 +14,8 @@ import {
   type EcommerceRevenueTotalsInput,
   type GoalConversion,
   type GoalConversionsInput,
+  type FunnelSummary,
+  type FunnelStepSummary,
 } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
@@ -131,6 +133,14 @@ export interface GetTrafficChannelsInput {
 }
 
 export type GetGoalConversionsInput = Partial<Omit<GoalConversionsInput, 'siteId'>> & { siteId?: number };
+
+export interface GetFunnelSummaryInput {
+  siteId?: number;
+  funnelId: string;
+  period?: string;
+  date?: string;
+  segment?: string;
+}
 
 export type GetKeyNumbersSeriesInput = GetKeyNumbersInput;
 
@@ -605,6 +615,20 @@ export class MatomoClient {
     });
   }
 
+  async getFunnelSummary(input: GetFunnelSummaryInput): Promise<FunnelSummary> {
+    const siteId = this.resolveSiteId(input.siteId);
+    const period = input.period ?? 'day';
+    const date = input.date ?? 'today';
+
+    return this.reports.getFunnelSummary({
+      siteId,
+      funnelId: input.funnelId,
+      period,
+      date,
+      segment: input.segment,
+    });
+  }
+
   getCacheStats(): CacheStatsSnapshot {
     return this.reports.getCacheStats();
   }
@@ -895,6 +919,8 @@ export type {
   EcommerceRevenueTotalsInput,
   TrafficChannel,
   GoalConversion,
+  FunnelSummary,
+  FunnelStepSummary,
   MatomoRateLimitEvent,
 };
 

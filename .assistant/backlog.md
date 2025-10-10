@@ -23,7 +23,7 @@
       tags: infrastructure,reliability  priority: medium  est: 2d
       deps: ADR-0003
       accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
-- [ ] P-006 Add funnel analytics helpers
+- [x] P-006 Add funnel analytics helpers
       tags: feature,sdk  priority: medium  est: 1.5d
       deps: ADR-0001
       accepts: Provide funnel analytics helpers surfaced through the API tools, covering data retrieval, normalization, and documentation/tests for usage.

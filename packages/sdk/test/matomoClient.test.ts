@@ -625,6 +625,162 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('5');
   });
 
+  it('handles goal conversions returned as an object map', async () => {
+    const fetchMock = createFetchMock({
+      donation: { idgoal: '1', goal: 'Donation', nb_conversions: '4', type: 'manually' },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'today', goalId: '1' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '1', label: 'Donation', nb_conversions: 4 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Goals.get');
+    expect(url.searchParams.get('idGoal')).toBe('1');
+  });
+
+  it('handles goal conversion summaries returned as a single object', async () => {
+    const fetchMock = createFetchMock({
+      nb_conversions: '7',
+      nb_visits_converted: '3',
+      revenue: '0',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'today', goalId: 2 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '2', nb_conversions: 7 });
+  });
+
+  it('filters goal conversions by label when goalId is non-numeric', async () => {
+    const fetchMock = createFetchMock([
+      { idgoal: 1, goal: 'Donation g n f', nb_conversions: '2', nb_visits_converted: '1', revenue: '0' },
+      { idgoal: 2, goal: 'Newsletter Signup', nb_conversions: '5', nb_visits_converted: '4', revenue: '0' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 12 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'last7', goalId: 'Donation g n f' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '1', label: 'Donation g n f', nb_conversions: 2 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.has('idGoal')).toBe(false);
+  });
+
+  it('passes Matomo special goal identifiers through unchanged', async () => {
+    const fetchMock = createFetchMock([
+      { idgoal: 'ecommerceOrder', goal: 'Orders', nb_conversions: '9', revenue: '120.50', type: 'ecommerce' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const results = await client.getGoalConversions({ period: 'week', date: 'last7', goalId: 'ecommerceOrder' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: 'ecommerceOrder', nb_conversions: 9, revenue: 120.5, type: 'ecommerce' });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('idGoal')).toBe('ecommerceOrder');
+  });
+
+  it('aggregates goal conversions across nested date buckets', async () => {
+    const fetchMock = createFetchMock({
+      '2025-10-01': [
+        { idgoal: 1, goal: 'Donation g n f', nb_conversions: '1', nb_visits_converted: '1', revenue: '0' },
+      ],
+      '2025-10-02': {
+        goals: [
+          { idgoal: '1', name: 'Donation g n f', nb_conversions: '1', nb_visits_converted: '0', revenue: '0' },
+          { reportMetadata: { something: 'else' } },
+        ],
+      },
+      reportMetadata: {
+        idSites: ['12'],
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 12 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'last7', goalId: '1' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: '1',
+      label: 'Donation g n f',
+      nb_conversions: 2,
+      nb_visits_converted: 1,
+      revenue: 0,
+    });
+  });
+
+  it('fetches funnel summary and normalizes step metrics', async () => {
+    const fetchMock = createFetchMock({
+      label: 'Checkout Funnel',
+      overall_conversion_rate: '32.5%',
+      nb_conversions_total: '48',
+      nb_visits_total: '120',
+      steps: [
+        { idstep: 1, label: 'Cart', nb_visits_total: '120', nb_conversions: '80', step_conversion_rate: '66.7%' },
+        { label: 'Payment', nb_visits_total: '80', nb_conversions_total: '48', overall_conversion_rate: '40%' },
+      ],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
+    const result = await client.getFunnelSummary({ funnelId: 'checkout' });
+
+    expect(result.id).toBe('checkout');
+    expect(result.label).toBe('Checkout Funnel');
+    expect(result.overallConversionRate).toBe(32.5);
+    expect(result.totalConversions).toBe(48);
+    expect(result.totalVisits).toBe(120);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ id: '1', conversions: 80, conversionRate: 66.7 });
+    expect(result.steps[1]).toMatchObject({ id: '2', overallConversionRate: 40 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('method')).toBe('Funnels.getFunnel');
+    expect(url.searchParams.get('idFunnel')).toBe('checkout');
+    expect(url.searchParams.get('idSite')).toBe('5');
+    expect(url.searchParams.get('period')).toBe('day');
+    expect(url.searchParams.get('date')).toBe('today');
+  });
+
+  it('uses funnel definition steps when Matomo omits flow step metrics', async () => {
+    const fetchMock = createSequencedFetchMock([
+      {
+        idFunnel: 7,
+        label: 'Signup Flow',
+        definition: {
+          steps: {
+            1: { name: 'Landing Page' },
+            2: { pattern: '/signup', step_position: 2 },
+          },
+        },
+      },
+      { nb_conversions_total: '5', nb_visits_total: '20' },
+      [],
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const result = await client.getFunnelSummary({ funnelId: 'signup' });
+
+    expect(result.label).toBe('Signup Flow');
+    expect(result.totalConversions).toBe(5);
+    expect(result.totalVisits).toBe(20);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ id: '1', label: 'Landing Page' });
+    expect(result.steps[1]).toMatchObject({ id: '2', label: '/signup' });
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
