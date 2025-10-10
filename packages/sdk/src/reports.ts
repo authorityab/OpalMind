@@ -949,52 +949,114 @@ function normalizeFunnelMetrics(raw: unknown): PartialFunnelSummary {
   };
 }
 
-function normalizeFunnelDefinitionSteps(raw: unknown): FunnelStepSummary[] {
+function normalizeFunnelDefinitionSteps(raw: unknown, seen = new Set<unknown>()): FunnelStepSummary[] {
   if (!raw) {
     return [];
   }
 
-  const entries: Array<{ key: string; value: unknown; index: number }> = [];
+  if (typeof raw === 'object') {
+    if (seen.has(raw)) {
+      return [];
+    }
+    seen.add(raw);
+  }
+
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const label = String(raw).trim();
+    if (label.length === 0) {
+      return [];
+    }
+    return [
+      {
+        id: normalizeIdentifier(undefined, '1'),
+        label,
+      } as FunnelStepSummary,
+    ];
+  }
+
+  const entries: Array<{ key: string; value: unknown; index: number; fromArray: boolean }> = [];
 
   if (Array.isArray(raw)) {
     raw.forEach((value, index) => {
-      entries.push({ key: String(index + 1), value, index });
+      entries.push({ key: String(index + 1), value, index, fromArray: true });
     });
   } else if (typeof raw === 'object') {
     let index = 0;
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-      entries.push({ key, value, index });
+      entries.push({ key, value, index, fromArray: false });
       index += 1;
     }
   } else {
     return [];
   }
 
-  return entries
-    .map(({ key, value, index }) => {
+  const rawSteps = entries.flatMap(({ key, value, index, fromArray }) => {
       if (!value || typeof value !== 'object') {
+        const shouldInclude = fromArray || /^\d+$/.test(key);
+        if (!shouldInclude) {
+          return [];
+        }
         const id = normalizeIdentifier(undefined, key || String(index + 1));
         const label =
           typeof value === 'string' && value.trim().length > 0 ? value.trim() : `Step ${id}`;
-        return { id, label } as FunnelStepSummary;
+        return [{ id, label } as FunnelStepSummary];
       }
 
       const record = value as Record<string, unknown>;
       const lc = lowerCaseKeys(record);
+      const keyLower = key.toLowerCase();
+
+      const nestedSteps: FunnelStepSummary[] = [];
+
+      if (lc.has('steps')) {
+        nestedSteps.push(...normalizeFunnelDefinitionSteps(lc.get('steps'), seen));
+      }
+
+      if (
+        keyLower === 'steps' ||
+        keyLower === 'definition' ||
+        keyLower.endsWith('steps') ||
+        keyLower.endsWith('definition')
+      ) {
+        const containerSteps = normalizeFunnelDefinitionSteps(record, seen);
+        if (containerSteps.length > 0) {
+          nestedSteps.push(...containerSteps);
+        }
+        return nestedSteps;
+      }
+
+      if (nestedSteps.length > 0) {
+        return nestedSteps;
+      }
 
       const idCandidate = getStringFromMap(lc, ['step_position', 'position', 'idstep', 'id', key]);
       const labelCandidate = getStringFromMap(lc, ['label', 'name', 'step_name', 'title']);
-      const pattern = getStringFromMap(lc, ['pattern', 'pattern match', 'match']);
+      const pattern = getStringFromMap(lc, ['pattern', 'pattern match', 'match', 'url']);
 
       const id = normalizeIdentifier(idCandidate ?? key, String(index + 1));
-      const label = labelCandidate ?? pattern ?? `Step ${id}`;
+      const labelSource = labelCandidate ?? pattern;
+      const label = labelSource && labelSource.trim().length > 0 ? labelSource : `Step ${id}`;
 
-      return {
-        id,
-        label,
-      } as FunnelStepSummary;
-    })
-    .filter((step): step is FunnelStepSummary => Boolean(step));
+      return [
+        {
+          id,
+          label,
+        } as FunnelStepSummary,
+      ];
+    });
+
+  const deduped = new Map<string, FunnelStepSummary>();
+  const order: string[] = [];
+
+  rawSteps.forEach(step => {
+    const key = `${step.id.toLowerCase()}|${(step.label ?? '').toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, step);
+      order.push(key);
+    }
+  });
+
+  return order.map(k => deduped.get(k)!);
 }
 
 function normalizeFunnelSteps(raw: unknown): FunnelStepSummary[] {

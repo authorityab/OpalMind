@@ -690,6 +690,34 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('date')).toBe('today');
   });
 
+  it('uses funnel definition steps when Matomo omits flow step metrics', async () => {
+    const fetchMock = createSequencedFetchMock([
+      {
+        idFunnel: 7,
+        label: 'Signup Flow',
+        definition: {
+          steps: {
+            1: { name: 'Landing Page' },
+            2: { pattern: '/signup', step_position: 2 },
+          },
+        },
+      },
+      { nb_conversions_total: '5', nb_visits_total: '20' },
+      [],
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
+    const result = await client.getFunnelSummary({ funnelId: 'signup' });
+
+    expect(result.label).toBe('Signup Flow');
+    expect(result.totalConversions).toBe(5);
+    expect(result.totalVisits).toBe(20);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ id: '1', label: 'Landing Page' });
+    expect(result.steps[1]).toMatchObject({ id: '2', label: '/signup' });
+  });
+
   it('tracks pageviews using the default siteId', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

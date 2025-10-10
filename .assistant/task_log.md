@@ -183,3 +183,15 @@
   args: bash -lc 'cat .assistant/plan.md'
   result: Reviewed the current roadmap to confirm monitoring and analytics priorities
   artifacts: none
+- tool: apply_patch
+  args: Normalize Matomo funnel definition parsing to harvest nested `definition.steps` containers
+  result: Updated `packages/sdk/src/reports.ts` to recurse through container keys, dedupe results, and keep fallback labels predictable
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Add regression coverage for funnels missing flow step metrics
+  result: Added `uses funnel definition steps when Matomo omits flow step metrics` case in `packages/sdk/test/matomoClient.test.ts`
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (57 tests) validating funnel step normalization and overall SDK behaviour
+  artifacts: none
