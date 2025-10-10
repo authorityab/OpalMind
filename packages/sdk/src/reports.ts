@@ -535,6 +535,8 @@ export class ReportsService {
     const cached = this.getFromCache<GoalConversion[]>(feature, cacheKey);
     if (cached) return cached;
 
+    const goalQuery = resolveGoalLookup(input.goalId);
+
     const data = await matomoGet<unknown>(this.http, {
       method: 'Goals.get',
       params: {
@@ -543,7 +545,7 @@ export class ReportsService {
         date: input.date,
         segment: input.segment,
         filter_limit: input.limit ?? 10,
-        idGoal: input.goalId,
+        idGoal: goalQuery.idGoalParam,
       },
     });
 
@@ -557,9 +559,15 @@ export class ReportsService {
     );
     const normalized = merged.map(entry => normalizeGoalConversion(entry));
 
-    const filtered = input.goalType
-      ? normalized.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
+    const withLabelFilter = goalQuery.labelFilter
+      ? normalized.filter(goal =>
+        goal.label.toLowerCase() === goalQuery.labelFilter ||
+        goal.id.toLowerCase() === goalQuery.labelFilter)
       : normalized;
+
+    const filtered = input.goalType
+      ? withLabelFilter.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
+      : withLabelFilter;
 
     this.setCache(feature, cacheKey, filtered);
     return filtered;
@@ -1107,6 +1115,32 @@ function mergeFunnelSteps(baseSteps: FunnelStepSummary[], flowSteps: FunnelStepS
 
 function normalizeGoalConversionResponse(data: unknown, context: GoalConversionsInput): unknown[] {
   return collectGoalConversionRecords(data, context);
+}
+
+function resolveGoalLookup(goalId: GoalConversionsInput['goalId']): { idGoalParam?: string | number; labelFilter?: string } {
+  if (goalId === undefined || goalId === null) {
+    return {};
+  }
+
+  if (typeof goalId === 'number') {
+    return { idGoalParam: goalId };
+  }
+
+  const trimmed = goalId.trim();
+  if (trimmed.length === 0) {
+    return {};
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return { idGoalParam: trimmed };
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'ecommerceorder' || lower === 'abandonedcart') {
+    return { idGoalParam: trimmed };
+  }
+
+  return { labelFilter: lower };
 }
 
 function collectGoalConversionRecords(

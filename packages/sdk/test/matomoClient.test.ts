@@ -657,6 +657,39 @@ describe('MatomoClient', () => {
     expect(results[0]).toMatchObject({ id: '2', nb_conversions: 7 });
   });
 
+  it('filters goal conversions by label when goalId is non-numeric', async () => {
+    const fetchMock = createFetchMock([
+      { idgoal: 1, goal: 'Donation g n f', nb_conversions: '2', nb_visits_converted: '1', revenue: '0' },
+      { idgoal: 2, goal: 'Newsletter Signup', nb_conversions: '5', nb_visits_converted: '4', revenue: '0' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 12 });
+    const results = await client.getGoalConversions({ period: 'day', date: 'last7', goalId: 'Donation g n f' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: '1', label: 'Donation g n f', nb_conversions: 2 });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.has('idGoal')).toBe(false);
+  });
+
+  it('passes Matomo special goal identifiers through unchanged', async () => {
+    const fetchMock = createFetchMock([
+      { idgoal: 'ecommerceOrder', goal: 'Orders', nb_conversions: '9', revenue: '120.50', type: 'ecommerce' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const results = await client.getGoalConversions({ period: 'week', date: 'last7', goalId: 'ecommerceOrder' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ id: 'ecommerceOrder', nb_conversions: 9, revenue: 120.5, type: 'ecommerce' });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get('idGoal')).toBe('ecommerceOrder');
+  });
+
   it('aggregates goal conversions across nested date buckets', async () => {
     const fetchMock = createFetchMock({
       '2025-10-01': [

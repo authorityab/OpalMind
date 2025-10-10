@@ -207,3 +207,15 @@
   args: npm run test --workspace @opalmind/sdk -- --run
   result: Passed (58 tests) after goal conversion normalization updates
   artifacts: none
+- tool: apply_patch
+  args: Support goal lookups by label and preserve Matomo special identifiers
+  result: Enhanced `packages/sdk/src/reports.ts` to resolve string goal filters, apply label matching, and keep ecommerce IDs intact
+  artifacts: packages/sdk/src/reports.ts
+- tool: apply_patch
+  args: Cover label-based goal queries and special IDs in SDK tests
+  result: Added targeted cases to `packages/sdk/test/matomoClient.test.ts` for label filtering and ecommerce goal passthrough
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (60 tests) validating goal lookup enhancements
+  artifacts: none
