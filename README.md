@@ -119,6 +119,15 @@ Sample responses and curl snippets are documented in `packages/api/docs/sample-r
 3. Tool discovery is provided automatically by the Opal Tools SDK (e.g., `GET /discovery`).
 4. Tool handlers map directly to SDK methods—extend the SDK first, then expose new tools.
 
+## Comparative Reporting Deltas
+Upcoming UI requirements call for “current vs previous period” deltas (▲/▼) beside every reported metric. When implementing this feature:
+
+1. **Dual fetches** – For each reporting helper (e.g., `GetMostPopularUrls`, `GetTrafficChannels`, `GetKeyNumbers`, `GetEcommerceOverview`, `GetEcommerceRevenue`, `GetGoalConversions`), request both the selected period and the immediately preceding period of identical duration.
+2. **Align periods** – Derive the previous period from Matomo’s `period`/`date` inputs (e.g., `2025-09-01,2025-09-30` → `2025-08-02,2025-08-31` for `month`; `last7` → prior seven days). Preserve timezone alignment.
+3. **Calculate change** – For each metric, compute `((current - previous) / previous) * 100`. Handle zero baselines explicitly (return `null`, `N/A`, or an infinity marker when the previous value is `0`).
+4. **Direction indicators** – Present ▲ for positive deltas, ▼ for negative, and `—` (or similar) for zero change. Format values with one decimal place and a trailing `%`.
+5. **Payload shape** – Extend tool responses to include both absolute values and delta metadata so downstream agents can render summaries and presentation assets without recomputing.
+
 ## Cache Monitoring
 - The `ReportsService` keeps an in-memory cache per report helper. Configure cache behaviour via the Matomo client:
   - `cache.ttlMs` overrides the default 60s TTL.

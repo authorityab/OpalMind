@@ -315,3 +315,11 @@
   args: npm run test --workspace @opalmind/sdk -- --run
   result: Passed (64 tests) verifying diagnostics adjustments
   artifacts: none
+- tool: apply_patch
+  args: Add comparative period delta task to backlog
+  result: Logged P-002c for dual-period analytics work
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Document comparative delta implementation guidelines
+  result: Added README instructions covering dual fetches, delta calculations, and payload formatting
+  artifacts: README.md
