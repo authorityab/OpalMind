@@ -54,7 +54,7 @@ Returns real-time health status with individual component checks.
 ## Health Checks
 
 ### 1. Matomo API Connectivity
-- **Check**: Calls `API.getVersion` to verify Matomo reachability
+- **Check**: Calls `API.getMatomoVersion` (fallback to `API.getVersion` for legacy Matomo) to verify reachability
 - **Metrics**: Response time in milliseconds
 - **Status**: 
   - `pass`: API responds successfully

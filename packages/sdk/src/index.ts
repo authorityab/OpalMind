@@ -40,7 +40,7 @@ import {
   type TrackingIdempotencyRecord,
   type TrackingIdempotencyStore,
 } from './tracking.js';
-import { MatomoApiError, MatomoNetworkError } from './errors.js';
+import { MatomoApiError, MatomoClientError, MatomoNetworkError } from './errors.js';
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -347,6 +347,63 @@ async function performDiagnosticCheck(
       label,
       status: 'error',
       error: toDiagnosticError(error),
+    };
+  }
+}
+
+type MatomoVersionMethod = 'API.getMatomoVersion' | 'API.getVersion';
+
+function extractMatomoVersion(payload: unknown): string | undefined {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  if (payload && typeof payload === 'object') {
+    const version = (payload as Record<string, unknown>).version;
+    if (typeof version === 'string') {
+      return version;
+    }
+  }
+
+  return undefined;
+}
+
+function isMatomoVersionMethodUnavailable(error: unknown): error is MatomoClientError {
+  if (!(error instanceof MatomoClientError)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  if (!message.includes('getmatomoversion')) {
+    return false;
+  }
+
+  return message.includes('method') && message.includes('does not exist');
+}
+
+async function fetchMatomoVersionWithFallback(
+  http: MatomoHttpClient
+): Promise<{ version?: string; method: MatomoVersionMethod }> {
+  try {
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getMatomoVersion',
+    });
+    return {
+      version: extractMatomoVersion(payload),
+      method: 'API.getMatomoVersion',
+    };
+  } catch (error) {
+    if (!isMatomoVersionMethodUnavailable(error)) {
+      throw error;
+    }
+
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getVersion',
+    });
+
+    return {
+      version: extractMatomoVersion(payload),
+      method: 'API.getVersion',
     };
   }
 }
@@ -666,21 +723,10 @@ export class MatomoClient {
     const checks: MatomoDiagnosticCheck[] = [];
 
     const baseCheck = await performDiagnosticCheck('base-url', 'Matomo base URL reachability', async () => {
-      const payload = await matomoGet<unknown>(this.http, {
-        method: 'API.getVersion',
-      });
-
-      if (typeof payload === 'string') {
-        return { version: payload };
+      const { version } = await fetchMatomoVersionWithFallback(this.http);
+      if (version) {
+        return { version };
       }
-
-      if (payload && typeof payload === 'object') {
-        const version = (payload as Record<string, unknown>)['version'];
-        if (typeof version === 'string') {
-          return { version };
-        }
-      }
-
       return undefined;
     });
 
@@ -791,9 +837,7 @@ export class MatomoClient {
 
     try {
       const startTime = Date.now();
-      await matomoGet<unknown>(this.http, {
-        method: 'API.getVersion',
-      });
+      await fetchMatomoVersionWithFallback(this.http);
       responseTime = Date.now() - startTime;
       matomoOutput = `API responded in ${responseTime}ms`;
     } catch (error) {
