@@ -2,6 +2,8 @@
 
 These examples assume the service is running locally on `http://localhost:4000` with a valid bearer token injected via `OPAL_BEARER_TOKEN`.
 
+> **Delta metadata** — Every tool response now includes a `comparisons` map describing the previous-period baseline, percentage change, absolute delta, and direction indicator for each numeric metric. Array responses attach the same object to each row. The examples below highlight the new metadata.
+
 ## GetKeyNumbers
 
 **Request**
@@ -15,19 +17,38 @@ curl -X POST http://localhost:4000/tools/get-key-numbers \
 **Response**
 ```json
 {
-  "nb_visits": 0,
-  "nb_uniq_visitors": 0,
-  "nb_actions": 0,
-  "nb_pageviews": 0,
-  "nb_uniq_pageviews": 0,
-  "nb_users": 0,
-  "nb_visits_converted": 0,
-  "sum_visit_length": 0,
-  "max_actions": 0,
-  "bounce_rate": "0%",
-  "nb_actions_per_visit": 0,
-  "bounce_count": 0,
-  "avg_time_on_site": 0
+  "nb_visits": 120,
+  "nb_uniq_visitors": 95,
+  "nb_actions": 310,
+  "nb_pageviews": 450,
+  "nb_uniq_pageviews": 325,
+  "nb_users": 80,
+  "nb_visits_converted": 6,
+  "sum_visit_length": 9123,
+  "max_actions": 15,
+  "bounce_rate": "38%",
+  "nb_actions_per_visit": 2.6,
+  "avg_time_on_site": 210,
+  "comparisons": {
+    "nb_visits": {
+      "current": 120,
+      "previous": 100,
+      "absoluteChange": 20,
+      "deltaPercentage": 20,
+      "deltaFormatted": "20.0%",
+      "direction": "up",
+      "directionSymbol": "▲"
+    },
+    "nb_pageviews": {
+      "current": 450,
+      "previous": 300,
+      "absoluteChange": 150,
+      "deltaPercentage": 50,
+      "deltaFormatted": "50.0%",
+      "direction": "up",
+      "directionSymbol": "▲"
+    }
+  }
 }
 ```
 

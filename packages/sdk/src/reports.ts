@@ -11,18 +11,26 @@ import {
   trafficChannelsSchema,
   goalConversionsSchema,
 } from './schemas.js';
+import type { EcommerceSummaryRecord, RawGoalConversion } from './schemas.js';
+import {
+  annotateArrayWithComparisons,
+  annotateRecordWithComparisons,
+} from './comparisons.js';
+import { resolvePreviousPeriodDate } from './periods.js';
 import type {
   Campaign,
   DeviceTypeSummary,
+  EcommerceRevenueSeriesPoint,
+  EcommerceRevenueTotals,
   EcommerceSummary,
   EntryPage,
   EventCategory,
   EventSummary,
+  GoalConversion,
   MostPopularUrl,
   TopReferrer,
   TrafficChannel,
-  RawGoalConversion,
-} from './schemas.js';
+} from './types.js';
 
 export interface MostPopularUrlsInput {
   siteId: number;
@@ -122,14 +130,7 @@ export interface GoalConversionsInput {
   goalType?: string;
 }
 
-export interface GoalConversion {
-  id: string;
-  label: string;
-  type: string;
-  nb_conversions?: number;
-  nb_visits_converted?: number;
-  revenue?: number;
-}
+type GoalConversionRecord = Omit<GoalConversion, 'comparisons'>;
 
 export interface FunnelSummaryInput {
   siteId: number;
@@ -280,27 +281,55 @@ export class ReportsService {
     this.emit({ type: 'set', feature, key, expiresAt, ttlMs: this.cacheTtlMs });
   }
 
+  private async fetchWithPrevious<T>(
+    input: { period: string; date: string },
+    requester: (date: string) => Promise<unknown>,
+    parser: (raw: unknown) => T,
+    empty: () => T
+  ): Promise<{ current: T; previous: T }> {
+    const previousDate = resolvePreviousPeriodDate(input.period, input.date);
+
+    const [currentRaw, previousRaw] = await Promise.all([
+      requester(input.date),
+      previousDate ? requester(previousDate) : Promise.resolve(undefined),
+    ]);
+
+    const current = parser(currentRaw);
+    const previous = previousDate ? parser(previousRaw) : empty();
+
+    return { current, previous };
+  }
+
   async getMostPopularUrls(input: MostPopularUrlsInput): Promise<MostPopularUrl[]> {
     const feature = 'popularUrls';
     const cacheKey = this.makeCacheKey(feature, input);
     const cached = this.getFromCache<MostPopularUrl[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<MostPopularUrl[]>(this.http, {
-      method: 'Actions.getPageUrls',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-        flat: 1,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Actions.getPageUrls',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+            flat: 1,
+          },
+        }),
+      raw => mostPopularUrlsSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label ?? item.url,
     });
 
-    const parsed = mostPopularUrlsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getTopReferrers(input: TopReferrersInput): Promise<TopReferrer[]> {
@@ -309,20 +338,29 @@ export class ReportsService {
     const cached = this.getFromCache<TopReferrer[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<TopReferrer[]>(this.http, {
-      method: 'Referrers.getReferrerType',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Referrers.getReferrerType',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+          },
+        }),
+      raw => topReferrersSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label,
     });
 
-    const parsed = topReferrersSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getEvents(input: EventsInput): Promise<EventSummary[]> {
@@ -331,24 +369,33 @@ export class ReportsService {
     const cached = this.getFromCache<EventSummary[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<EventSummary[]>(this.http, {
-      method: 'Events.getAction',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-        flat: 1,
-        eventCategory: input.category,
-        eventAction: input.action,
-        eventName: input.name,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Events.getAction',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+            flat: 1,
+            eventCategory: input.category,
+            eventAction: input.action,
+            eventName: input.name,
+          },
+        }),
+      raw => eventsSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label,
     });
 
-    const parsed = eventsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getEntryPages(input: EntryPagesInput): Promise<EntryPage[]> {
@@ -357,21 +404,30 @@ export class ReportsService {
     const cached = this.getFromCache<EntryPage[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<EntryPage[]>(this.http, {
-      method: 'Actions.getEntryPageUrls',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-        flat: 1,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Actions.getEntryPageUrls',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+            flat: 1,
+          },
+        }),
+      raw => entryPagesSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label ?? item.url,
     });
 
-    const parsed = entryPagesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getCampaigns(input: CampaignsInput): Promise<Campaign[]> {
@@ -380,20 +436,29 @@ export class ReportsService {
     const cached = this.getFromCache<Campaign[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<Campaign[]>(this.http, {
-      method: 'Referrers.getCampaigns',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Referrers.getCampaigns',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+          },
+        }),
+      raw => campaignsSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label,
     });
 
-    const parsed = campaignsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getEcommerceOverview(input: EcommerceOverviewInput): Promise<EcommerceSummary> {
@@ -402,21 +467,29 @@ export class ReportsService {
     const cached = this.getFromCache<EcommerceSummary>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<unknown>(this.http, {
-      method: 'Goals.get',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        idGoal: 'ecommerceOrder',
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Goals.get',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            idGoal: 'ecommerceOrder',
+          },
+        }),
+      raw => {
+        const summary = extractEcommerceSummary(raw);
+        return ecommerceSummarySchema.parse(summary ?? {});
       },
-    });
+      () => ecommerceSummarySchema.parse({})
+    );
 
-    const summary = extractEcommerceSummary(data);
-    const parsed = ecommerceSummarySchema.parse(summary ?? {});
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    const enriched = annotateRecordWithComparisons(current, previous);
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getEcommerceRevenueTotals(input: EcommerceRevenueTotalsInput): Promise<EcommerceRevenueTotals> {
@@ -425,33 +498,36 @@ export class ReportsService {
     const cached = this.getFromCache<EcommerceRevenueTotals>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<unknown>(this.http, {
-      method: 'Goals.get',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        idGoal: 'ecommerceOrder',
-      },
-    });
-
-    const entries = collectEcommerceSummaries(data);
-    const parsedEntries = entries.map(entry => ({
-      label: entry.label,
-      summary: ecommerceSummarySchema.parse(entry.value ?? {}),
-    }));
-
-    const summaries = parsedEntries.map(entry => entry.summary);
-    const totals = summaries.length > 0 ? aggregateEcommerceSummaries(summaries) : ecommerceSummarySchema.parse({ revenue: 0, nb_conversions: 0 });
-
     const includeSeries = input.includeSeries ?? false;
-    const seriesCandidates = parsedEntries.filter(entry => entry.label !== '');
-    const series = includeSeries || seriesCandidates.length > 1
-      ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
+
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Goals.get',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            idGoal: 'ecommerceOrder',
+          },
+        }),
+      raw => buildEcommerceRevenueTotals(raw, includeSeries),
+      () => ({
+        totals: ecommerceSummarySchema.parse({ revenue: 0, nb_conversions: 0 }),
+        series: [],
+      })
+    );
+
+    const totals = annotateRecordWithComparisons(current.totals, previous.totals);
+    const series = current.series && current.series.length > 0
+      ? annotateArrayWithComparisons(current.series, previous.series ?? [], {
+          key: entry => entry.label,
+        })
       : undefined;
 
-    const result: EcommerceRevenueTotals = { totals, series };
+    const result: EcommerceRevenueTotals = { totals, ...(series ? { series } : {}) };
     this.setCache(feature, cacheKey, result);
     return result;
   }
@@ -462,21 +538,30 @@ export class ReportsService {
     const cached = this.getFromCache<EventCategory[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<EventCategory[]>(this.http, {
-      method: 'Events.getCategory',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-        flat: 1,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Events.getCategory',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+            flat: 1,
+          },
+        }),
+      raw => eventCategoriesSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label,
     });
 
-    const parsed = eventCategoriesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getDeviceTypes(input: DeviceTypesInput): Promise<DeviceTypeSummary[]> {
@@ -485,20 +570,29 @@ export class ReportsService {
     const cached = this.getFromCache<DeviceTypeSummary[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<DeviceTypeSummary[]>(this.http, {
-      method: 'DevicesDetection.getType',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'DevicesDetection.getType',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+          },
+        }),
+      raw => deviceTypesSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.label,
     });
 
-    const parsed = deviceTypesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getTrafficChannels(input: TrafficChannelsInput): Promise<TrafficChannel[]> {
@@ -507,26 +601,41 @@ export class ReportsService {
     const cached = this.getFromCache<TrafficChannel[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<TrafficChannel[]>(this.http, {
-      method: 'Referrers.getReferrerType',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-      },
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Referrers.getReferrerType',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+          },
+        }),
+      raw => trafficChannelsSchema.parse(raw ?? []),
+      () => []
+    );
+
+    const filterChannels = <T extends { label: string }>(channels: T[]): T[] => {
+      if (!input.channelType) {
+        return channels;
+      }
+
+      const target = resolveChannelAlias(input.channelType);
+      return channels.filter(channel => resolveChannelAlias(channel.label) === target);
+    };
+
+    const filteredCurrent = filterChannels(current);
+    const filteredPrevious = filterChannels(previous);
+
+    const enriched = annotateArrayWithComparisons(filteredCurrent, filteredPrevious, {
+      key: item => item.label,
     });
 
-    let parsed = trafficChannelsSchema.parse(data);
-
-    if (input.channelType) {
-      const target = resolveChannelAlias(input.channelType);
-      parsed = parsed.filter(channel => resolveChannelAlias(channel.label) === target);
-    }
-
-    this.setCache(feature, cacheKey, parsed);
-    return parsed;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getGoalConversions(input: GoalConversionsInput): Promise<GoalConversion[]> {
@@ -536,41 +645,57 @@ export class ReportsService {
     if (cached) return cached;
 
     const goalQuery = resolveGoalLookup(input.goalId);
+    const parse = (raw: unknown): GoalConversionRecord[] => {
+      const normalizedResponse = normalizeGoalConversionResponse(raw, input);
+      const parsed = goalConversionsSchema.parse(normalizedResponse);
+      const merged = mergeGoalConversionRecords(parsed).filter(
+        entry =>
+          entry.nb_conversions !== undefined ||
+          entry.nb_visits_converted !== undefined ||
+          entry.revenue !== undefined,
+      );
+      const normalized = merged.map(entry => normalizeGoalConversion(entry));
 
-    const data = await matomoGet<unknown>(this.http, {
-      method: 'Goals.get',
-      params: {
-        idSite: input.siteId,
-        period: input.period,
-        date: input.date,
-        segment: input.segment,
-        filter_limit: input.limit ?? 10,
-        idGoal: goalQuery.idGoalParam,
-      },
+      const withLabelFilter = goalQuery.labelFilter
+        ? normalized.filter(goal =>
+            goal.label.toLowerCase() === goalQuery.labelFilter ||
+            goal.id.toLowerCase() === goalQuery.labelFilter
+          )
+        : normalized;
+
+      const filtered = input.goalType
+        ? withLabelFilter.filter(
+            goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType)
+          )
+        : withLabelFilter;
+
+      return filtered;
+    };
+
+    const { current, previous } = await this.fetchWithPrevious(
+      input,
+      date =>
+        matomoGet<unknown>(this.http, {
+          method: 'Goals.get',
+          params: {
+            idSite: input.siteId,
+            period: input.period,
+            date,
+            segment: input.segment,
+            filter_limit: input.limit ?? 10,
+            idGoal: goalQuery.idGoalParam,
+          },
+        }),
+      parse,
+      () => []
+    );
+
+    const enriched = annotateArrayWithComparisons(current, previous, {
+      key: item => item.id,
     });
 
-    const normalizedResponse = normalizeGoalConversionResponse(data, input);
-    const parsed = goalConversionsSchema.parse(normalizedResponse);
-    const merged = mergeGoalConversionRecords(parsed).filter(
-      entry =>
-        entry.nb_conversions !== undefined ||
-        entry.nb_visits_converted !== undefined ||
-        entry.revenue !== undefined,
-    );
-    const normalized = merged.map(entry => normalizeGoalConversion(entry));
-
-    const withLabelFilter = goalQuery.labelFilter
-      ? normalized.filter(goal =>
-        goal.label.toLowerCase() === goalQuery.labelFilter ||
-        goal.id.toLowerCase() === goalQuery.labelFilter)
-      : normalized;
-
-    const filtered = input.goalType
-      ? withLabelFilter.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
-      : withLabelFilter;
-
-    this.setCache(feature, cacheKey, filtered);
-    return filtered;
+    this.setCache(feature, cacheKey, enriched);
+    return enriched;
   }
 
   async getFunnelSummary(input: FunnelSummaryInput): Promise<FunnelSummary> {
@@ -687,7 +812,7 @@ function isEcommerceSummaryCandidate(record: Record<string, unknown>): boolean {
   );
 }
 
-const numericEcommerceFields: Array<keyof EcommerceSummary> = [
+const numericEcommerceFields: Array<keyof EcommerceSummaryRecord> = [
   'nb_conversions',
   'nb_visits',
   'nb_visits_converted',
@@ -702,7 +827,7 @@ const numericEcommerceFields: Array<keyof EcommerceSummary> = [
   'revenue_discount',
 ];
 
-function aggregateEcommerceSummaries(summaries: EcommerceSummary[]): EcommerceSummary {
+function aggregateEcommerceSummaries(summaries: EcommerceSummaryRecord[]): EcommerceSummaryRecord {
   const totals: Record<string, number> = {};
 
   for (const summary of summaries) {
@@ -720,6 +845,33 @@ function aggregateEcommerceSummaries(summaries: EcommerceSummary[]): EcommerceSu
   }
 
   return ecommerceSummarySchema.parse(totals);
+}
+
+interface RawEcommerceRevenueTotals {
+  totals: EcommerceSummaryRecord;
+  series: Array<EcommerceSummaryRecord & { label: string }>;
+}
+
+function buildEcommerceRevenueTotals(raw: unknown, includeSeries: boolean): RawEcommerceRevenueTotals {
+  const entries = collectEcommerceSummaries(raw);
+  const parsedEntries = entries.map(entry => ({
+    label: entry.label,
+    summary: ecommerceSummarySchema.parse(entry.value ?? {}),
+  }));
+
+  const summaries = parsedEntries.map(entry => entry.summary);
+  const totals =
+    summaries.length > 0
+      ? aggregateEcommerceSummaries(summaries)
+      : ecommerceSummarySchema.parse({ revenue: 0, nb_conversions: 0 });
+
+  const seriesCandidates = parsedEntries.filter(entry => entry.label !== '');
+  const shouldIncludeSeries = includeSeries || seriesCandidates.length > 1;
+  const series = shouldIncludeSeries
+    ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
+    : [];
+
+  return { totals, series };
 }
 
 function resolveChannelAlias(value: string): string {
@@ -749,7 +901,7 @@ function resolveChannelAlias(value: string): string {
   }
 }
 
-function normalizeGoalConversion(entry: RawGoalConversion): GoalConversion {
+function normalizeGoalConversion(entry: RawGoalConversion): GoalConversionRecord {
   const id = normalizeGoalId(entry.idgoal);
   const type = normalizeGoalType(entry.type, id);
 
@@ -760,7 +912,7 @@ function normalizeGoalConversion(entry: RawGoalConversion): GoalConversion {
     nb_conversions: entry.nb_conversions,
     nb_visits_converted: entry.nb_visits_converted,
     revenue: entry.revenue,
-  } as GoalConversion;
+  };
 }
 
 function normalizeGoalId(id?: string | number): string {

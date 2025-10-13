@@ -7,7 +7,7 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
-- [ ] P-002c Compute comparative period deltas for reports
+- [x] P-002c Compute comparative period deltas for reports
       tags: analytics,ux  priority: medium  est: 1.5d
       deps: P-002
       accepts: Reporting tools fetch current and prior periods for each metric, compute percentage deltas with up/down indicators, handle zero-baseline cases, and expose the results through SDK/UI with documentation.

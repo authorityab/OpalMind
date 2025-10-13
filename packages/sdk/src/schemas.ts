@@ -18,7 +18,7 @@ export const keyNumbersSchema = z
   })
   .passthrough();
 
-export type KeyNumbers = z.infer<typeof keyNumbersSchema>;
+export type KeyNumbersPayload = z.infer<typeof keyNumbersSchema>;
 
 export const keyNumbersSeriesSchema = z.record(keyNumbersSchema);
 
@@ -35,7 +35,7 @@ export const mostPopularUrlsSchema = z.array(
     .passthrough()
 );
 
-export type MostPopularUrl = z.infer<typeof mostPopularUrlsSchema>[number];
+export type MostPopularUrlRecord = z.infer<typeof mostPopularUrlsSchema>[number];
 
 export const topReferrersSchema = z.array(
   z
@@ -48,7 +48,7 @@ export const topReferrersSchema = z.array(
     .passthrough()
 );
 
-export type TopReferrer = z.infer<typeof topReferrersSchema>[number];
+export type TopReferrerRecord = z.infer<typeof topReferrersSchema>[number];
 
 export const eventsSchema = z.array(
   z
@@ -66,7 +66,7 @@ export const eventsSchema = z.array(
     .passthrough()
 );
 
-export type EventSummary = z.infer<typeof eventsSchema>[number];
+export type EventSummaryRecord = z.infer<typeof eventsSchema>[number];
 
 export const entryPagesSchema = z.array(
   z
@@ -92,7 +92,7 @@ export const entryPagesSchema = z.array(
     .passthrough()
 );
 
-export type EntryPage = z.infer<typeof entryPagesSchema>[number];
+export type EntryPageRecord = z.infer<typeof entryPagesSchema>[number];
 
 export const campaignsSchema = z.array(
   z
@@ -106,7 +106,7 @@ export const campaignsSchema = z.array(
     .passthrough()
 );
 
-export type Campaign = z.infer<typeof campaignsSchema>[number];
+export type CampaignRecord = z.infer<typeof campaignsSchema>[number];
 
 export const ecommerceSummarySchema = z
   .object({
@@ -126,7 +126,7 @@ export const ecommerceSummarySchema = z
   })
   .passthrough();
 
-export type EcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
+export type EcommerceSummaryRecord = z.infer<typeof ecommerceSummarySchema>;
 
 export const eventCategoriesSchema = z.array(
   z
@@ -144,7 +144,7 @@ export const eventCategoriesSchema = z.array(
     .passthrough()
 );
 
-export type EventCategory = z.infer<typeof eventCategoriesSchema>[number];
+export type EventCategoryRecord = z.infer<typeof eventCategoriesSchema>[number];
 
 export const deviceTypesSchema = z.array(
   z
@@ -162,7 +162,7 @@ export const deviceTypesSchema = z.array(
     .passthrough()
 );
 
-export type DeviceTypeSummary = z.infer<typeof deviceTypesSchema>[number];
+export type DeviceTypeSummaryRecord = z.infer<typeof deviceTypesSchema>[number];
 
 export const trafficChannelsSchema = z.array(
   z
@@ -178,7 +178,7 @@ export const trafficChannelsSchema = z.array(
     .passthrough()
 );
 
-export type TrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
+export type TrafficChannelRecord = z.infer<typeof trafficChannelsSchema>[number];
 
 export const goalConversionsSchema = z.array(
   z

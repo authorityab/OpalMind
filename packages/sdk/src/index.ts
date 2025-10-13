@@ -9,27 +9,34 @@ import {
   type CacheStatsSnapshot,
   type ReportsServiceOptions,
   type CacheEvent,
-  type EcommerceRevenueTotals,
-  type EcommerceRevenueSeriesPoint,
-  type EcommerceRevenueTotalsInput,
-  type GoalConversion,
-  type GoalConversionsInput,
   type FunnelSummary,
   type FunnelStepSummary,
+  type EcommerceRevenueTotalsInput,
+  type GoalConversionsInput,
 } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
+import type { KeyNumbersPayload } from './schemas.js';
+import {
+  annotateArrayWithComparisons,
+  annotateRecordWithComparisons,
+} from './comparisons.js';
+import { resolvePreviousPeriodDate } from './periods.js';
 import type {
   Campaign,
   DeviceTypeSummary,
+  EcommerceRevenueSeriesPoint,
+  EcommerceRevenueTotals,
   EcommerceSummary,
   EntryPage,
   EventCategory,
   EventSummary,
+  GoalConversion,
   KeyNumbers,
+  KeyNumbersSeriesPoint,
   MostPopularUrl,
   TopReferrer,
   TrafficChannel,
-} from './schemas.js';
+} from './types.js';
 import {
   TrackingService,
   type TrackEventInput,
@@ -197,7 +204,7 @@ export interface GetHealthStatusInput {
   siteId?: number;
 }
 
-const keyNumberNumericFields: Array<keyof KeyNumbers> = [
+const keyNumberNumericFields: Array<keyof KeyNumbersPayload> = [
   'nb_visits',
   'nb_uniq_visitors',
   'nb_actions',
@@ -304,6 +311,34 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
   }
 
   return sanitized;
+}
+
+function normalizeKeyNumberValues(raw: KeyNumbersPayload): KeyNumbersPayload {
+  const normalized: Record<string, unknown> = { ...raw };
+
+  for (const field of keyNumberNumericFields) {
+    const value = normalized[field as string];
+
+    if (typeof value === 'number') {
+      if (Number.isFinite(value)) {
+        continue;
+      }
+
+      if (field === 'nb_visits') {
+        normalized.nb_visits = 0;
+        continue;
+      }
+
+      normalized[field as string] = undefined;
+      continue;
+    }
+
+    if (field === 'nb_visits') {
+      normalized.nb_visits = 0;
+    }
+  }
+
+  return normalized as KeyNumbersPayload;
 }
 
 function toDiagnosticError(error: unknown): MatomoDiagnosticError {
@@ -508,29 +543,56 @@ export class MatomoClient {
 
   async getKeyNumbers(input: GetKeyNumbersInput = {}): Promise<KeyNumbers> {
     const siteId = this.resolveSiteId(input.siteId);
+    const period = input.period ?? 'day';
+    const date = input.date ?? 'today';
+    const segment = input.segment;
+    const previousDate = resolvePreviousPeriodDate(period, date);
 
     const raw = await matomoGet<unknown>(this.http, {
       method: 'VisitsSummary.get',
       params: {
         idSite: siteId,
-        period: input.period ?? 'day',
-        date: input.date ?? 'today',
-        segment: input.segment,
+        period,
+        date,
+        segment,
       },
     });
 
     const source = normalizeKeyNumbersPayload(raw);
 
-    let pageviewSummary: Partial<Pick<KeyNumbers, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
+    let previousSource: Record<string, unknown> | undefined;
 
-    try {
+    if (previousDate) {
+      try {
+        const previousRaw = await matomoGet<unknown>(this.http, {
+          method: 'VisitsSummary.get',
+          params: {
+            idSite: siteId,
+            period,
+            date: previousDate,
+            segment,
+          },
+        });
+
+        previousSource = normalizeKeyNumbersPayload(previousRaw);
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to fetch previous key numbers', error);
+        }
+      }
+    }
+
+    const fetchActionsSummary = async (
+      targetDate: string
+    ): Promise<Partial<Pick<KeyNumbersPayload, 'nb_pageviews' | 'nb_uniq_pageviews'>>> => {
       const actionsRaw = await matomoGet<unknown>(this.http, {
         method: 'Actions.get',
         params: {
           idSite: siteId,
-          period: input.period ?? 'day',
-          date: input.date ?? 'today',
-          segment: input.segment,
+          period,
+          date: targetDate,
+          segment,
         },
       });
 
@@ -539,43 +601,47 @@ export class MatomoClient {
       const nb_pageviews = toFiniteNumber(actionsSummary?.['nb_pageviews']);
       const nb_uniq_pageviews = toFiniteNumber(actionsSummary?.['nb_uniq_pageviews']);
 
-      pageviewSummary = {
+      return {
         nb_pageviews: nb_pageviews ?? undefined,
         nb_uniq_pageviews: nb_uniq_pageviews ?? undefined,
       };
+    };
+
+    let pageviewSummary: Partial<Pick<KeyNumbersPayload, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
+    try {
+      pageviewSummary = await fetchActionsSummary(date);
     } catch (error) {
-      // swallow errors; nb_actions will still be returned
       if (process.env.NODE_ENV !== 'production') {
         // eslint-disable-next-line no-console
         console.warn('Failed to fetch pageview summary from Actions.get', error);
       }
     }
 
-    const payload = sanitizeKeyNumbers({ ...source, ...pageviewSummary });
-    const parsed = keyNumbersSchema.parse(payload);
-
-    const normalized: KeyNumbers = { ...parsed };
-
-    for (const field of keyNumberNumericFields) {
-      const value = normalized[field];
-
-      if (typeof value !== 'number') {
-        continue;
+    let previousPageviewSummary: Partial<Pick<KeyNumbersPayload, 'nb_pageviews' | 'nb_uniq_pageviews'>> = {};
+    if (previousDate) {
+      try {
+        previousPageviewSummary = await fetchActionsSummary(previousDate);
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to fetch previous pageview summary from Actions.get', error);
+        }
       }
-
-      if (Number.isFinite(value)) {
-        continue;
-      }
-
-      if (field === 'nb_visits') {
-        normalized.nb_visits = 0;
-        continue;
-      }
-
-      normalized[field] = undefined;
     }
 
-    return normalized;
+    const payload = sanitizeKeyNumbers({ ...source, ...pageviewSummary });
+    const parsed = keyNumbersSchema.parse(payload);
+    const currentNormalized = normalizeKeyNumberValues(parsed);
+
+    const previousNormalized = previousSource
+      ? normalizeKeyNumberValues(
+          keyNumbersSchema.parse(
+            sanitizeKeyNumbers({ ...previousSource, ...previousPageviewSummary })
+          )
+        )
+      : undefined;
+
+    return annotateRecordWithComparisons(currentNormalized, previousNormalized ?? {});
   }
 
   async getKeyNumbersSeries(input: GetKeyNumbersSeriesInput = {}): Promise<KeyNumbersSeriesPoint[]> {
@@ -607,10 +673,53 @@ export class MatomoClient {
     );
 
     const parsed = keyNumbersSeriesSchema.parse(normalizedResponse);
-
-    return Object.entries(parsed)
-      .map(([label, value]) => ({ date: label, ...value }))
+    const currentSeries = Object.entries(parsed)
+      .map(([label, value]) => ({ date: label, ...normalizeKeyNumberValues(value) }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    const previousDate = resolvePreviousPeriodDate(period, date);
+    let previousSeries: KeyNumbersSeriesPoint[] = [];
+
+    if (previousDate) {
+      try {
+        const previousResponse = await matomoGet<Record<string, unknown>>(this.http, {
+          method: 'VisitsSummary.get',
+          params: {
+            idSite: siteId,
+            period,
+            date: previousDate,
+            segment: input.segment,
+          },
+        });
+
+        const normalizedPrevious = Object.fromEntries(
+          Object.entries(previousResponse ?? {}).map(([label, value]) => {
+            const record = unwrapToRecord(value);
+
+            if (Object.keys(record).length > 0) {
+              return [label, record];
+            }
+
+            const visits = toFiniteNumber(unwrapMatomoValue(value)) ?? 0;
+            return [label, { nb_visits: visits } as Record<string, unknown>];
+          })
+        );
+
+        const previousParsed = keyNumbersSeriesSchema.parse(normalizedPrevious);
+        previousSeries = Object.entries(previousParsed)
+          .map(([label, value]) => ({ date: label, ...normalizeKeyNumberValues(value) }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to fetch previous key numbers series', error);
+        }
+      }
+    }
+
+    return annotateArrayWithComparisons(currentSeries, previousSeries, {
+      key: (_item, index) => index,
+    });
   }
 
   async getMostPopularUrls(
@@ -1017,6 +1126,7 @@ export type {
   EcommerceRevenueTotalsInput,
   TrafficChannel,
   GoalConversion,
+  KeyNumbersSeriesPoint,
   FunnelSummary,
   FunnelStepSummary,
   MatomoRateLimitEvent,

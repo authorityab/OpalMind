@@ -128,6 +128,37 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 4. **Direction indicators** – Present ▲ for positive deltas, ▼ for negative, and `—` (or similar) for zero change. Format values with one decimal place and a trailing `%`.
 5. **Payload shape** – Extend tool responses to include both absolute values and delta metadata so downstream agents can render summaries and presentation assets without recomputing.
 
+All SDK helpers now return a `comparisons` map alongside the existing numeric fields. Each entry provides the current value, the previous-period value, the absolute delta, a percentage delta (or `N/A` when the baseline is zero), and the direction symbol. For example:
+
+```json
+{
+  "nb_visits": 120,
+  "nb_pageviews": 450,
+  "comparisons": {
+    "nb_visits": {
+      "current": 120,
+      "previous": 100,
+      "absoluteChange": 20,
+      "deltaPercentage": 20,
+      "deltaFormatted": "20.0%",
+      "direction": "up",
+      "directionSymbol": "▲"
+    },
+    "nb_pageviews": {
+      "current": 450,
+      "previous": 300,
+      "absoluteChange": 150,
+      "deltaPercentage": 50,
+      "deltaFormatted": "50.0%",
+      "direction": "up",
+      "directionSymbol": "▲"
+    }
+  }
+}
+```
+
+Array-based responses (e.g., most popular URLs, traffic channels, goal conversions) attach the same `comparisons` object to each row using the metric keys in that record. These comparisons are computed using Matomo-aligned previous periods derived by `resolvePreviousPeriodDate`, ensuring month/week/day semantics match Matomo's reporting rules.
+
 ## Cache Monitoring
 - The `ReportsService` keeps an in-memory cache per report helper. Configure cache behaviour via the Matomo client:
   - `cache.ttlMs` overrides the default 60s TTL.

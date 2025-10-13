@@ -65,7 +65,12 @@ describe('MatomoClient', () => {
   });
 
   it('resolves default site ID when provided and merges pageview totals', async () => {
-    const fetchMock = createSequencedFetchMock([{ nb_visits: 42 }, { nb_pageviews: 149, nb_uniq_pageviews: 140 }]);
+    const fetchMock = createSequencedFetchMock([
+      { nb_visits: 42 },
+      { nb_visits: 21 },
+      { nb_pageviews: 149, nb_uniq_pageviews: 140 },
+      { nb_pageviews: 120, nb_uniq_pageviews: 100 },
+    ]);
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -76,12 +81,30 @@ describe('MatomoClient', () => {
     expect(result.nb_pageviews).toEqual(149);
     expect(result.nb_uniq_pageviews).toEqual(140);
 
+    expect(result.comparisons.nb_visits).toMatchObject({
+      current: 42,
+      previous: 21,
+      deltaPercentage: 100,
+      directionSymbol: '▲',
+    });
+    expect(result.comparisons.nb_pageviews).toMatchObject({
+      current: 149,
+      previous: 120,
+      deltaPercentage: 24.2,
+      directionSymbol: '▲',
+    });
+
     const firstUrl = new URL((fetchMock.mock.calls[0] ?? [])[0] as string);
     expect(firstUrl.searchParams.get('idSite')).toBe('5');
 
     const secondUrl = new URL((fetchMock.mock.calls[1] ?? [])[0] as string);
-    expect(secondUrl.searchParams.get('method')).toBe('Actions.get');
-    expect(secondUrl.searchParams.get('idSite')).toBe('5');
+    expect(secondUrl.searchParams.get('method')).toBe('VisitsSummary.get');
+    expect(secondUrl.searchParams.get('date')).toBeDefined();
+
+    const thirdUrl = new URL((fetchMock.mock.calls[2] ?? [])[0] as string);
+    expect(thirdUrl.searchParams.get('method')).toBe('Actions.get');
+    expect(thirdUrl.searchParams.get('idSite')).toBe('5');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('guards against NaN responses from Matomo key numbers', async () => {
@@ -92,7 +115,9 @@ describe('MatomoClient', () => {
         nb_visits_converted: false,
         sum_visit_length: '',
       },
+      { nb_visits: 0 },
       { nb_pageviews: 'NaN', nb_uniq_pageviews: 'NaN' },
+      { nb_pageviews: '0', nb_uniq_pageviews: '0' },
     ]);
 
     vi.stubGlobal('fetch', fetchMock);
@@ -104,10 +129,11 @@ describe('MatomoClient', () => {
     expect(result.nb_actions).toBeUndefined();
     expect(result.nb_visits_converted).toBeUndefined();
     expect(result.nb_pageviews).toBeUndefined();
+    expect(result.comparisons.nb_visits.deltaPercentage).toBe(0);
   });
 
   it('coerces scalar key number payloads into objects', async () => {
-    const fetchMock = createSequencedFetchMock(['0', { nb_pageviews: '0' }]);
+    const fetchMock = createSequencedFetchMock(['0', '0', { nb_pageviews: '0' }, { nb_pageviews: '0' }]);
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -121,7 +147,9 @@ describe('MatomoClient', () => {
   it('unwraps array key number payloads returned by Matomo', async () => {
     const fetchMock = createSequencedFetchMock([
       [{ nb_visits: 5, nb_actions: '10' }],
+      [{ nb_visits: 4, nb_actions: '8' }],
       [{ nb_pageviews: '15', nb_uniq_pageviews: '12' }],
+      [{ nb_pageviews: '10', nb_uniq_pageviews: '8' }],
     ]);
 
     vi.stubGlobal('fetch', fetchMock);
@@ -133,6 +161,7 @@ describe('MatomoClient', () => {
     expect(result.nb_actions).toBe(10);
     expect(result.nb_pageviews).toBe(15);
     expect(result.nb_uniq_pageviews).toBe(12);
+    expect(result.comparisons.nb_actions.directionSymbol).toBe('▲');
   });
 
   it('falls back to nb_visits_series totals when aggregate visits are NaN', async () => {
@@ -145,7 +174,16 @@ describe('MatomoClient', () => {
         },
         nb_actions: 'NaN',
       },
+      {
+        nb_visits: 'NaN',
+        nb_visits_series: {
+          '2023-12-30': '5',
+          '2023-12-31': '6',
+        },
+        nb_actions: 'NaN',
+      },
       { nb_pageviews: 'NaN', nb_uniq_pageviews: 'NaN' },
+      { nb_pageviews: '10', nb_uniq_pageviews: '9' },
     ]);
 
     vi.stubGlobal('fetch', fetchMock);
@@ -154,6 +192,7 @@ describe('MatomoClient', () => {
     const result = await client.getKeyNumbers({ period: 'week', date: 'last2' });
 
     expect(result.nb_visits).toBe(20);
+    expect(result.comparisons.nb_visits.previous).toBe(11);
   });
 
   it('normalizes non-finite visit totals for longer ranges and parses pageview strings', async () => {
@@ -163,7 +202,9 @@ describe('MatomoClient', () => {
         nb_actions: '12',
         nb_uniq_visitors: '0',
       },
+      { nb_visits: 5, nb_actions: '7', nb_uniq_visitors: '2' },
       { nb_pageviews: '450', nb_uniq_pageviews: '325' },
+      { nb_pageviews: '300', nb_uniq_pageviews: '200' },
     ]);
 
     vi.stubGlobal('fetch', fetchMock);
@@ -179,6 +220,7 @@ describe('MatomoClient', () => {
     const firstRequest = new URL(fetchMock.mock.calls[0][0] as string);
     expect(firstRequest.searchParams.get('period')).toBe('week');
     expect(firstRequest.searchParams.get('date')).toBe('last4');
+    expect(result.comparisons.nb_pageviews.previous).toBe(300);
   });
 
   it('returns key number series sorted by date', async () => {
@@ -187,16 +229,21 @@ describe('MatomoClient', () => {
       '2024-01-01': { nb_visits: 1, nb_pageviews: 3 },
     };
 
-    const fetchMock = createFetchMock(seriesData);
+    const previousSeries = {
+      '2023-12-31': { nb_visits: 1, nb_pageviews: 4 },
+      '2023-12-30': { nb_visits: 2, nb_pageviews: 2 },
+    };
+
+    const fetchMock = createSequencedFetchMock([seriesData, previousSeries]);
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
     const result = await client.getKeyNumbersSeries({ date: 'last2' });
 
-    expect(result).toEqual([
-      { date: '2024-01-01', nb_visits: 1, nb_pageviews: 3 },
-      { date: '2024-01-02', nb_visits: 2, nb_pageviews: 5 },
-    ]);
+    expect(result[0]).toMatchObject({ date: '2024-01-01', nb_visits: 1, nb_pageviews: 3 });
+    expect(result[0].comparisons.nb_pageviews.previous).toBe(2);
+    expect(result[1].date).toBe('2024-01-02');
+    expect(result[1].comparisons.nb_visits.current).toBe(2);
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('method')).toBe('VisitsSummary.get');
@@ -209,16 +256,19 @@ describe('MatomoClient', () => {
       '2025-08-02': '3',
     };
 
-    const fetchMock = createFetchMock(seriesData);
+    const previousSeries = {
+      '2025-07-30': 1,
+      '2025-07-31': '2',
+    };
+
+    const fetchMock = createSequencedFetchMock([seriesData, previousSeries]);
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 12 });
     const result = await client.getKeyNumbersSeries({ date: '2025-08-01,2025-08-02', period: 'day' });
 
-    expect(result).toEqual([
-      { date: '2025-08-01', nb_visits: 0 },
-      { date: '2025-08-02', nb_visits: 3 },
-    ]);
+    expect(result[0]).toMatchObject({ date: '2025-08-01', nb_visits: 0 });
+    expect(result[0].comparisons.nb_visits.previous).toBe(1);
   });
 
   it('unwraps array entries returned in key number series', async () => {
@@ -227,16 +277,19 @@ describe('MatomoClient', () => {
       '2025-08-02': [[{ nb_visits: 2 }]],
     } as Record<string, unknown>;
 
-    const fetchMock = createFetchMock(seriesData);
+    const previousSeries = {
+      '2025-07-30': [{ nb_visits: '1', nb_pageviews: '2' }],
+      '2025-07-31': [[{ nb_visits: 1 }]],
+    } as Record<string, unknown>;
+
+    const fetchMock = createSequencedFetchMock([seriesData, previousSeries]);
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 14 });
     const result = await client.getKeyNumbersSeries({ date: '2025-08-01,2025-08-02', period: 'day' });
 
-    expect(result).toEqual([
-      { date: '2025-08-01', nb_visits: 4, nb_pageviews: 6 },
-      { date: '2025-08-02', nb_visits: 2 },
-    ]);
+    expect(result[0]).toMatchObject({ date: '2025-08-01', nb_visits: 4, nb_pageviews: 6 });
+    expect(result[0].comparisons.nb_pageviews.previous).toBe(2);
   });
 
   it('runs diagnostics and reports successful checks', async () => {
@@ -467,7 +520,7 @@ describe('MatomoClient', () => {
     await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
     await client.getMostPopularUrls({ period: 'day', date: 'today', limit: 5 });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('passes through overrides for reporting helpers', async () => {
@@ -599,7 +652,9 @@ describe('MatomoClient', () => {
   it('records stale evictions when cache entries expire', async () => {
     const fetchMock = createSequencedFetchMock([
       [{ label: 'Home', nb_visits: '10' }],
+      [{ label: 'Home', nb_visits: '8' }],
       [{ label: 'Home', nb_visits: '12' }],
+      [{ label: 'Home', nb_visits: '9' }],
     ]);
     vi.stubGlobal('fetch', fetchMock);
 

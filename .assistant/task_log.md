@@ -323,3 +323,24 @@
   args: Document comparative delta implementation guidelines
   result: Added README instructions covering dual fetches, delta calculations, and payload formatting
   artifacts: README.md
+## 2025-10-09
+- tool: apply_patch
+  args: Implemented dual-period fetching, comparison utilities, and delta metadata across reporting helpers
+  result: Added comparison calculators, previous-period resolution, and enriched report payloads with `comparisons` maps including direction symbols
+  artifacts: packages/sdk/src/reports.ts, packages/sdk/src/index.ts, packages/sdk/src/comparisons.ts, packages/sdk/src/periods.ts, packages/sdk/src/types.ts
+- tool: apply_patch
+  args: Updated SDK tests for new comparison metadata and added coverage for comparison utilities
+  result: Adjusted MatomoClient caching/tests for dual fetches and introduced direct unit tests for `computeComparisonDelta`
+  artifacts: packages/sdk/test/matomoClient.test.ts, packages/sdk/test/comparisons.test.ts
+- tool: apply_patch
+  args: Documented comparison metadata in README and API sample responses; marked backlog item P-002c complete
+  result: README and docs now highlight `comparisons` payload shape, and backlog/task log reflect completion of comparative delta work
+  artifacts: README.md, packages/api/docs/sample-responses.md, .assistant/backlog.md, .assistant/task_log.md
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (66 tests) verifying dual-period comparisons and regression coverage【8fe987†L1-L11】
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (22 tests) confirming API compatibility with comparison metadata【00366f†L1-L94】
+  artifacts: none
