@@ -54,7 +54,7 @@ Returns real-time health status with individual component checks.
 ## Health Checks
 
 ### 1. Matomo API Connectivity
-- **Check**: Calls `API.getVersion` to verify Matomo reachability
+- **Check**: Calls `API.getMatomoVersion` (fallback to `API.getVersion` for legacy Matomo) to verify reachability
 - **Metrics**: Response time in milliseconds
 - **Status**: 
   - `pass`: API responds successfully
@@ -79,6 +79,13 @@ Returns real-time health status with individual component checks.
 - **Status**:
   - `pass`: Site accessible and permissions valid
   - `fail`: Site not found or permission denied
+
+## Diagnostics Token Verification
+
+The accompanying diagnostics routine validates API tokens before running site-level checks.
+
+- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when the method is missing or the token lacks UsersManager permissions.
+- **Outcome**: Reports the resolved Matomo user login or surfaces actionable guidance when authentication fails.
 
 ## Overall Status Logic
 

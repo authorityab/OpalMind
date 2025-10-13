@@ -40,7 +40,7 @@ import {
   type TrackingIdempotencyRecord,
   type TrackingIdempotencyStore,
 } from './tracking.js';
-import { MatomoApiError, MatomoNetworkError } from './errors.js';
+import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -349,6 +349,124 @@ async function performDiagnosticCheck(
       error: toDiagnosticError(error),
     };
   }
+}
+
+function isMatomoMethodUnavailable(error: unknown, method: string): error is MatomoClientError {
+  if (!(error instanceof MatomoClientError)) {
+    return false;
+  }
+
+  const normalized = error.message.toLowerCase();
+  if (!normalized.includes(method.toLowerCase())) {
+    return false;
+  }
+
+  return normalized.includes('method') && normalized.includes('does not exist');
+}
+
+type MatomoVersionMethod = 'API.getMatomoVersion' | 'API.getVersion';
+
+function extractMatomoVersion(payload: unknown): string | undefined {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  if (payload && typeof payload === 'object') {
+    const version = (payload as Record<string, unknown>).version;
+    if (typeof version === 'string') {
+      return version;
+    }
+  }
+
+  return undefined;
+}
+
+async function fetchMatomoVersionWithFallback(
+  http: MatomoHttpClient
+): Promise<{ version?: string; method: MatomoVersionMethod }> {
+  try {
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getMatomoVersion',
+    });
+    return {
+      version: extractMatomoVersion(payload),
+      method: 'API.getMatomoVersion',
+    };
+  } catch (error) {
+    if (!isMatomoMethodUnavailable(error, 'getmatomoversion')) {
+      throw error;
+    }
+
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getVersion',
+    });
+
+    return {
+      version: extractMatomoVersion(payload),
+      method: 'API.getVersion',
+    };
+  }
+}
+
+type MatomoUserMethod = 'UsersManager.getUserByTokenAuth' | 'API.getLoggedInUser';
+
+function extractMatomoUserLogin(payload: unknown): string | undefined {
+  if (!payload) return undefined;
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      if (entry && typeof entry === 'object') {
+        const login = (entry as Record<string, unknown>).login;
+        if (typeof login === 'string') {
+          return login;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  if (typeof payload === 'object') {
+    const login = (payload as Record<string, unknown>).login;
+    if (typeof login === 'string') {
+      return login;
+    }
+  }
+
+  return undefined;
+}
+
+async function fetchMatomoUserWithFallback(
+  http: MatomoHttpClient
+): Promise<{ login?: string; method: MatomoUserMethod }> {
+  try {
+    const payload = await matomoGet<unknown>(http, {
+      method: 'UsersManager.getUserByTokenAuth',
+    });
+    return {
+      login: extractMatomoUserLogin(payload),
+      method: 'UsersManager.getUserByTokenAuth',
+    };
+  } catch (error) {
+    if (
+      !isMatomoMethodUnavailable(error, 'getuserbytokenauth') &&
+      !(error instanceof MatomoPermissionError)
+    ) {
+      throw error;
+    }
+  }
+
+  const payload = await matomoGet<unknown>(http, {
+    method: 'API.getLoggedInUser',
+  });
+
+  return {
+    login: extractMatomoUserLogin(payload),
+    method: 'API.getLoggedInUser',
+  };
 }
 
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
@@ -666,21 +784,10 @@ export class MatomoClient {
     const checks: MatomoDiagnosticCheck[] = [];
 
     const baseCheck = await performDiagnosticCheck('base-url', 'Matomo base URL reachability', async () => {
-      const payload = await matomoGet<unknown>(this.http, {
-        method: 'API.getVersion',
-      });
-
-      if (typeof payload === 'string') {
-        return { version: payload };
+      const { version } = await fetchMatomoVersionWithFallback(this.http);
+      if (version) {
+        return { version };
       }
-
-      if (payload && typeof payload === 'object') {
-        const version = (payload as Record<string, unknown>)['version'];
-        if (typeof version === 'string') {
-          return { version };
-        }
-      }
-
       return undefined;
     });
 
@@ -704,17 +811,10 @@ export class MatomoClient {
     }
 
     const tokenCheck = await performDiagnosticCheck('token-auth', 'Token authentication', async () => {
-      const payload = await matomoGet<unknown>(this.http, {
-        method: 'API.getLoggedInUser',
-      });
-
-      if (payload && typeof payload === 'object') {
-        const login = (payload as Record<string, unknown>)['login'];
-        if (typeof login === 'string') {
-          return { login };
-        }
+      const { login } = await fetchMatomoUserWithFallback(this.http);
+      if (login) {
+        return { login };
       }
-
       return undefined;
     });
 
@@ -791,9 +891,7 @@ export class MatomoClient {
 
     try {
       const startTime = Date.now();
-      await matomoGet<unknown>(this.http, {
-        method: 'API.getVersion',
-      });
+      await fetchMatomoVersionWithFallback(this.http);
       responseTime = Date.now() - startTime;
       matomoOutput = `API responded in ${responseTime}ms`;
     } catch (error) {

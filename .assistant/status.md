@@ -30,6 +30,8 @@ See `.assistant/plan.md` for details.
 - Completed P-006 by shipping funnel analytics helpers in the SDK and new `/tools/get-funnel-analytics` API endpoint with docs/tests.
 - Patched funnel step normalization to read nested Matomo `definition.steps` containers and added regression coverage for missing flow metrics.
 - Hardened goal conversion normalization to flatten nested Matomo buckets, merge duplicate goals, reject metadata-only records, and allow label-based lookups alongside Matomo special IDs.
+- Completed P-002a by switching health diagnostics to `API.getMatomoVersion` with legacy fallback, adding regression coverage, and updating monitoring docs.
+- Completed P-002b by validating tokens through `UsersManager.getUserByTokenAuth` with a fallback to `API.getLoggedInUser`, updating docs/tests to match.
 - Logged follow-up backlog item P-006a to finish funnel analytics hardening and mirrored it in the active plan.
 
 ## Open Questions

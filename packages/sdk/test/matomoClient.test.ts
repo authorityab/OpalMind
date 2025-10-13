@@ -14,20 +14,46 @@ const createFetchMock = <T>(data: T) =>
     text: async () => JSON.stringify(data),
   });
 
+type JsonResponseOverrides = {
+  ok?: boolean;
+  status?: number;
+  statusText?: string;
+};
+
+const createJsonResponse = (data: unknown, overrides: JsonResponseOverrides = {}) => ({
+  ok: overrides.ok ?? true,
+  status: overrides.status ?? 200,
+  statusText: overrides.statusText ?? 'OK',
+  headers: new Headers(),
+  json: async () => data,
+  text: async () => JSON.stringify(data),
+});
+
 const createSequencedFetchMock = (responses: unknown[]) => {
   const mock = vi.fn();
   responses.forEach(response => {
-    mock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => response,
-      text: async () => JSON.stringify(response),
-    });
+    mock.mockResolvedValueOnce(createJsonResponse(response));
   });
   return mock;
 };
 
+const createMethodMissingResponse = (method: string) =>
+  createJsonResponse(
+    {
+      result: 'error',
+      message: `Method '${method}' does not exist or is not available in module '\\Piwik\\Plugins\\API\\API'.`,
+    },
+    { ok: false, status: 400, statusText: 'Bad Request' }
+  );
+
+const createPermissionErrorResponse = (method: string) =>
+  createJsonResponse(
+    {
+      result: 'error',
+      message: `Access denied for method '${method}'.`,
+    },
+    { ok: false, status: 403, statusText: 'Forbidden' }
+  );
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -247,6 +273,10 @@ describe('MatomoClient', () => {
     ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
     expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('SitesManager.getSiteFromId');
   });
 
@@ -280,6 +310,124 @@ describe('MatomoClient', () => {
       status: 'skipped',
       skippedReason: 'Authentication failed, unable to verify site permissions.',
     });
+  });
+
+  it('falls back to the legacy version probe when Matomo lacks getMatomoVersion', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createMethodMissingResponse('getMatomoVersion'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => '4.15.0',
+        text: async () => JSON.stringify('4.15.0'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ login: 'viewer' }),
+        text: async () => JSON.stringify({ login: 'viewer' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ idsite: '2', name: 'Legacy Site' }),
+        text: async () => JSON.stringify({ idsite: '2', name: 'Legacy Site' }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[0]).toMatchObject({
+      id: 'base-url',
+      status: 'ok',
+      details: { version: '4.15.0' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe('API.getVersion');
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+  });
+
+  it('falls back to API.getLoggedInUser when getUserByTokenAuth is unavailable', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => '5.0.0',
+        text: async () => JSON.stringify('5.0.0'),
+      })
+      .mockResolvedValueOnce(createMethodMissingResponse('getUserByTokenAuth'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ login: 'legacy-user' }),
+        text: async () => JSON.stringify({ login: 'legacy-user' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ idsite: '2', name: 'Legacy Site' }),
+        text: async () => JSON.stringify({ idsite: '2', name: 'Legacy Site' }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'ok',
+      details: { login: 'legacy-user' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
+  });
+
+  it('falls back to API.getLoggedInUser when UsersManager requires elevated permissions', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse('5.0.0'))
+      .mockResolvedValueOnce(createPermissionErrorResponse('UsersManager.getUserByTokenAuth'))
+      .mockResolvedValueOnce(createJsonResponse({ login: 'viewer-token' }))
+      .mockResolvedValueOnce(createJsonResponse({ idsite: '2', name: 'Viewer Site' }));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'ok',
+      details: { login: 'viewer-token' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
   });
 
   it('flags base URL errors and stops further checks', async () => {
@@ -833,6 +981,7 @@ describe('MatomoClient', () => {
       expect(matomoCheck?.status).toBe('pass');
       expect(matomoCheck?.componentType).toBe('service');
       expect(matomoCheck?.observedUnit).toBe('ms');
+      expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
     });
 
     it('returns unhealthy status when API fails', async () => {
@@ -849,9 +998,35 @@ describe('MatomoClient', () => {
       expect(matomoCheck?.output).toContain('Failed to reach Matomo instance');
     });
 
+    it('falls back to API.getVersion when getMatomoVersion is unavailable', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(createMethodMissingResponse('getMatomoVersion'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers(),
+          json: async () => '4.15.0',
+          text: async () => JSON.stringify('4.15.0'),
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+      const result = await client.getHealthStatus();
+
+      expect(result.status).toBe('healthy');
+      const matomoCheck = result.checks.find(c => c.name === 'matomo-api');
+      expect(matomoCheck?.status).toBe('pass');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
+      expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe('API.getVersion');
+    });
+
     it('includes site access check when requested', async () => {
       const fetchMock = createSequencedFetchMock([
-        '3.14.0', // API.getVersion
+        '3.14.0', // API.getMatomoVersion
         { idsite: '5', name: 'Test Site' } // SitesManager.getSiteFromId
       ]);
       vi.stubGlobal('fetch', fetchMock);
