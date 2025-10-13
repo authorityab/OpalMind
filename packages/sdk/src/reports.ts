@@ -512,11 +512,12 @@ export class ReportsService {
     );
 
     const totals = annotateRecordWithComparisons(current.totals, previous.totals);
-    const series = current.series && current.series.length > 0
-      ? annotateArrayWithComparisons(current.series, previous.series ?? [], {
-          key: entry => entry.label,
-        })
-      : undefined;
+    const series: EcommerceRevenueSeriesPoint[] | undefined =
+      current.series && current.series.length > 0
+        ? annotateArrayWithComparisons(current.series, previous.series ?? [], {
+            key: entry => entry.label,
+          })
+        : undefined;
 
     const result: EcommerceRevenueTotals = { totals, ...(series ? { series } : {}) };
     this.setCache(feature, cacheKey, result);
