@@ -7,6 +7,10 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
+- [x] P-002b Update Matomo token authentication probe
+      tags: observability,ops  priority: medium  est: 0.5d
+      deps: P-002
+      accepts: Diagnostics use `UsersManager.getUserByTokenAuth` with fallback to legacy `API.getLoggedInUser`; token failures surface actionable guidance; tests/docs updated to reflect new method order.
 - [x] P-002a Swap Matomo version health probe
       tags: observability,ops  priority: medium  est: 0.5d
       deps: P-002

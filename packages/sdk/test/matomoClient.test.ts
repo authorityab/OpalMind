@@ -264,6 +264,9 @@ describe('MatomoClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
     expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('SitesManager.getSiteFromId');
   });
 
@@ -341,6 +344,55 @@ describe('MatomoClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
     expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe('API.getVersion');
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+  });
+
+  it('falls back to API.getLoggedInUser when getUserByTokenAuth is unavailable', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => '5.0.0',
+        text: async () => JSON.stringify('5.0.0'),
+      })
+      .mockResolvedValueOnce(createMethodMissingResponse('getUserByTokenAuth'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ login: 'legacy-user' }),
+        text: async () => JSON.stringify({ login: 'legacy-user' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({ idsite: '2', name: 'Legacy Site' }),
+        text: async () => JSON.stringify({ idsite: '2', name: 'Legacy Site' }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'ok',
+      details: { login: 'legacy-user' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
   });
 
   it('flags base URL errors and stops further checks', async () => {

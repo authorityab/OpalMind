@@ -80,6 +80,13 @@ Returns real-time health status with individual component checks.
   - `pass`: Site accessible and permissions valid
   - `fail`: Site not found or permission denied
 
+## Diagnostics Token Verification
+
+The accompanying diagnostics routine validates API tokens before running site-level checks.
+
+- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when newer endpoints are unavailable.
+- **Outcome**: Reports the resolved Matomo user login or surfaces actionable guidance when authentication fails.
+
 ## Overall Status Logic
 
 - **healthy**: All checks pass

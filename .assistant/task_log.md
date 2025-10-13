@@ -263,3 +263,39 @@
   args: Capture P-002a completion in status changelog
   result: Noted Matomo version probe update in `.assistant/status.md`
   artifacts: .assistant/status.md
+- tool: apply_patch
+  args: Add P-002b Matomo token authentication probe task to backlog
+  result: Documented follow-up for updating diagnostics token check with fallback support
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add P-002b to active plan
+  result: Listed token authentication probe work alongside P-002 in current focus
+  artifacts: .assistant/plan.md
+- tool: apply_patch
+  args: Prefer token diagnostics via UsersManager.getUserByTokenAuth with legacy fallback
+  result: Added shared Matomo helper utilities for method detection and reused them within diagnostics workflow
+  artifacts: packages/sdk/src/index.ts
+- tool: apply_patch
+  args: Extend SDK diagnostics tests for token method fallback
+  result: Asserted new method ordering and legacy fallback coverage in `matomoClient.test.ts`
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Document token authentication probe strategy
+  result: Noted UsersManager.getUserByTokenAuth fallback approach in health monitoring doc
+  artifacts: packages/api/docs/health-monitoring.md
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (63 tests) validating diagnostics updates
+  artifacts: none
+- tool: apply_patch
+  args: Mark P-002b complete in backlog
+  result: Checked off token probe update with new diagnostics behaviour
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Remove completed P-002b from active plan
+  result: Restored plan focus to remaining P-002 monitoring work
+  artifacts: .assistant/plan.md
+- tool: apply_patch
+  args: Capture P-002b completion in status changelog
+  result: Documented token authentication probe improvements in `.assistant/status.md`
+  artifacts: .assistant/status.md
