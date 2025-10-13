@@ -299,3 +299,19 @@
   args: Capture P-002b completion in status changelog
   result: Documented token authentication probe improvements in `.assistant/status.md`
   artifacts: .assistant/status.md
+- tool: apply_patch
+  args: Allow token diagnostics fallback on permission errors
+  result: Treated UsersManager permission failures as a cue to retry with legacy login method
+  artifacts: packages/sdk/src/index.ts
+- tool: apply_patch
+  args: Cover UsersManager permission fallback in diagnostics tests
+  result: Added JSON response helpers and new permission scenario cases in `matomoClient.test.ts`
+  artifacts: packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Document UsersManager permission fallback for diagnostics
+  result: Updated health monitoring guide to mention limited-view token behaviour
+  artifacts: packages/api/docs/health-monitoring.md
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (64 tests) verifying diagnostics adjustments
+  artifacts: none

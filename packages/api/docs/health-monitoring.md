@@ -84,7 +84,7 @@ Returns real-time health status with individual component checks.
 
 The accompanying diagnostics routine validates API tokens before running site-level checks.
 
-- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when newer endpoints are unavailable.
+- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when the method is missing or the token lacks UsersManager permissions.
 - **Outcome**: Reports the resolved Matomo user login or surfaces actionable guidance when authentication fails.
 
 ## Overall Status Logic

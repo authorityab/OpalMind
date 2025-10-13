@@ -14,36 +14,46 @@ const createFetchMock = <T>(data: T) =>
     text: async () => JSON.stringify(data),
   });
 
+type JsonResponseOverrides = {
+  ok?: boolean;
+  status?: number;
+  statusText?: string;
+};
+
+const createJsonResponse = (data: unknown, overrides: JsonResponseOverrides = {}) => ({
+  ok: overrides.ok ?? true,
+  status: overrides.status ?? 200,
+  statusText: overrides.statusText ?? 'OK',
+  headers: new Headers(),
+  json: async () => data,
+  text: async () => JSON.stringify(data),
+});
+
 const createSequencedFetchMock = (responses: unknown[]) => {
   const mock = vi.fn();
   responses.forEach(response => {
-    mock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => response,
-      text: async () => JSON.stringify(response),
-      headers: new Headers(),
-    });
+    mock.mockResolvedValueOnce(createJsonResponse(response));
   });
   return mock;
 };
 
-const createMethodMissingResponse = (method: string) => ({
-  ok: false,
-  status: 400,
-  statusText: 'Bad Request',
-  headers: new Headers(),
-  json: async () => ({
-    result: 'error',
-    message: `Method '${method}' does not exist or is not available in module '\\Piwik\\Plugins\\API\\API'.`,
-  }),
-  text: async () =>
-    JSON.stringify({
+const createMethodMissingResponse = (method: string) =>
+  createJsonResponse(
+    {
       result: 'error',
       message: `Method '${method}' does not exist or is not available in module '\\Piwik\\Plugins\\API\\API'.`,
-    }),
-});
+    },
+    { ok: false, status: 400, statusText: 'Bad Request' }
+  );
+
+const createPermissionErrorResponse = (method: string) =>
+  createJsonResponse(
+    {
+      result: 'error',
+      message: `Access denied for method '${method}'.`,
+    },
+    { ok: false, status: 403, statusText: 'Forbidden' }
+  );
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -387,6 +397,31 @@ describe('MatomoClient', () => {
       id: 'token-auth',
       status: 'ok',
       details: { login: 'legacy-user' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
+  });
+
+  it('falls back to API.getLoggedInUser when UsersManager requires elevated permissions', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse('5.0.0'))
+      .mockResolvedValueOnce(createPermissionErrorResponse('UsersManager.getUserByTokenAuth'))
+      .mockResolvedValueOnce(createJsonResponse({ login: 'viewer-token' }))
+      .mockResolvedValueOnce(createJsonResponse({ idsite: '2', name: 'Viewer Site' }));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'ok',
+      details: { login: 'viewer-token' },
     });
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(

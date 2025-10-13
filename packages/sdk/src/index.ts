@@ -40,7 +40,7 @@ import {
   type TrackingIdempotencyRecord,
   type TrackingIdempotencyStore,
 } from './tracking.js';
-import { MatomoApiError, MatomoClientError, MatomoNetworkError } from './errors.js';
+import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -451,7 +451,10 @@ async function fetchMatomoUserWithFallback(
       method: 'UsersManager.getUserByTokenAuth',
     };
   } catch (error) {
-    if (!isMatomoMethodUnavailable(error, 'getuserbytokenauth')) {
+    if (
+      !isMatomoMethodUnavailable(error, 'getuserbytokenauth') &&
+      !(error instanceof MatomoPermissionError)
+    ) {
       throw error;
     }
   }
