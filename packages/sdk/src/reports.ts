@@ -86,15 +86,6 @@ export interface EcommerceRevenueTotalsInput extends EcommerceOverviewInput {
   includeSeries?: boolean;
 }
 
-export interface EcommerceRevenueSeriesPoint extends EcommerceSummary {
-  label: string;
-}
-
-export interface EcommerceRevenueTotals {
-  totals: EcommerceSummary;
-  series?: EcommerceRevenueSeriesPoint[];
-}
-
 export interface EventCategoriesInput {
   siteId: number;
   period: string;

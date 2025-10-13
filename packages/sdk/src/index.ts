@@ -49,6 +49,8 @@ import {
 } from './tracking.js';
 import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
 
+type KeyNumbersSeriesPointWithoutComparisons = Omit<KeyNumbersSeriesPoint, 'comparisons'>;
+
 export interface CacheConfig {
   ttlMs?: number;
   onEvent?: (event: CacheEvent) => void;
@@ -150,10 +152,6 @@ export interface GetFunnelSummaryInput {
 }
 
 export type GetKeyNumbersSeriesInput = GetKeyNumbersInput;
-
-export interface KeyNumbersSeriesPoint extends KeyNumbers {
-  date: string;
-}
 
 type DiagnosticCheckId = 'base-url' | 'token-auth' | 'site-access';
 
@@ -673,12 +671,12 @@ export class MatomoClient {
     );
 
     const parsed = keyNumbersSeriesSchema.parse(normalizedResponse);
-    const currentSeries = Object.entries(parsed)
+    const currentSeries: KeyNumbersSeriesPointWithoutComparisons[] = Object.entries(parsed)
       .map(([label, value]) => ({ date: label, ...normalizeKeyNumberValues(value) }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     const previousDate = resolvePreviousPeriodDate(period, date);
-    let previousSeries: KeyNumbersSeriesPoint[] = [];
+    let previousSeries: KeyNumbersSeriesPointWithoutComparisons[] = [];
 
     if (previousDate) {
       try {
@@ -719,7 +717,7 @@ export class MatomoClient {
 
     return annotateArrayWithComparisons(currentSeries, previousSeries, {
       key: (_item, index) => index,
-    });
+    }) as KeyNumbersSeriesPoint[];
   }
 
   async getMostPopularUrls(
