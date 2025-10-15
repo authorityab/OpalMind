@@ -1,15 +1,18 @@
 # Status
 
 ## Focus
-Integrate the existing OpalMind project into the refreshed `.assistant/` workflow while prioritizing observability follow-ups and queue persistence after recent reliability upgrades.
+Close the production-readiness gate by redacting Matomo secrets, enforcing tracking endpoint auth, and requiring explicit Matomo configuration while continuing P-002 health integration work.
 
 ## Now / Next / Later
 See `.assistant/plan.md` for details.
-- Now: P-002 Integrate health endpoint with monitoring.
-- Next: P-005 Persist retry queue/cache; P-006a Harden funnel analytics flow outputs; P-011–P-015 analytics expansion.
+- Now: B-002 Redact secrets, B-003 Enforce tracking auth, B-004 Require explicit Matomo config, P-002 Monitoring integration.
+- Next: P-016 Matomo back-pressure handling, P-017 HTTP timeouts/retries, P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
 - Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
 ## Risks
+- Secret leakage possible until Matomo error/log redaction lands (B-002).
+- Tracking endpoints remain unauthenticated until B-003 ships, risking spam and quota exhaustion.
+- Service can boot with unintended Matomo targets until B-004 enforces explicit configuration.
 - Monitoring platform undecided, leaving P-002 blocked until owners align on tooling.
 - Persistence backend for cache/queue still undecided; impacts P-005 scope and deployment expectations.
 - Rate-limit handling now exists, but alerting hooks remain manual until monitoring plan lands.

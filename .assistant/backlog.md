@@ -7,6 +7,18 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
+- [ ] B-002 Redact Matomo secrets from errors and logs
+      tags: security,ops,prod-gate  priority: critical  est: 0.5d
+      deps: ADR-0001
+      accepts: Ensure MatomoApiError and any serialized payloads omit `token_auth` values, sanitize logged endpoints, add regression tests covering API/tool error responses, and document the redaction strategy.
+- [ ] B-003 Enforce authentication for tracking endpoints
+      tags: security,api,prod-gate  priority: critical  est: 1d
+      deps: ADR-0003
+      accepts: Apply bearer (or equivalent) auth to `/track/pageview`, `/track/event`, and `/track/goal`, return 401/403 when missing or invalid, update README/docs to reflect protections, and add tests covering authorized vs unauthorized calls.
+- [ ] B-004 Fail fast without explicit Matomo configuration
+      tags: security,config,prod-gate  priority: critical  est: 0.5d
+      deps: ADR-0001
+      accepts: Reject startup when Matomo base URL or token are unset, remove default credentials, surface actionable configuration errors, and cover the guard with tests.
 - [ ] P-002c Compute comparative period deltas for reports
       tags: analytics,ux  priority: medium  est: 1.5d
       deps: P-002
@@ -50,6 +62,34 @@
       notes:
         1. Define a site-name → siteId mapping (JSON/YAML file, lightweight datastore, or hardcoded map for small footprints); refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
+- [ ] P-016 Honor Matomo back-pressure in tracking retries
+      tags: reliability,queue  priority: high  est: 1.5d
+      deps: P-004
+      accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.
+- [ ] P-017 Add timeout and retry safeguards to Matomo HTTP client
+      tags: reliability,http  priority: high  est: 1d
+      deps: ADR-0001
+      accepts: Wrap fetch calls with AbortController-driven timeouts, add bounded retry logic with circuit breaking for transient failures, and ensure diagnostics/SDK tests cover timeout scenarios.
+- [ ] P-018 Bound caches and idempotency stores
+      tags: reliability,infra  priority: high  est: 1d
+      deps: ADR-0003
+      accepts: Introduce TTL and maximum size limits for reporting cache and tracking retry/idempotency stores, expose eviction metrics, and validate behavior under load in tests.
+- [ ] P-019 Instrument health endpoint with real queue metrics
+      tags: observability,ops  priority: high  est: 1d
+      deps: P-002, P-016
+      accepts: Report actual tracking queue depth/state, reflect rate-limit failures in health status, and update docs/tests so `/tools/get-health-status` surfaces accurate queue insights.
+- [ ] P-020 Align authentication documentation with implementation
+      tags: docs,dx  priority: medium  est: 0.5d
+      deps: B-003
+      accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
+- [ ] B-005 Improve tracking failure diagnostics
+      tags: analytics,api  priority: medium  est: 0.5d
+      deps: P-004
+      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.
+- [ ] B-006 Support decimal inputs in numeric parsing
+      tags: bug,api  priority: medium  est: 0.25d
+      deps: none
+      accepts: Replace integer-only parsing with decimal-safe handling for numeric parameters (e.g., revenue), preserving validation errors for invalid values and covering decimals in tests.
 - [ ] P-007 Publish Opal discovery integration guide
       tags: docs,dx  priority: low  est: 1d
       deps: ADR-0001

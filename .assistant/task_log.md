@@ -1,4 +1,16 @@
 # Task Log
+## 2025-10-15
+- tool: shell
+  args: |
+    rg "get-health" -n -C3 packages/api/src &&
+    sed -n '883,1030p' packages/sdk/src/index.ts &&
+    sed -n '1,200p' packages/api/docs/health-monitoring.md
+  result: Reviewed health endpoint implementation, SDK checks, and monitoring documentation to baseline current behaviour and thresholds for P-002.
+  artifacts: packages/api/src/server.ts, packages/sdk/src/index.ts, packages/api/docs/health-monitoring.md
+- tool: apply_patch
+  args: Updated backlog, plan, and status to capture production gate tasks from the latest code review.
+  result: Added B-002/B-004 critical fixes with `prod-gate` tags, queued reliability follow-ups (P-016–P-020), and refreshed status focus/risks.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
 ## 2025-10-02
 - tool: none
   args: Reviewed `.assistant/backlog.md` and `.assistant/plan.md`
