@@ -335,3 +335,11 @@
   args: Document comparative delta implementation guidelines
   result: Added README instructions covering dual fetches, delta calculations, and payload formatting
   artifacts: README.md
+- tool: apply_patch
+  args: Add B-007 auto-resolve Matomo siteId defaults backlog item
+  result: Captured default siteId fallback requirement with acceptance criteria and tags
+  artifacts: .assistant/backlog.md
+- tool: rg
+  args: rg "token_auth"
+  result: Located Matomo token usages; noted MatomoHttpClient error endpoints retain raw token and dev console.warn surfaces those errors
+  artifacts: none

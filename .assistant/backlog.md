@@ -19,6 +19,10 @@
       tags: security,config,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Reject startup when Matomo base URL or token are unset, remove default credentials, surface actionable configuration errors, and cover the guard with tests.
+- [ ] B-007 Auto-resolve Matomo siteId defaults
+      tags: dx,api  priority: high  est: 0.5d
+      deps: ADR-0003
+      accepts: Matomo tools prefer caller-provided siteIds, fall back to `MATOMO_DEFAULT_SITE_ID` when unspecified, prompt only when neither is available, centralize default lookup, and cover the trie of scenarios with tests/docs updates.
 - [ ] P-002c Compute comparative period deltas for reports
       tags: analytics,ux  priority: medium  est: 1.5d
       deps: P-002
