@@ -47,13 +47,31 @@ export function buildServer() {
   app.use(express.json());
 
   const bearerToken = process.env.OPAL_BEARER_TOKEN?.trim();
-
   if (!bearerToken || bearerToken === 'change-me') {
     throw new Error('OPAL_BEARER_TOKEN must be set to a non-default value before starting the service.');
   }
 
+  const matomoBaseUrl = process.env.MATOMO_BASE_URL?.trim();
+  if (!matomoBaseUrl) {
+    throw new Error('MATOMO_BASE_URL must be set before starting the service.');
+  }
+
+  const matomoToken = process.env.MATOMO_TOKEN?.trim();
+  if (!matomoToken || matomoToken === 'set-me') {
+    throw new Error('MATOMO_TOKEN must be set to a valid Matomo token before starting the service.');
+  }
+
+  const defaultSiteIdEnv = process.env.MATOMO_DEFAULT_SITE_ID?.trim();
+  const defaultSiteId =
+    defaultSiteIdEnv && defaultSiteIdEnv.length > 0 ? Number.parseInt(defaultSiteIdEnv, 10) : undefined;
+
+  if (defaultSiteIdEnv && (Number.isNaN(defaultSiteId) || !Number.isFinite(defaultSiteId))) {
+    throw new Error('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
+  }
+
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (!req.path.startsWith('/tools')) {
+    const requiresAuth = req.path.startsWith('/tools') || req.path.startsWith('/track');
+    if (!requiresAuth) {
       return next();
     }
 
@@ -66,13 +84,10 @@ export function buildServer() {
     return next();
   });
 
-  const defaultSiteIdEnv = process.env.MATOMO_DEFAULT_SITE_ID ?? '1';
-  const defaultSiteId = Number.parseInt(defaultSiteIdEnv, 10);
-
   const matomoClient = createMatomoClient({
-    baseUrl: process.env.MATOMO_BASE_URL || 'https://matomo.surputte.se',
-    tokenAuth: process.env.MATOMO_TOKEN || 'set-me',
-    defaultSiteId: Number.isNaN(defaultSiteId) ? undefined : defaultSiteId,
+    baseUrl: matomoBaseUrl,
+    tokenAuth: matomoToken,
+    defaultSiteId,
   });
 
   const toolsService = new ToolsService(app);

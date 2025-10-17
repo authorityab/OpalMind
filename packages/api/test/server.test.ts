@@ -1,10 +1,11 @@
-import { EventEmitter } from 'node:events';
-
 import type { Express } from 'express';
 import httpMocks from 'node-mocks-http';
+import { EventEmitter } from 'node:events';
+
+import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockMatomoClient = {
+const mockMatomoClient = vi.hoisted(() => ({
   getKeyNumbers: vi.fn(),
   getKeyNumbersSeries: vi.fn(),
   getMostPopularUrls: vi.fn(),
@@ -23,13 +24,17 @@ const mockMatomoClient = {
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
-};
-
-const createMatomoClientMock = vi.fn(() => mockMatomoClient);
-
-vi.mock('@opalmind/sdk', () => ({
-  createMatomoClient: createMatomoClientMock,
 }));
+
+const createMatomoClientMock = vi.hoisted(() => vi.fn(() => mockMatomoClient));
+
+vi.mock('@opalmind/sdk', async () => {
+  const actual = await vi.importActual<typeof import('@opalmind/sdk')>('@opalmind/sdk');
+  return {
+    ...actual,
+    createMatomoClient: createMatomoClientMock,
+  };
+});
 
 async function createApp(): Promise<Express> {
   const module = await import('../src/server.js');
@@ -516,6 +521,27 @@ describe('tool endpoints', () => {
     expect(response.body).toEqual({ error: 'Unexpected token < in JSON at position 0' });
   });
 
+  it('redacts Matomo token details from tool error responses', async () => {
+    const app = await createApp();
+    const matomoError = new MatomoClientError('Matomo authentication failed: Invalid token', {
+      endpoint:
+        'https://matomo.example.com/index.php?module=API&method=VisitsSummary.get&token_auth=REDACTED',
+    });
+
+    mockMatomoClient.getKeyNumbers.mockRejectedValue(matomoError);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Matomo authentication failed: Invalid token' });
+    expect(matomoError.endpoint).toContain('token_auth=REDACTED');
+    expect(response.body.error).not.toContain('token_auth');
+  });
+
   it('records pageviews via track endpoint', async () => {
     const app = await createApp();
     mockMatomoClient.trackPageview.mockResolvedValue({ ok: true, status: 204, body: '', pvId: 'abcdef1234567890' });
@@ -602,5 +628,40 @@ describe('tool endpoints', () => {
       referrer: undefined,
       ts: undefined,
     });
+  });
+});
+
+describe('tracking endpoints', () => {
+  it('rejects unauthenticated tracking requests', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/track/pageview',
+      body: { parameters: { url: 'https://example.com/' } },
+      headers: {},
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Unauthorized' });
+  });
+});
+
+describe('configuration guards', () => {
+  it('throws when MATOMO_BASE_URL is missing', async () => {
+    delete process.env.MATOMO_BASE_URL;
+
+    await expect(createApp()).rejects.toThrow('MATOMO_BASE_URL must be set before starting the service.');
+  });
+
+  it('throws when MATOMO_TOKEN is missing', async () => {
+    delete process.env.MATOMO_TOKEN;
+
+    await expect(createApp()).rejects.toThrow('MATOMO_TOKEN must be set to a valid Matomo token before starting the service.');
+  });
+
+  it('throws when MATOMO_DEFAULT_SITE_ID is not numeric', async () => {
+    process.env.MATOMO_DEFAULT_SITE_ID = 'not-a-number';
+
+    await expect(createApp()).rejects.toThrow('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
   });
 });

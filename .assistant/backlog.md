@@ -3,19 +3,19 @@
       tags: security,ops  priority: high  est: 0.5d
       deps: ADR-0001
       accepts: Replace placeholder bearer token, document rotation strategy, and ensure env templates reference secure secret storage.
-- [ ] P-002 Integrate health endpoint with monitoring
+- [x] P-002 Integrate health endpoint with monitoring
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
-- [ ] B-002 Redact Matomo secrets from errors and logs
+- [x] B-002 Redact Matomo secrets from errors and logs
       tags: security,ops,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Ensure MatomoApiError and any serialized payloads omit `token_auth` values, sanitize logged endpoints, add regression tests covering API/tool error responses, and document the redaction strategy.
-- [ ] B-003 Enforce authentication for tracking endpoints
+- [x] B-003 Enforce authentication for tracking endpoints
       tags: security,api,prod-gate  priority: critical  est: 1d
       deps: ADR-0003
       accepts: Apply bearer (or equivalent) auth to `/track/pageview`, `/track/event`, and `/track/goal`, return 401/403 when missing or invalid, update README/docs to reflect protections, and add tests covering authorized vs unauthorized calls.
-- [ ] B-004 Fail fast without explicit Matomo configuration
+- [x] B-004 Fail fast without explicit Matomo configuration
       tags: security,config,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Reject startup when Matomo base URL or token are unset, remove default credentials, surface actionable configuration errors, and cover the guard with tests.

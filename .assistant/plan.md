@@ -1,14 +1,11 @@
 # Plan
 
 ## Now
-- B-002 Redact Matomo secrets from errors and logs
-- B-003 Enforce authentication for tracking endpoints
-- B-004 Fail fast without explicit Matomo configuration
-- P-002 Integrate health endpoint with monitoring
-
-## Next
+- B-007 Auto-resolve Matomo siteId defaults
 - P-016 Honor Matomo back-pressure in tracking retries
 - P-017 Add timeout and retry safeguards to Matomo HTTP client
+
+## Next
 - P-018 Bound caches and idempotency stores
 - P-019 Instrument health endpoint with real queue metrics
 - P-005 Persist retry queue and cache state
