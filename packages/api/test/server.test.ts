@@ -645,3 +645,23 @@ describe('tracking endpoints', () => {
     expect(response.body).toEqual({ error: 'Unauthorized' });
   });
 });
+
+describe('configuration guards', () => {
+  it('throws when MATOMO_BASE_URL is missing', async () => {
+    delete process.env.MATOMO_BASE_URL;
+
+    await expect(createApp()).rejects.toThrow('MATOMO_BASE_URL must be set before starting the service.');
+  });
+
+  it('throws when MATOMO_TOKEN is missing', async () => {
+    delete process.env.MATOMO_TOKEN;
+
+    await expect(createApp()).rejects.toThrow('MATOMO_TOKEN must be set to a valid Matomo token before starting the service.');
+  });
+
+  it('throws when MATOMO_DEFAULT_SITE_ID is not numeric', async () => {
+    process.env.MATOMO_DEFAULT_SITE_ID = 'not-a-number';
+
+    await expect(createApp()).rejects.toThrow('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
+  });
+});

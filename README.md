@@ -71,11 +71,13 @@ This project provides a lightweight SDK and Express-based tool service that make
 ## Environment Variables
 | Variable | Description |
 |----------|-------------|
-| `MATOMO_BASE_URL` | Base URL to your Matomo instance (should include host, optional path). |
-| `MATOMO_TOKEN` | Matomo `token_auth` used for Reporting API calls. |
-| `MATOMO_DEFAULT_SITE_ID` | Default `idSite` used when tool requests omit `siteId`. |
+| `MATOMO_BASE_URL` | **Required.** Base URL to your Matomo instance (must include protocol and host). |
+| `MATOMO_TOKEN` | **Required.** Matomo `token_auth` used for Reporting API calls; replace the scaffold placeholder with a real token. |
+| `MATOMO_DEFAULT_SITE_ID` | Optional default `idSite` applied when tool requests omit `siteId`. |
 | `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints (generate securely, e.g., `openssl rand -hex 32`). |
 | `PORT` | Listener port for the API service (default `4000`). |
+
+> The API refuses to start unless `MATOMO_BASE_URL`, `MATOMO_TOKEN`, and `OPAL_BEARER_TOKEN` are populated with non-placeholder values.
 
 ## Available Scripts
 From the repo root:

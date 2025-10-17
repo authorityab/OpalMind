@@ -1,17 +1,16 @@
 # Status
 
 ## Focus
-Close the production-readiness gate by requiring explicit Matomo configuration while continuing P-002 health integration work.
+Advance Matomo operational resilience by auto-resolving default site IDs and hardening tracking retry safeguards while instrumenting the health endpoint.
 
 ## Now / Next / Later
-See `.assistant/plan.md` for details.
-- Now: B-004 Require explicit Matomo config, P-002 Monitoring integration.
-- Next: P-016 Matomo back-pressure handling, P-017 HTTP timeouts/retries, P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
+- Now: B-007 Auto siteId defaults, P-016 Matomo back-pressure handling, P-017 HTTP timeouts/retries.
+- Next: P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
 - Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
 ## Risks
-- Service can boot with unintended Matomo targets until B-004 enforces explicit configuration.
-- Monitoring platform undecided, leaving P-002 blocked until owners align on tooling.
+- Default site resolution remains manual until B-007 lands, risking inconsistent reporting defaults.
+- Monitoring platform alignment still pending; SRE must adopt the recommended health alerts to ensure coverage.
 - Persistence backend for cache/queue still undecided; impacts P-005 scope and deployment expectations.
 - Rate-limit handling now exists, but alerting hooks remain manual until monitoring plan lands.
 
@@ -24,6 +23,7 @@ See `.assistant/plan.md` for details.
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Enforced Matomo configuration guards, removed placeholder defaults, expanded monitoring docs/runbook, and completed P-002.
 - Enforced bearer auth on `/track/*` routes and extended regression coverage/documentation, closing B-003.
 - Redacted Matomo `token_auth` from HTTP error endpoints and added SDK/API regression coverage to close the exposure gap.
 - Rebranded the codebase, packages, and deployment assets from Opalytics to OpalMind.

@@ -7,9 +7,9 @@ services:
       - stack.env
     environment:
       - NODE_ENV=production
-      - MATOMO_BASE_URL=${MATOMO_BASE_URL:-https://matomo.example.com}
-      - MATOMO_TOKEN=${MATOMO_TOKEN:-token_auth_here}
-      - MATOMO_DEFAULT_SITE_ID=${MATOMO_DEFAULT_SITE_ID:-1}
+      - MATOMO_BASE_URL=${MATOMO_BASE_URL:?missing_MATOMO_BASE_URL}
+      - MATOMO_TOKEN=${MATOMO_TOKEN:?missing_MATOMO_TOKEN}
+      - MATOMO_DEFAULT_SITE_ID=${MATOMO_DEFAULT_SITE_ID:-}
       - OPAL_BEARER_TOKEN=${OPAL_BEARER_TOKEN:?missing_OPAL_BEARER_TOKEN}
     ports:
       - "3000:3000"

@@ -121,9 +121,15 @@ const detailedHealth = await client.getHealthStatus({
 The health status endpoint follows standard health check patterns and can be integrated with:
 
 - **Load Balancers**: Use for upstream health checks
-- **Monitoring Systems**: Parse JSON response for alerting
-- **Dashboards**: Display real-time service health
+- **Monitoring Systems**: Poll every 60 seconds (Grafana Synthetic Monitoring, Prometheus `probe_http_status`, Datadog HTTP checks). Treat any `status` other than `healthy` as a warning and raise a critical alert when it reports `unhealthy` for two consecutive intervals.
+- **Dashboards**: Display real-time service health with the full `checks` array so operators can see which subsystem degraded.
 - **CI/CD**: Verify deployment health
+
+### Alerting & Runbook
+
+- **Warning thresholds**: fire a warning when `status === "degraded"` for more than 2 minutes or when `reports-cache` hit rate drops below 20%.
+- **Critical thresholds**: fire a critical alert immediately when `status === "unhealthy"` or the `matomo-api` check fails.
+- **Runbook**: link alerts to `/.assistant/troubleshoot/runbook.md#health-status-alert-triggered-by-monitoring` for triage steps covering Matomo connectivity, cache, and tracking queue recovery.
 
 ## Example cURL
 

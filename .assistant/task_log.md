@@ -383,6 +383,30 @@
   args: Document tracking endpoint auth requirements
   result: Clarified README that /tools/* and /track/* share the same bearer protection
   artifacts: README.md
+- tool: apply_patch
+  args: Require explicit Matomo configuration at server startup
+  result: Added MATOMO_BASE_URL/TOKEN guards, optional siteId validation, and shared bearer middleware reuse
+  artifacts: packages/api/src/server.ts
+- tool: apply_patch
+  args: Add configuration guard regression coverage
+  result: Extended API tests for missing env variables and invalid default site ids alongside tracking auth checks
+  artifacts: packages/api/test/server.test.ts
+- tool: apply_patch
+  args: Remove Matomo placeholder defaults from deploy scaffolding
+  result: Enforced docker-compose env requirements and cleared example .env placeholders
+  artifacts: docker-compose.yml, deploy/opalmind.env.example
+- tool: apply_patch
+  args: Expand health monitoring guidance and runbooks
+  result: Added alert thresholds, runbook link, config guard troubleshooting, and README environment notes
+  artifacts: packages/api/docs/health-monitoring.md, README.md, .assistant/troubleshoot/runbook.md
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (27 tests) covering configuration guards and tracking auth
+  artifacts: none
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (65 tests) ensuring SDK behaviour unchanged after config updates
+  artifacts: none
 - tool: rg
   args: rg "token_auth"
   result: Located Matomo token usages; noted MatomoHttpClient error endpoints retain raw token and dev console.warn surfaces those errors
