@@ -11,7 +11,7 @@
       tags: security,ops,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Ensure MatomoApiError and any serialized payloads omit `token_auth` values, sanitize logged endpoints, add regression tests covering API/tool error responses, and document the redaction strategy.
-- [ ] B-003 Enforce authentication for tracking endpoints
+- [x] B-003 Enforce authentication for tracking endpoints
       tags: security,api,prod-gate  priority: critical  est: 1d
       deps: ADR-0003
       accepts: Apply bearer (or equivalent) auth to `/track/pageview`, `/track/event`, and `/track/goal`, return 401/403 when missing or invalid, update README/docs to reflect protections, and add tests covering authorized vs unauthorized calls.

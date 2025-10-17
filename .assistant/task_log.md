@@ -367,6 +367,22 @@
   args: Mark B-002 complete and refresh plan/status focus
   result: Checked off redaction backlog item, removed it from active plan, and updated status focus/risks
   artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
+- tool: apply_patch
+  args: Enforce bearer auth on /track endpoints
+  result: Updated API middleware to protect tracking routes alongside tool routes
+  artifacts: packages/api/src/server.ts
+- tool: apply_patch
+  args: Cover tracking auth enforcement in API tests
+  result: Added unauthorized tracking test and hoisted mocks for compatibility
+  artifacts: packages/api/test/server.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (24 tests) verifying tracking and tool auth flows
+  artifacts: none
+- tool: apply_patch
+  args: Document tracking endpoint auth requirements
+  result: Clarified README that /tools/* and /track/* share the same bearer protection
+  artifacts: README.md
 - tool: rg
   args: rg "token_auth"
   result: Located Matomo token usages; noted MatomoHttpClient error endpoints retain raw token and dev console.warn surfaces those errors

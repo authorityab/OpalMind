@@ -630,3 +630,18 @@ describe('tool endpoints', () => {
     });
   });
 });
+
+describe('tracking endpoints', () => {
+  it('rejects unauthenticated tracking requests', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/track/pageview',
+      body: { parameters: { url: 'https://example.com/' } },
+      headers: {},
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Unauthorized' });
+  });
+});

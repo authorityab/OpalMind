@@ -113,6 +113,8 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
+All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`.
+
 Sample responses and curl snippets are documented in `packages/api/docs/sample-responses.md`.
 
 ## Development Workflow

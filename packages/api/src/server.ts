@@ -53,7 +53,8 @@ export function buildServer() {
   }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (!req.path.startsWith('/tools')) {
+    const requiresAuth = req.path.startsWith('/tools') || req.path.startsWith('/track');
+    if (!requiresAuth) {
       return next();
     }
 
