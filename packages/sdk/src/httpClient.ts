@@ -131,6 +131,20 @@ function normalizeBaseUrl(baseUrl: string): string {
   return `${trimmed.replace(/\/?$/, '')}/index.php`;
 }
 
+function redactMatomoToken(input: string): string {
+  if (!input) return input;
+
+  try {
+    const parsed = new URL(input);
+    if (parsed.searchParams.has('token_auth')) {
+      parsed.searchParams.set('token_auth', 'REDACTED');
+    }
+    return parsed.toString();
+  } catch {
+    return input.replace(/token_auth=[^&#?]*/gi, 'token_auth=REDACTED');
+  }
+}
+
 export class MatomoHttpClient {
   private readonly baseEndpoint: string;
   private readonly token: string;
@@ -169,13 +183,14 @@ export class MatomoHttpClient {
     }
 
     const endpoint = url.toString();
+    const redactedEndpoint = redactMatomoToken(endpoint);
     let res: Awaited<ReturnType<typeof fetch>>;
 
     try {
       res = await fetch(endpoint);
     } catch (error) {
       throw new MatomoNetworkError('Failed to reach Matomo instance.', {
-        endpoint,
+        endpoint: redactedEndpoint,
         cause: error,
       });
     }
@@ -187,7 +202,7 @@ export class MatomoHttpClient {
       bodyText = await res.text();
     } catch (error) {
       throw new MatomoNetworkError('Failed to read Matomo response.', {
-        endpoint,
+        endpoint: redactedEndpoint,
         cause: error,
         status: res.status,
       });
@@ -202,7 +217,7 @@ export class MatomoHttpClient {
       } catch (error) {
         if (res.ok) {
           throw new MatomoParseError('Failed to parse Matomo JSON response.', {
-            endpoint,
+            endpoint: redactedEndpoint,
             status: res.status,
             body: bodyText,
             cause: error,
@@ -222,7 +237,7 @@ export class MatomoHttpClient {
       throw classifyMatomoError({
         status: res.status,
         statusText: res.statusText,
-        endpoint,
+        endpoint: redactedEndpoint,
         bodyText,
         payload,
         rateLimit: rateLimitFromHeaders,
@@ -232,7 +247,7 @@ export class MatomoHttpClient {
     if (payload && typeof payload === 'object') {
       const extracted = extractMatomoError(payload);
       if (extracted) {
-        const error = classifyMatomoResultError(endpoint, payload, rateLimitFromHeaders);
+        const error = classifyMatomoResultError(redactedEndpoint, payload, rateLimitFromHeaders);
         if (error instanceof MatomoRateLimitError) {
           this.applyRateLimit(rateLimitFromHeaders, 'payload', {
             message: extracted.message,

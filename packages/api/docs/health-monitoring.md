@@ -86,6 +86,7 @@ The accompanying diagnostics routine validates API tokens before running site-le
 
 - **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when the method is missing or the token lacks UsersManager permissions.
 - **Outcome**: Reports the resolved Matomo user login or surfaces actionable guidance when authentication fails.
+- **Redaction**: Diagnostic errors sanitize Matomo URLs before logging or returning them. Any `token_auth` query parameters are replaced with `REDACTED` so credentials never appear in responses or logs.
 
 ## Overall Status Logic
 

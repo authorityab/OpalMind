@@ -111,6 +111,8 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `TrackGoal` | `POST /track/goal` | Captures goal conversions with optional revenue. |
 | `*` | Responses surface guidance via `MatomoApiError` when Matomo rejects a request (auth, permissions, rate limits, etc.). |
 
+Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
+
 Sample responses and curl snippets are documented in `packages/api/docs/sample-responses.md`.
 
 ## Development Workflow

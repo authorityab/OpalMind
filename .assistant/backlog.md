@@ -7,7 +7,7 @@
       tags: observability,ops  priority: high  est: 1d
       deps: ADR-0002
       accepts: `/tools/get-health-status` polled by chosen platform with warning/failure thresholds defined and runbook linked in docs.
-- [ ] B-002 Redact Matomo secrets from errors and logs
+- [x] B-002 Redact Matomo secrets from errors and logs
       tags: security,ops,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Ensure MatomoApiError and any serialized payloads omit `token_auth` values, sanitize logged endpoints, add regression tests covering API/tool error responses, and document the redaction strategy.

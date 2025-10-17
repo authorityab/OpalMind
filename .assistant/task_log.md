@@ -339,6 +339,34 @@
   args: Add B-007 auto-resolve Matomo siteId defaults backlog item
   result: Captured default siteId fallback requirement with acceptance criteria and tags
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Redact token_auth in Matomo HTTP error endpoints
+  result: Ensured MatomoApiError stores sanitized endpoints by stripping token_auth before bubbling errors
+  artifacts: packages/sdk/src/httpClient.ts
+- tool: apply_patch
+  args: Add regression test covering Matomo endpoint redaction
+  result: Verified Matomo errors remove token_auth values from error surfaces and serialized JSON
+  artifacts: packages/sdk/test/httpClient.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (65 tests) validating Matomo endpoint redaction
+  artifacts: none
+- tool: apply_patch
+  args: Extend API tool tests to cover Matomo token redaction handling
+  result: Ensured API layer uses real MatomoClientError class and added regression asserting 500 responses omit token_auth details
+  artifacts: packages/api/test/server.test.ts
+- tool: npm
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (23 tests) confirming API tool responses keep Matomo tokens redacted
+  artifacts: none
+- tool: apply_patch
+  args: Document Matomo token redaction in health monitoring and README guides
+  result: Added note that diagnostic errors replace `token_auth` with `REDACTED` in docs
+  artifacts: packages/api/docs/health-monitoring.md, README.md
+- tool: apply_patch
+  args: Mark B-002 complete and refresh plan/status focus
+  result: Checked off redaction backlog item, removed it from active plan, and updated status focus/risks
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
 - tool: rg
   args: rg "token_auth"
   result: Located Matomo token usages; noted MatomoHttpClient error endpoints retain raw token and dev console.warn surfaces those errors

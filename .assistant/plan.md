@@ -1,7 +1,6 @@
 # Plan
 
 ## Now
-- B-002 Redact Matomo secrets from errors and logs
 - B-003 Enforce authentication for tracking endpoints
 - B-004 Fail fast without explicit Matomo configuration
 - P-002 Integrate health endpoint with monitoring

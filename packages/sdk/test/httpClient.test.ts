@@ -82,6 +82,29 @@ describe('MatomoHttpClient', () => {
     ).rejects.toBeInstanceOf(MatomoClientError);
   });
 
+  it('redacts token_auth values from error endpoints', async () => {
+    const fetchMock = createFetchMock({ result: 'error', message: 'Oops' }, false, 400);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token);
+
+    let caught: unknown;
+    try {
+      await client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(MatomoClientError);
+    const matomoError = caught as MatomoClientError;
+    expect(matomoError.endpoint).toContain('token_auth=REDACTED');
+    expect(matomoError.endpoint).not.toContain(token);
+
+    const serialized = JSON.parse(JSON.stringify(matomoError));
+    expect(serialized.endpoint).toContain('token_auth=REDACTED');
+    expect(serialized.endpoint).not.toContain(token);
+  });
+
   it('throws an auth error when Matomo rejects the token', async () => {
     const fetchMock = createFetchMock({ result: 'error', message: 'Invalid token' }, true, 200);
     vi.stubGlobal('fetch', fetchMock);
