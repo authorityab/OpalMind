@@ -3,6 +3,7 @@ import {
   matomoGet,
   type MatomoRateLimitEvent,
   type MatomoRateLimitOptions,
+  type MatomoRetryOptions,
 } from './httpClient.js';
 import {
   ReportsService,
@@ -51,6 +52,10 @@ export interface MatomoClientConfig {
   baseUrl: string;
   tokenAuth: string;
   defaultSiteId?: number;
+  http?: {
+    timeoutMs?: number;
+    retry?: MatomoRetryOptions;
+  };
   tracking?: {
     baseUrl?: string;
     maxRetries?: number;
@@ -484,6 +489,8 @@ export class MatomoClient {
   constructor(config: MatomoClientConfig) {
     this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
       rateLimit: config.rateLimit,
+      timeoutMs: config.http?.timeoutMs,
+      retry: config.http?.retry,
     });
     const reportsOptions: ReportsServiceOptions = {
       cacheTtlMs: config.cache?.ttlMs ?? config.cacheTtlMs,

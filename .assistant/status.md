@@ -1,10 +1,10 @@
 # Status
 
 ## Focus
-Advance Matomo operational resilience by auto-resolving default site IDs and hardening tracking retry safeguards while instrumenting the health endpoint.
+Advance Matomo operational resilience by auto-resolving default site IDs and honoring Matomo back-pressure while surfacing actionable queue metrics.
 
 ## Now / Next / Later
-- Now: B-007 Auto siteId defaults, P-016 Matomo back-pressure handling, P-017 HTTP timeouts/retries.
+- Now: B-007 Auto siteId defaults, P-016 Matomo back-pressure handling.
 - Next: P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
 - Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
 
@@ -23,6 +23,7 @@ Advance Matomo operational resilience by auto-resolving default site IDs and har
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Added AbortController-driven timeouts and exponential backoff to the Matomo HTTP client with new SDK coverage and configuration knobs.
 - Wired `/health` endpoint to real Matomo diagnostics, surfacing degraded/unhealthy states via HTTP status and adding regression coverage.
 - Enforced Matomo configuration guards, removed placeholder defaults, expanded monitoring docs/runbook, and completed P-002.
 - Enforced bearer auth on `/track/*` routes and extended regression coverage/documentation, closing B-003.

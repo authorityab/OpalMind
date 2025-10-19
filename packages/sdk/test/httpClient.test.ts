@@ -26,6 +26,7 @@ describe('MatomoHttpClient', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('normalizes the base URL when missing index.php', async () => {
@@ -223,5 +224,110 @@ describe('MatomoHttpClient', () => {
 
     const event = client.getLastRateLimitEvent();
     expect(event?.retryAfterMs).toBe(3000);
+  });
+
+  it('aborts and surfaces a network error when the request exceeds the timeout', async () => {
+    const abortError = new DOMException('The operation was aborted.', 'AbortError');
+    let capturedSignal: AbortSignal | undefined;
+
+    const fetchMock = vi.fn((_endpoint: string, init?: RequestInit) => {
+      capturedSignal = init?.signal as AbortSignal | undefined;
+      return Promise.reject(abortError);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token, {
+      timeoutMs: 1000,
+      retry: { maxAttempts: 1, baseDelayMs: 0, jitterMs: 0 },
+    });
+
+    await expect(
+      client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } })
+    ).rejects.toBeInstanceOf(MatomoNetworkError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('retries transient network failures with exponential backoff', async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => JSON.stringify({ visits: 42 }),
+        headers: new Headers(),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token, {
+      timeoutMs: 2000,
+      retry: { maxAttempts: 3, baseDelayMs: 500, jitterMs: 0 },
+    });
+
+    const promise = client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    const response = await promise;
+    expect(response).toEqual({
+      data: { visits: 42 },
+      status: 200,
+      ok: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    randomSpy.mockRestore();
+  });
+
+  it('retries 503 responses before failing or succeeding', async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const firstResponse = {
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      text: async () => 'unavailable',
+      headers: new Headers(),
+    };
+
+    const secondResponse = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({ visits: 15 }),
+      headers: new Headers(),
+    };
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MatomoHttpClient(baseUrl, token, {
+      timeoutMs: 2000,
+      retry: { maxAttempts: 2, baseDelayMs: 300, jitterMs: 0 },
+    });
+
+    const promise = client.get({ method: 'VisitsSummary.get', params: { idSite: 1 } });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    const result = await promise;
+    expect(result).toEqual({
+      data: { visits: 15 },
+      status: 200,
+      ok: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    randomSpy.mockRestore();
   });
 });

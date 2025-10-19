@@ -27,7 +27,7 @@
       tags: security,ops,observability  priority: critical  est: 0.5d
       deps: ADR-0002
       accepts: `/health` invokes `matomoClient.getHealthStatus`, returns 503 with redacted errors when Matomo or caches fail, updates Docker/Kubernetes health probes, and adds regression coverage for healthy vs degraded responses.
-- [ ] B-009 Add Matomo HTTP client timeouts and backoff
+- [x] B-009 Add Matomo HTTP client timeouts and backoff
       tags: security,reliability  priority: critical  est: 1d
       deps: ADR-0001
       accepts: SDK fetch wrappers use AbortController with configurable timeout/jittered retry budget, surface structured `MatomoNetworkError` diagnostics, and ship unit tests covering timeout and retry exhaustion scenarios.
@@ -110,7 +110,7 @@
       tags: reliability,queue  priority: high  est: 1.5d
       deps: P-004
       accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.
-- [ ] P-017 Add timeout and retry safeguards to Matomo HTTP client
+- [x] P-017 Add timeout and retry safeguards to Matomo HTTP client
       tags: reliability,http  priority: high  est: 1d
       deps: ADR-0001
       accepts: Wrap fetch calls with AbortController-driven timeouts, add bounded retry logic with circuit breaking for transient failures, and ensure diagnostics/SDK tests cover timeout scenarios.

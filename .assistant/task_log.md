@@ -427,3 +427,31 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: Failed — `npm` binary not available in environment; manual test run required
   artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (30 tests) validating `/health` diagnostics wiring and existing tool routes
+  artifacts: none
+- tool: apply_patch
+  args: Add Matomo HTTP client timeouts/backoff with retries
+  result: Introduced AbortController timeouts, exponential backoff, and retry configuration knobs with updated SDK tests
+  artifacts: packages/sdk/src/httpClient.ts, packages/sdk/src/index.ts, packages/sdk/test/httpClient.test.ts
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (68 tests) covering new timeout/retry scenarios alongside existing SDK suites
+  artifacts: none
+- tool: apply_patch
+  args: Document HTTP safeguards and close backlog/status items
+  result: Marked B-009/P-017 complete, refreshed plan/status changelog, and added README guidance for configuring HTTP timeouts/retries
+  artifacts: README.md, .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
+- tool: shell
+  args: npm run build --workspaces
+  result: Passed TypeScript builds for SDK and API packages after HTTP client changes
+  artifacts: none
+- tool: apply_patch
+  args: Fix lint import ordering and const usage
+  result: Reordered test imports and tightened Matomo HTTP client declaration to satisfy eslint prefer-const/import-order rules
+  artifacts: packages/api/test/server.test.ts, packages/sdk/src/httpClient.ts
+- tool: shell
+  args: npm run lint --workspaces
+  result: Lint passed for API and SDK workspaces with clean output
+  artifacts: none
