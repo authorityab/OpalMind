@@ -23,6 +23,7 @@ Advance Matomo operational resilience by auto-resolving default site IDs and hon
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Replaced ToolsService logging with redacted structured entries and added regression coverage to prove no request/response payload leakage.
 - Added AbortController-driven timeouts and exponential backoff to the Matomo HTTP client with new SDK coverage and configuration knobs.
 - Wired `/health` endpoint to real Matomo diagnostics, surfacing degraded/unhealthy states via HTTP status and adding regression coverage.
 - Enforced Matomo configuration guards, removed placeholder defaults, expanded monitoring docs/runbook, and completed P-002.

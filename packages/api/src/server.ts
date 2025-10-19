@@ -2,9 +2,9 @@ import 'dotenv/config';
 
 import { fileURLToPath } from 'node:url';
 
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
-import { Parameter, ParameterType, ToolsService } from '@optimizely-opal/opal-tools-sdk';
+import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { createMatomoClient } from '@opalmind/sdk';
 
 function parseOptionalNumber(value: unknown): number | undefined {
@@ -40,6 +40,151 @@ function requireString(value: unknown, field: string): string {
     throw new Error(`${field} is required`);
   }
   return parsed;
+}
+
+function configureToolsServiceLogging(service: ToolsService) {
+  const internal = service as unknown as { router: Router; functions: ToolFunction[] };
+  const router = internal.router;
+  const functions = internal.functions;
+
+  const sanitizedRegisterTool: ToolsService['registerTool'] = function registerTool(
+    name,
+    description,
+    handler,
+    parameters,
+    endpoint,
+    authRequirements
+  ) {
+    const definition = new ToolFunction(name, description, parameters, endpoint, authRequirements);
+    functions.push(definition);
+
+    router.post(endpoint, async (req: Request, res: Response) => {
+      const startTime = Date.now();
+      const { params, auth, usedFallback } = extractInvocationPayload(req.body);
+      const paramKeys = summarizeParameters(params);
+      logToolInfo('request', {
+        tool: name,
+        endpoint,
+        paramKeys,
+        authProvider: summarizeAuthProvider(auth),
+        fallbackUsed: usedFallback,
+      });
+
+      try {
+        const handlerParamCount = handler.length;
+        const result =
+          handlerParamCount >= 2 ? await handler(params, auth) : await handler(params);
+
+        res.json(result);
+
+        logToolInfo('success', {
+          tool: name,
+          endpoint,
+          durationMs: Date.now() - startTime,
+          paramKeys,
+        });
+      } catch (error) {
+        const status = determineErrorStatus(error);
+        const sanitizedError = sanitizeErrorForLogs(error);
+
+        logToolError('failure', {
+          tool: name,
+          endpoint,
+          message: sanitizedError.message,
+          status: sanitizedError.status,
+          code: sanitizedError.code,
+        });
+
+        res.status(status).json({ error: sanitizedError.message ?? 'Unknown error' });
+      }
+    });
+  };
+
+  (service as unknown as { registerTool: typeof sanitizedRegisterTool }).registerTool = sanitizedRegisterTool;
+}
+
+function extractInvocationPayload(body: unknown): { params: unknown; auth: unknown; usedFallback: boolean } {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    const record = body as Record<string, unknown>;
+    if ('parameters' in record) {
+      return {
+        params: record.parameters,
+        auth: record.auth,
+        usedFallback: false,
+      };
+    }
+    return { params: body, auth: record.auth, usedFallback: true };
+  }
+
+  return { params: body, auth: undefined, usedFallback: true };
+}
+
+const SENSITIVE_PARAM_KEY = /(token|secret|password|auth)/i;
+
+function summarizeParameters(params: unknown): string[] {
+  if (params && typeof params === 'object' && !Array.isArray(params)) {
+    return Object.keys(params as Record<string, unknown>).map(key =>
+      SENSITIVE_PARAM_KEY.test(key) ? '[redacted]' : key
+    );
+  }
+  if (Array.isArray(params)) {
+    return ['[array]'];
+  }
+  if (params === null || params === undefined) {
+    return [];
+  }
+  return ['[primitive]'];
+}
+
+function summarizeAuthProvider(auth: unknown): string | undefined {
+  if (auth && typeof auth === 'object' && !Array.isArray(auth)) {
+    const provider = (auth as Record<string, unknown>).provider;
+    return typeof provider === 'string' ? provider : undefined;
+  }
+  return undefined;
+}
+
+function logToolInfo(event: 'request' | 'success', details: Record<string, unknown>) {
+  console.info('[tools]', { event, ...details });
+}
+
+function logToolError(event: 'failure', details: Record<string, unknown>) {
+  console.error('[tools]', { event, ...details });
+}
+
+function determineErrorStatus(error: unknown): number {
+  const candidate =
+    error && typeof error === 'object' && 'status' in error ? Number((error as { status?: unknown }).status) : undefined;
+  if (candidate && Number.isFinite(candidate) && candidate >= 400 && candidate < 600) {
+    return candidate;
+  }
+  return 500;
+}
+
+function sanitizeErrorForLogs(error: unknown): { message?: string; status?: number; code?: unknown } {
+  if (error instanceof Error) {
+    const status =
+      typeof (error as { status?: unknown }).status === 'number' ? ((error as { status?: number }).status as number) : undefined;
+    const code = (error as { code?: unknown }).code;
+    return {
+      message: redactTokens(error.message),
+      status,
+      code,
+    };
+  }
+
+  if (typeof error === 'string') {
+    return { message: redactTokens(error) };
+  }
+
+  return { message: 'Unknown error' };
+}
+
+function redactTokens(value: string): string {
+  return value
+    .replace(/token_auth=[^&#\s"]+/gi, 'token_auth=REDACTED')
+    .replace(/\btoken[\w-]*\s*[:=]\s*[^,\s]+/gi, match => `${match.split(/[:=]/)[0].trim()}=REDACTED`)
+    .replace(/Bearer\s+[A-Za-z0-9\-._~+/=]+/gi, 'Bearer REDACTED');
 }
 
 export function buildServer() {
@@ -91,6 +236,7 @@ export function buildServer() {
   });
 
   const toolsService = new ToolsService(app);
+  configureToolsServiceLogging(toolsService);
 
   const siteIdParam = new Parameter('siteId', ParameterType.Integer, 'Override site ID (defaults to MATOMO_DEFAULT_SITE_ID)', false);
   const periodParam = new Parameter('period', ParameterType.String, 'Matomo period (day, week, month, year, range)', false);

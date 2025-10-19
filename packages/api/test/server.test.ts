@@ -197,6 +197,59 @@ describe('health endpoint', () => {
   });
 });
 
+describe('tools logging', () => {
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('redacts sensitive values from request/success logs', async () => {
+    const app = await createApp();
+    mockMatomoClient.getKeyNumbers.mockResolvedValue({ nb_visits: 5 });
+
+    await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: {
+        parameters: { period: 'day', date: 'today', token_auth: 'super-secret' },
+      },
+    });
+
+    const serialized = JSON.stringify(infoSpy.mock.calls);
+    expect(serialized).not.toContain('super-secret');
+    expect(serialized).not.toContain('token_auth=');
+    expect(serialized).toContain('[redacted]');
+  });
+
+  it('redacts sensitive values from error logs and responses', async () => {
+    const app = await createApp();
+    mockMatomoClient.getKeyNumbers.mockRejectedValue(
+      new Error('Matomo failed with token_auth=super-secret')
+    );
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Matomo failed with token_auth=REDACTED' });
+
+    const serializedErrors = JSON.stringify(errorSpy.mock.calls);
+    expect(serializedErrors).not.toContain('super-secret');
+    expect(serializedErrors).toContain('token_auth=REDACTED');
+  });
+});
+
 describe('tool endpoints', () => {
   it('rejects unauthenticated requests', async () => {
     const app = await createApp();

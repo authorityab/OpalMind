@@ -31,7 +31,7 @@
       tags: security,reliability  priority: critical  est: 1d
       deps: ADR-0001
       accepts: SDK fetch wrappers use AbortController with configurable timeout/jittered retry budget, surface structured `MatomoNetworkError` diagnostics, and ship unit tests covering timeout and retry exhaustion scenarios.
-- [ ] B-010 Sanitize ToolsService logging
+- [x] B-010 Sanitize ToolsService logging
       tags: security,logging  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Replace upstream verbose logger with redacted structured logging, ensure request/response bodies never dump tokens/PII, and attest via tests or manual verification under production log level.
