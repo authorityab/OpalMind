@@ -645,8 +645,25 @@ export function buildServer() {
     '/track/goal'
   );
 
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({ ok: true });
+  app.get('/health', async (_req: Request, res: Response) => {
+    try {
+      const health = await matomoClient.getHealthStatus();
+      const isHealthy = health.status === 'healthy';
+      const statusCode = health.status === 'unhealthy' ? 503 : 200;
+
+      res.status(statusCode).json({
+        ok: isHealthy,
+        status: health.status,
+        health,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Matomo diagnostics unavailable';
+      res.status(503).json({
+        ok: false,
+        status: 'unhealthy',
+        error: message.includes('token_auth') ? 'Matomo diagnostics unavailable' : message,
+      });
+    }
   });
 
   return app;

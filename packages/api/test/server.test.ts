@@ -21,6 +21,7 @@ const mockMatomoClient = vi.hoisted(() => ({
   getGoalConversions: vi.fn(),
   getFunnelSummary: vi.fn(),
   runDiagnostics: vi.fn(),
+  getHealthStatus: vi.fn(),
   trackPageview: vi.fn(),
   trackEvent: vi.fn(),
   trackGoal: vi.fn(),
@@ -94,6 +95,7 @@ beforeEach(() => {
   mockMatomoClient.getGoalConversions.mockReset();
   mockMatomoClient.getFunnelSummary.mockReset();
   mockMatomoClient.runDiagnostics.mockReset();
+  mockMatomoClient.getHealthStatus.mockReset();
   mockMatomoClient.trackPageview.mockReset();
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
@@ -109,6 +111,90 @@ afterEach(() => {
   delete process.env.MATOMO_TOKEN;
   delete process.env.MATOMO_DEFAULT_SITE_ID;
   delete process.env.OPAL_BEARER_TOKEN;
+});
+
+describe('health endpoint', () => {
+  it('returns health diagnostics when Matomo is healthy', async () => {
+    const app = await createApp();
+    const healthPayload = {
+      status: 'healthy',
+      checks: [
+        {
+          name: 'matomo-api',
+          status: 'pass',
+          componentType: 'service',
+          observedValue: 120,
+          observedUnit: 'ms',
+          time: '2024-03-01T12:00:00.000Z',
+          output: 'API responded in 120ms',
+        },
+      ],
+    };
+    mockMatomoClient.getHealthStatus.mockResolvedValue(healthPayload);
+
+    const response = await invoke(app, {
+      url: '/health',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      ok: true,
+      status: 'healthy',
+      health: healthPayload,
+    });
+    expect(mockMatomoClient.getHealthStatus).toHaveBeenCalledWith();
+  });
+
+  it('returns 503 when health status is unhealthy', async () => {
+    const app = await createApp();
+    const healthPayload = {
+      status: 'unhealthy',
+      checks: [
+        {
+          name: 'matomo-api',
+          status: 'fail',
+          componentType: 'service',
+          observedValue: 0,
+          observedUnit: 'ms',
+          time: '2024-03-01T12:05:00.000Z',
+          output: 'Matomo unreachable',
+        },
+      ],
+    };
+    mockMatomoClient.getHealthStatus.mockResolvedValue(healthPayload);
+
+    const response = await invoke(app, {
+      url: '/health',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      ok: false,
+      status: 'unhealthy',
+      health: healthPayload,
+    });
+  });
+
+  it('redacts token information when diagnostics throw', async () => {
+    const app = await createApp();
+    mockMatomoClient.getHealthStatus.mockRejectedValue(
+      new Error('Failed to reach Matomo instance token_auth=secret')
+    );
+
+    const response = await invoke(app, {
+      url: '/health',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      ok: false,
+      status: 'unhealthy',
+      error: 'Matomo diagnostics unavailable',
+    });
+  });
 });
 
 describe('tool endpoints', () => {

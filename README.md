@@ -188,7 +188,7 @@ curl -H "Authorization: Bearer your-token" \
 - **Monitoring Systems**: Parse JSON for alerting (Grafana, Prometheus, etc.)
 - **CI/CD**: Verify deployment health post-deployment
 
-See `packages/api/docs/health-monitoring.md` for detailed documentation.
+The unauthenticated `GET /health` endpoint mirrors this payload (without requiring a bearer token) and returns HTTP 503 when the overall status is `unhealthy`, making it suitable for container health probes. See `packages/api/docs/health-monitoring.md` for detailed documentation.
 
 ## Testing
 - SDK tests rely on mocked `fetch` and validate request construction and response parsing.
