@@ -455,3 +455,23 @@
   args: npm run lint --workspaces
   result: Lint passed for API and SDK workspaces with clean output
   artifacts: none
+- tool: apply_patch
+  args: Replace ToolsService logging with sanitized wrapper
+  result: Overrode tool registration to emit redacted structured logs, added helper utilities, and documented sanitization tests
+  artifacts: packages/api/src/server.ts
+- tool: apply_patch
+  args: Add regression coverage for sanitized logging
+  result: Added console spy tests ensuring sensitive data is redacted from tool logs and responses
+  artifacts: packages/api/test/server.test.ts
+- tool: shell
+  args: npm run lint --workspaces
+  result: Lint passed after logging changes (API, SDK)
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (32 tests) verifying sanitized logging and existing tool/health behaviours
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (68 tests) ensuring SDK behaviour unaffected by API logging changes
+  artifacts: none
