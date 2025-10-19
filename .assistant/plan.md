@@ -3,7 +3,6 @@
 ## Now
 - B-007 Auto-resolve Matomo siteId defaults
 - P-016 Honor Matomo back-pressure in tracking retries
-- P-017 Add timeout and retry safeguards to Matomo HTTP client
 
 ## Next
 - P-018 Bound caches and idempotency stores

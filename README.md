@@ -140,6 +140,11 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
   - `cache.onEvent` receives `{ type, feature, key, expiresAt }` notifications for hits, misses, sets, and stale evictions—pipe these into your metrics system.
 - Call `client.getCacheStats()` to retrieve cumulative hit/miss/set counts and current entry totals per feature.
 
+## HTTP Client Safeguards
+- All Matomo HTTP calls now enforce an AbortController timeout (10s default) and exponential backoff with jitter for transient failures.
+- Customize the behaviour via `createMatomoClient({ baseUrl, tokenAuth, http: { timeoutMs: 5000, retry: { maxAttempts: 4, baseDelayMs: 500, jitterMs: 250 } } })`.
+- Network timeouts and repeated 5xx responses raise `MatomoNetworkError` with redacted endpoints so operators can trace issues without leaking credentials.
+
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:
 

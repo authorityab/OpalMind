@@ -32,8 +32,17 @@ export interface MatomoRateLimitOptions {
   onLimit?: (event: MatomoRateLimitEvent) => void;
 }
 
+export interface MatomoRetryOptions {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  jitterMs?: number;
+}
+
 export interface MatomoHttpClientOptions {
   rateLimit?: MatomoRateLimitOptions;
+  timeoutMs?: number;
+  retry?: MatomoRetryOptions;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -150,6 +159,11 @@ export class MatomoHttpClient {
   private readonly token: string;
   private readonly rateLimitMinDelayMs: number;
   private readonly onRateLimit?: (event: MatomoRateLimitEvent) => void;
+  private readonly timeoutMs: number;
+  private readonly retryMaxAttempts: number;
+  private readonly retryBaseDelayMs: number;
+  private readonly retryMaxDelayMs: number;
+  private readonly retryJitterMs: number;
   private rateLimitCooldownUntil = 0;
   private lastRateLimitEvent?: MatomoRateLimitEvent;
 
@@ -162,6 +176,12 @@ export class MatomoHttpClient {
     this.token = tokenAuth;
     this.rateLimitMinDelayMs = options.rateLimit?.minThrottleMs ?? 1000;
     this.onRateLimit = options.rateLimit?.onLimit;
+    this.timeoutMs = options.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 10_000;
+    const retryOptions = options.retry ?? {};
+    this.retryMaxAttempts = retryOptions.maxAttempts && retryOptions.maxAttempts > 0 ? retryOptions.maxAttempts : 3;
+    this.retryBaseDelayMs = retryOptions.baseDelayMs !== undefined && retryOptions.baseDelayMs >= 0 ? retryOptions.baseDelayMs : 250;
+    this.retryMaxDelayMs = retryOptions.maxDelayMs && retryOptions.maxDelayMs > 0 ? retryOptions.maxDelayMs : 2_000;
+    this.retryJitterMs = retryOptions.jitterMs !== undefined && retryOptions.jitterMs >= 0 ? retryOptions.jitterMs : 250;
   }
 
   async get<T>({ method, params = {} }: MatomoRequestOptions): Promise<MatomoResponse<T>> {
@@ -186,14 +206,7 @@ export class MatomoHttpClient {
     const redactedEndpoint = redactMatomoToken(endpoint);
     let res: Awaited<ReturnType<typeof fetch>>;
 
-    try {
-      res = await fetch(endpoint);
-    } catch (error) {
-      throw new MatomoNetworkError('Failed to reach Matomo instance.', {
-        endpoint: redactedEndpoint,
-        cause: error,
-      });
-    }
+    res = await this.fetchWithRetry(endpoint, redactedEndpoint);
 
     const rateLimitFromHeaders = res.headers ? extractRateLimitFromHeaders(res.headers) : undefined;
 
@@ -352,6 +365,101 @@ export class MatomoHttpClient {
     }
 
     return Math.max(0, ...candidates);
+  }
+
+  private async fetchWithRetry(endpoint: string, redactedEndpoint: string): Promise<Response> {
+    let attempt = 0;
+    let delayMs = this.retryBaseDelayMs;
+    let lastError: MatomoNetworkError | undefined;
+
+    while (attempt < this.retryMaxAttempts) {
+      attempt += 1;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      try {
+        const response = await fetch(endpoint, { signal: controller.signal });
+        clearTimeout(timeout);
+
+        if (!response.ok && this.shouldRetryResponse(response) && attempt < this.retryMaxAttempts) {
+          lastError = new MatomoNetworkError(
+            `Matomo responded with status ${response.status}. Retrying request.`,
+            {
+              endpoint: redactedEndpoint,
+              status: response.status,
+            }
+          );
+          await this.delayWithJitter(delayMs);
+          delayMs = this.nextDelay(delayMs);
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        clearTimeout(timeout);
+
+        const aborted = this.isAbortError(error);
+        const message = aborted
+          ? `Matomo request timed out after ${this.timeoutMs}ms.`
+          : 'Failed to reach Matomo instance.';
+
+        const networkError = new MatomoNetworkError(message, {
+          endpoint: redactedEndpoint,
+          cause: error,
+        });
+
+        if (attempt >= this.retryMaxAttempts) {
+          throw networkError;
+        }
+
+        lastError = networkError;
+        await this.delayWithJitter(delayMs);
+        delayMs = this.nextDelay(delayMs);
+      }
+    }
+
+    throw lastError ?? new MatomoNetworkError('Failed to reach Matomo instance.', { endpoint: redactedEndpoint });
+  }
+
+  private async delayWithJitter(delayMs: number): Promise<void> {
+    if (delayMs <= 0 && this.retryJitterMs <= 0) {
+      return;
+    }
+
+    const jitter = this.retryJitterMs > 0 ? Math.random() * this.retryJitterMs : 0;
+    await sleep(delayMs + jitter);
+  }
+
+  private nextDelay(previousDelay: number): number {
+    const doubled = previousDelay > 0 ? previousDelay * 2 : this.retryBaseDelayMs || 0;
+    const candidate = Math.max(this.retryBaseDelayMs, doubled);
+    return Math.min(this.retryMaxDelayMs, candidate);
+  }
+
+  private shouldRetryResponse(response: Response): boolean {
+    if (response.status === 429) {
+      return false;
+    }
+
+    if (response.status === 408) {
+      return true;
+    }
+
+    return response.status >= 500 && response.status < 600;
+  }
+
+  private isAbortError(error: unknown): boolean {
+    if (!error) return false;
+    if (error instanceof Error && error.name === 'AbortError') {
+      return true;
+    }
+
+    if (typeof error === 'object' && 'name' in error) {
+      const name = (error as { name?: unknown }).name;
+      return typeof name === 'string' && name === 'AbortError';
+    }
+
+    return false;
   }
 }
 
