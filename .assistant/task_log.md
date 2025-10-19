@@ -447,3 +447,11 @@
   args: npm run build --workspaces
   result: Passed TypeScript builds for SDK and API packages after HTTP client changes
   artifacts: none
+- tool: apply_patch
+  args: Fix lint import ordering and const usage
+  result: Reordered test imports and tightened Matomo HTTP client declaration to satisfy eslint prefer-const/import-order rules
+  artifacts: packages/api/test/server.test.ts, packages/sdk/src/httpClient.ts
+- tool: shell
+  args: npm run lint --workspaces
+  result: Lint passed for API and SDK workspaces with clean output
+  artifacts: none

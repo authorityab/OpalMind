@@ -204,9 +204,7 @@ export class MatomoHttpClient {
 
     const endpoint = url.toString();
     const redactedEndpoint = redactMatomoToken(endpoint);
-    let res: Awaited<ReturnType<typeof fetch>>;
-
-    res = await this.fetchWithRetry(endpoint, redactedEndpoint);
+    const res = await this.fetchWithRetry(endpoint, redactedEndpoint);
 
     const rateLimitFromHeaders = res.headers ? extractRateLimitFromHeaders(res.headers) : undefined;
 

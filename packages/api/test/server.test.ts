@@ -1,7 +1,7 @@
-import type { Express } from 'express';
-import httpMocks from 'node-mocks-http';
 import { EventEmitter } from 'node:events';
 
+import type { Express } from 'express';
+import httpMocks from 'node-mocks-http';
 import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
