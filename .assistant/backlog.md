@@ -106,7 +106,7 @@
       notes:
         1. Define a site-name → siteId mapping (JSON/YAML file, lightweight datastore, or hardcoded map for small footprints); refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
-- [ ] P-016 Honor Matomo back-pressure in tracking retries
+- [x] P-016 Honor Matomo back-pressure in tracking retries
       tags: reliability,queue  priority: high  est: 1.5d
       deps: P-004
       accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.

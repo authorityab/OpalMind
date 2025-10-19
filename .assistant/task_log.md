@@ -475,3 +475,31 @@
   args: npm run test --workspace @opalmind/sdk -- --run
   result: Passed (68 tests) ensuring SDK behaviour unaffected by API logging changes
   artifacts: none
+- tool: apply_patch
+  args: Implement tracking back-pressure handling
+  result: Added Retry-After aware backoff with jitter, queue metrics, and configurable tracking backoff options
+  artifacts: packages/sdk/src/tracking.ts, packages/sdk/src/index.ts
+- tool: apply_patch
+  args: Extend tracking regression coverage for back-pressure
+  result: Added Vitest cases for Retry-After delays, exponential backoff, and queue stats
+  artifacts: packages/sdk/test/tracking.test.ts
+- tool: apply_patch
+  args: Document tracking back-pressure configuration
+  result: Updated README with tracking backoff guidance and queue metrics usage
+  artifacts: README.md
+- tool: shell
+  args: npm run lint --workspaces
+  result: Lint passed after tracking back-pressure updates
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (70 tests) validating new tracking back-pressure behaviour
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (32 tests) confirming API surface unchanged after SDK updates
+  artifacts: none
+- tool: shell
+  args: npm run build --workspaces
+  result: TypeScript builds succeeded across API and SDK after back-pressure changes
+  artifacts: none

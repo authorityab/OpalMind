@@ -2,7 +2,6 @@
 
 ## Now
 - B-007 Auto-resolve Matomo siteId defaults
-- P-016 Honor Matomo back-pressure in tracking retries
 
 ## Next
 - P-018 Bound caches and idempotency stores
