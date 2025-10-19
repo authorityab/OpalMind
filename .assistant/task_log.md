@@ -419,3 +419,11 @@
   args: Update backlog with production review security tasks
   result: Added B-008–B-017 entries addressing health diagnostics, Matomo timeouts, logging redaction, Express hardening, queue metrics, bearer normalization, and compiler/lint strictness with security tagging
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Wire /health route to Matomo diagnostics
+  result: Updated Express route to proxy `matomoClient.getHealthStatus`, added failure redaction, and expanded API tests/docs to cover healthy vs unhealthy responses
+  artifacts: packages/api/src/server.ts, packages/api/test/server.test.ts, packages/api/docs/health-monitoring.md, README.md
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Failed — `npm` binary not available in environment; manual test run required
+  artifacts: none

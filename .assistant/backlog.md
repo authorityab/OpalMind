@@ -23,7 +23,7 @@
       tags: dx,api  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Matomo tools prefer caller-provided siteIds, fall back to `MATOMO_DEFAULT_SITE_ID` when unspecified, prompt only when neither is available, centralize default lookup, and cover the trie of scenarios with tests/docs updates.
-- [ ] B-008 Wire `/health` to real Matomo diagnostics
+- [x] B-008 Wire `/health` to real Matomo diagnostics
       tags: security,ops,observability  priority: critical  est: 0.5d
       deps: ADR-0002
       accepts: `/health` invokes `matomoClient.getHealthStatus`, returns 503 with redacted errors when Matomo or caches fail, updates Docker/Kubernetes health probes, and adds regression coverage for healthy vs degraded responses.

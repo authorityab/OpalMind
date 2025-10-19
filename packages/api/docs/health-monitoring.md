@@ -6,6 +6,33 @@ The health monitoring feature provides comprehensive status checks for Matomo AP
 
 ## API Endpoint
 
+### `GET /health`
+
+Container and load-balancer health probes should call this unauthenticated endpoint. It proxies Matomo diagnostics and returns HTTP `200` when the overall status is `healthy` or `degraded`, and `503` when marked `unhealthy`.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "status": "healthy",
+  "health": {
+    "status": "healthy",
+    "timestamp": "2025-09-30T15:30:00.000Z",
+    "checks": [
+      {
+        "name": "matomo-api",
+        "status": "pass",
+        "componentType": "service",
+        "observedValue": 145,
+        "observedUnit": "ms",
+        "time": "2025-09-30T15:30:00.000Z",
+        "output": "API responded in 145ms"
+      }
+    ]
+  }
+}
+```
+
 ### `GET /tools/get-health-status`
 
 Returns real-time health status with individual component checks.
@@ -135,6 +162,9 @@ The health status endpoint follows standard health check patterns and can be int
 
 ```bash
 # Basic health check
+curl http://localhost:3000/health
+
+# Authenticated health tool (richer diagnostics)
 curl -H "Authorization: Bearer your-token" \
   "http://localhost:3000/tools/get-health-status"
 

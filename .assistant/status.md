@@ -23,6 +23,7 @@ Advance Matomo operational resilience by auto-resolving default site IDs and har
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Wired `/health` endpoint to real Matomo diagnostics, surfacing degraded/unhealthy states via HTTP status and adding regression coverage.
 - Enforced Matomo configuration guards, removed placeholder defaults, expanded monitoring docs/runbook, and completed P-002.
 - Enforced bearer auth on `/track/*` routes and extended regression coverage/documentation, closing B-003.
 - Redacted Matomo `token_auth` from HTTP error endpoints and added SDK/API regression coverage to close the exposure gap.
