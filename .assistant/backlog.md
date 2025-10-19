@@ -23,6 +23,46 @@
       tags: dx,api  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Matomo tools prefer caller-provided siteIds, fall back to `MATOMO_DEFAULT_SITE_ID` when unspecified, prompt only when neither is available, centralize default lookup, and cover the trie of scenarios with tests/docs updates.
+- [ ] B-008 Wire `/health` to real Matomo diagnostics
+      tags: security,ops,observability  priority: critical  est: 0.5d
+      deps: ADR-0002
+      accepts: `/health` invokes `matomoClient.getHealthStatus`, returns 503 with redacted errors when Matomo or caches fail, updates Docker/Kubernetes health probes, and adds regression coverage for healthy vs degraded responses.
+- [ ] B-009 Add Matomo HTTP client timeouts and backoff
+      tags: security,reliability  priority: critical  est: 1d
+      deps: ADR-0001
+      accepts: SDK fetch wrappers use AbortController with configurable timeout/jittered retry budget, surface structured `MatomoNetworkError` diagnostics, and ship unit tests covering timeout and retry exhaustion scenarios.
+- [ ] B-010 Sanitize ToolsService logging
+      tags: security,logging  priority: critical  est: 0.5d
+      deps: ADR-0001
+      accepts: Replace upstream verbose logger with redacted structured logging, ensure request/response bodies never dump tokens/PII, and attest via tests or manual verification under production log level.
+- [ ] B-011 Surface real tracking queue health metrics
+      tags: security,observability,reliability  priority: high  est: 0.75d
+      deps: ADR-0002
+      accepts: Health payload reads retry queue depth/age from TrackingService, marks warn/fail thresholds based on backlog, exports metrics, and documents interpretation for SRE runbooks.
+- [ ] B-012 Harden Express boundary with security middleware and validation
+      tags: security,api  priority: high  est: 1d
+      deps: ADR-0003
+      accepts: Apply helmet, cors, rate limiting, body size guards, and Zod validators to `/tools/*` and `/track/*`, rejecting malformed payloads with structured errors and covering new guards in integration tests.
+- [ ] B-013 Make cache health thresholds configurable and observable
+      tags: security,observability  priority: medium  est: 0.75d
+      deps: ADR-0002
+      accepts: Cache health checks emit Prometheus-friendly metrics, thresholds driven by configuration/env, warnings/failures logged, and docs guide operators on tuning.
+- [ ] B-014 Normalize bearer token comparison and errors
+      tags: security,api,dx  priority: medium  est: 0.5d
+      deps: ADR-0003
+      accepts: Authorization middleware performs constant-time, case-insensitive comparison, differentiates missing vs invalid tokens with `WWW-Authenticate` headers, and adds regression coverage for header variations.
+- [ ] B-015 Split liveness and readiness probes
+      tags: security,ops  priority: medium  est: 0.5d
+      deps: ADR-0002
+      accepts: Introduce `/healthz` (process up) and `/readyz` (Matomo/cache success) endpoints, update deployment docs/Kubernetes manifest guidance, and add tests covering readiness failure while liveness stays green.
+- [ ] B-016 Enforce structured logging and lint rules
+      tags: security,devex  priority: low  est: 0.75d
+      deps: ADR-0001
+      accepts: Standardize on redacted logger utility, ban raw `console.*` via ESLint with security plugin, migrate existing logs, and ensure CI enforces the rule set.
+- [ ] B-017 Tighten TypeScript compiler strictness
+      tags: security,devex  priority: low  est: 1d
+      deps: ADR-0001
+      accepts: Enable `noImplicitAny`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`, resolve resulting errors in API/SDK packages, and document the stricter typing policy in contributor guides.
 - [ ] P-002c Compute comparative period deltas for reports
       tags: analytics,ux  priority: medium  est: 1.5d
       deps: P-002

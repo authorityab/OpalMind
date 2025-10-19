@@ -411,3 +411,11 @@
   args: rg "token_auth"
   result: Located Matomo token usages; noted MatomoHttpClient error endpoints retain raw token and dev console.warn surfaces those errors
   artifacts: none
+- tool: shell
+  args: sed -n '35,110p' docs/production-review.md
+  result: Reviewed production audit for Matomo timeout/back-pressure cues; confirmed HTTP client timeout gap and fabricated tracking queue stats while noting no guidance on siteId defaults
+  artifacts: none
+- tool: apply_patch
+  args: Update backlog with production review security tasks
+  result: Added B-008–B-017 entries addressing health diagnostics, Matomo timeouts, logging redaction, Express hardening, queue metrics, bearer normalization, and compiler/lint strictness with security tagging
+  artifacts: .assistant/backlog.md
