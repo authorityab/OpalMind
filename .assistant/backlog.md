@@ -43,7 +43,7 @@
       tags: security,api  priority: high  est: 1d
       deps: ADR-0003
       accepts: Apply helmet, cors, rate limiting, body size guards, and Zod validators to `/tools/*` and `/track/*`, rejecting malformed payloads with structured errors and covering new guards in integration tests.
-- [ ] B-013 Make cache health thresholds configurable and observable
+- [x] B-013 Make cache health thresholds configurable and observable
       tags: security,observability  priority: medium  est: 0.75d
       deps: ADR-0002
       accepts: Cache health checks emit Prometheus-friendly metrics, thresholds driven by configuration/env, warnings/failures logged, and docs guide operators on tuning.

@@ -8,7 +8,7 @@
 - Express boundary now enforces security headers, CORS allowlists, request body limits, rate limiting, and Zod validation for `/tools/*` and `/track/*`, reducing exposure to malformed payloads and brute-force attempts. 【F:packages/api/src/server.ts†L200-L323】【F:packages/api/src/validation.ts†L1-L188】
 - Repository lacks production runbook, Matomo troubleshooting guidance, and instructions for GHCR deployment despite containerized workflow expectations.
 - TypeScript compiler still allows implicit anys/loose optionals, and ESLint does not enforce security-sensitive rules (no-console, header validation) used in production paths. 【F:packages/api/src/server.ts†L648-L650】
-- Cache health thresholding uses arbitrary percentages and no alerts/metrics export, limiting observability when cache churn increases. 【F:packages/sdk/src/index.ts†L912-L933】
+- Cache health check thresholds are now configurable and embedded in health responses, providing operators with precise hit/miss metrics and actionable warning/failure triggers. 【F:packages/sdk/src/index.ts†L980-L1004】
 - Bearer authentication now performs case-insensitive, constant-time comparisons and returns RFC6750-compliant challenges for missing or invalid tokens, reducing spoofing vectors and improving diagnostics. 【F:packages/api/src/server.ts†L340-L383】
 - Tests cover happy-path tool routing only; there are no contract tests for `/track/*` failure cases, Matomo timeout handling, or `/health` degradation, leaving the main regressions unguarded. 【F:packages/api/test/server.test.ts†L1-L320】
 

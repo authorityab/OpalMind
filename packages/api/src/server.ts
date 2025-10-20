@@ -72,6 +72,19 @@ function parseRequiredNumber(value: unknown, field: string): number {
   return parsed;
 }
 
+function parseOptionalFloat(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  const numeric = Number.parseFloat(String(value));
+  return Number.isNaN(numeric) ? undefined : numeric;
+}
+
 function parseOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -418,6 +431,9 @@ export function buildServer() {
   const queueFailPending = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_PENDING);
   const queueWarnAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_AGE_MS);
   const queueFailAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_AGE_MS);
+  const cacheWarnHitRate = parseOptionalFloat(process.env.MATOMO_CACHE_WARN_HIT_RATE);
+  const cacheFailHitRate = parseOptionalFloat(process.env.MATOMO_CACHE_FAIL_HIT_RATE);
+  const cacheSampleSize = parseOptionalNumber(process.env.MATOMO_CACHE_SAMPLE_SIZE);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const requiresAuth = req.path.startsWith('/tools') || req.path.startsWith('/track');
@@ -454,6 +470,11 @@ export function buildServer() {
   if (queueWarnAgeMs !== undefined) queueHealthThresholds.ageWarnMs = queueWarnAgeMs;
   if (queueFailAgeMs !== undefined) queueHealthThresholds.ageFailMs = queueFailAgeMs;
 
+  const cacheHealthThresholds: Record<string, number> = {};
+  if (cacheWarnHitRate !== undefined) cacheHealthThresholds.warnHitRate = cacheWarnHitRate;
+  if (cacheFailHitRate !== undefined) cacheHealthThresholds.failHitRate = cacheFailHitRate;
+  if (cacheSampleSize !== undefined) cacheHealthThresholds.sampleSize = cacheSampleSize;
+
   const matomoClient = createMatomoClient({
     baseUrl: matomoBaseUrl,
     tokenAuth: matomoToken,
@@ -463,6 +484,7 @@ export function buildServer() {
       healthThresholds:
         Object.keys(queueHealthThresholds).length > 0 ? queueHealthThresholds : undefined,
     },
+    cacheHealth: Object.keys(cacheHealthThresholds).length > 0 ? cacheHealthThresholds : undefined,
   });
 
   const toolsService = new ToolsService(app);

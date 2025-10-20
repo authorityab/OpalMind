@@ -119,6 +119,9 @@ beforeEach(() => {
   delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
   delete process.env.OPAL_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
+  delete process.env.MATOMO_CACHE_WARN_HIT_RATE;
+  delete process.env.MATOMO_CACHE_FAIL_HIT_RATE;
+  delete process.env.MATOMO_CACHE_SAMPLE_SIZE;
 
   process.env.MATOMO_BASE_URL = 'https://matomo.example.com';
   process.env.MATOMO_TOKEN = 'token';

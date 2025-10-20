@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createMatomoClient, TrackingService, type TrackingQueueStats } from '../src/index.js';
+import {
+  createMatomoClient,
+  TrackingService,
+  type TrackingQueueStats,
+  type CacheStatsSnapshot,
+} from '../src/index.js';
 
 const baseUrl = 'https://matomo.example.com';
 const token = 'token';
@@ -976,18 +981,78 @@ describe('MatomoClient', () => {
       expect(result.status).toBe('healthy');
       expect(result.timestamp).toBeDefined();
       expect(result.checks).toHaveLength(3); // matomo-api, reports-cache, tracking-queue
-      
+
       const matomoCheck = result.checks.find(c => c.name === 'matomo-api');
       expect(matomoCheck?.status).toBe('pass');
       expect(matomoCheck?.componentType).toBe('service');
       expect(matomoCheck?.observedUnit).toBe('ms');
       expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
 
+      const cacheCheck = result.checks.find(c => c.name === 'reports-cache');
+      expect(cacheCheck?.status).toBe('pass');
+      expect(cacheCheck?.details).toEqual(
+        expect.objectContaining({ warnHitRate: 20, failHitRate: 5, sampleSize: 20 })
+      );
+
       const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
       expect(queueCheck?.status).toBe('pass');
       expect(queueCheck?.observedValue).toBe(0);
       expect(queueCheck?.details).toEqual(
         expect.objectContaining({ pending: 0, inflight: 0, backlogAgeMs: 0 })
+      );
+    });
+
+    it('marks reports-cache as warn when hit rate dips below warn threshold', async () => {
+      const fetchMock = createSequencedFetchMock(['3.14.0']);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({
+        baseUrl,
+        tokenAuth: token,
+        defaultSiteId: 1,
+        cacheHealth: { warnHitRate: 80, failHitRate: 40, sampleSize: 5 },
+      });
+
+      const snapshot: CacheStatsSnapshot = {
+        total: { hits: 7, misses: 3, sets: 12, staleEvictions: 1, entries: 4 },
+        features: [],
+      };
+
+      vi.spyOn(client, 'getCacheStats').mockReturnValue(snapshot);
+
+      const result = await client.getHealthStatus();
+      const cacheCheck = result.checks.find(c => c.name === 'reports-cache');
+
+      expect(cacheCheck?.status).toBe('warn');
+      expect(cacheCheck?.details).toEqual(
+        expect.objectContaining({ warnHitRate: 80, failHitRate: 40, sampleSize: 5 })
+      );
+    });
+
+    it('marks reports-cache as fail when hit rate drops below fail threshold', async () => {
+      const fetchMock = createSequencedFetchMock(['3.14.0']);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = createMatomoClient({
+        baseUrl,
+        tokenAuth: token,
+        defaultSiteId: 1,
+        cacheHealth: { warnHitRate: 80, failHitRate: 50, sampleSize: 5 },
+      });
+
+      const snapshot: CacheStatsSnapshot = {
+        total: { hits: 2, misses: 8, sets: 10, staleEvictions: 0, entries: 3 },
+        features: [],
+      };
+
+      vi.spyOn(client, 'getCacheStats').mockReturnValue(snapshot);
+
+      const result = await client.getHealthStatus();
+      const cacheCheck = result.checks.find(c => c.name === 'reports-cache');
+
+      expect(cacheCheck?.status).toBe('fail');
+      expect(cacheCheck?.details).toEqual(
+        expect.objectContaining({ warnHitRate: 80, failHitRate: 50, sampleSize: 5 })
       );
     });
 

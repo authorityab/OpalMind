@@ -591,3 +591,23 @@
   args: npm run lint --workspace @opalmind/api
   result: ESLint passed after bearer auth updates
   artifacts: none
+- tool: apply_patch
+  args: Add configurable cache health thresholds
+  result: Introduced configurable cache hit-rate thresholds with sample sizing, exposed details in health check payload, and wired env overrides through API server
+  artifacts: packages/sdk/src/index.ts, packages/api/src/server.ts
+- tool: apply_patch
+  args: Extend cache health tests and documentation
+  result: Added SDK health tests for warn/fail cache scenarios and documented new configuration knobs for operators
+  artifacts: packages/sdk/test/matomoClient.test.ts, README.md, docs/production-review.md
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (74 tests) including new cache threshold coverage
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (38 tests) verifying API remains stable with cache threshold env support
+  artifacts: none
+- tool: shell
+  args: npm run build --workspaces
+  result: Build succeeded for API and SDK after cache threshold updates
+  artifacts: none
