@@ -527,3 +527,11 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: Passed (32 tests) confirming API health endpoint and tooling unaffected by queue metrics update
   artifacts: none
+- tool: apply_patch
+  args: Remove duplicate TrackingQueueThresholds re-export
+  result: Resolved TypeScript export conflict in Matomo client by dropping redundant re-export entry
+  artifacts: packages/sdk/src/index.ts
+- tool: shell
+  args: npm run build --workspaces
+  result: Build succeeded across API and SDK after export cleanup
+  artifacts: none

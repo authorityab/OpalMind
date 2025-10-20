@@ -1113,7 +1113,6 @@ export type {
   TrackingIdempotencyRecord,
   TrackingIdempotencyStore,
   TrackingQueueStats,
-  TrackingQueueThresholds,
   TrackingBackoffOptions,
   CacheStatsSnapshot,
   CacheEvent,
