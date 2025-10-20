@@ -39,7 +39,7 @@
       tags: security,observability,reliability  priority: high  est: 0.75d
       deps: ADR-0002
       accepts: Health payload reads retry queue depth/age from TrackingService, marks warn/fail thresholds based on backlog, exports metrics, and documents interpretation for SRE runbooks.
-- [ ] B-012 Harden Express boundary with security middleware and validation
+- [x] B-012 Harden Express boundary with security middleware and validation
       tags: security,api  priority: high  est: 1d
       deps: ADR-0003
       accepts: Apply helmet, cors, rate limiting, body size guards, and Zod validators to `/tools/*` and `/track/*`, rejecting malformed payloads with structured errors and covering new guards in integration tests.

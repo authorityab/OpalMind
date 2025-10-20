@@ -535,3 +535,35 @@
   args: npm run build --workspaces
   result: Build succeeded across API and SDK after export cleanup
   artifacts: none
+- tool: inspection
+  args: Review packages/api/src/server.ts middleware
+  result: Confirmed only express.json() is registered; no helmet, CORS, rate limiting, or schema validation present, informing B-012 scope
+  artifacts: none
+- tool: apply_patch
+  args: Harden API boundary with security middleware and validation
+  result: Added custom CORS, security headers, rate limiting, request size guards, error handling, and Zod-based payload validation for tools/track endpoints
+  artifacts: packages/api/src/server.ts, packages/api/src/validation.ts
+- tool: apply_patch
+  args: Extend API test suite for security middleware
+  result: Added Vitest coverage for CORS allowlist, rate limiting, validation errors, and body-limit handler, updating helpers for header inspection
+  artifacts: packages/api/test/server.test.ts
+- tool: apply_patch
+  args: Document new security configuration knobs
+  result: Recorded API hardening details and env variables in README and production review doc
+  artifacts: README.md, docs/production-review.md
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (36 tests) covering new security middleware and validation scenarios
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (72 tests) ensuring SDK unaffected by API security changes
+  artifacts: none
+- tool: shell
+  args: npm run typecheck --workspaces
+  result: TypeScript type checks succeeded for API and SDK packages
+  artifacts: none
+- tool: shell
+  args: npm run build --workspaces
+  result: Build succeeded for API and SDK after security hardening updates
+  artifacts: none

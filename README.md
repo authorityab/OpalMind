@@ -151,6 +151,12 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Tune behaviour with `tracking.backoff` (e.g., `createMatomoClient({ tracking: { backoff: { baseDelayMs: 250, maxDelayMs: 8000, jitterMs: 250 } } })`).
 - Queue health degrades at 10 pending items or 60s backlog age and fails at 25 pending or 120s backlog by default. Override with `MATOMO_QUEUE_WARN_PENDING`, `MATOMO_QUEUE_FAIL_PENDING`, `MATOMO_QUEUE_WARN_AGE_MS`, and `MATOMO_QUEUE_FAIL_AGE_MS`.
 
+## API Boundary Hardening
+- Express applies security headers, duplicate-parameter stripping, and configurable CORS. Allow cross-origin calls by setting `OPAL_CORS_ALLOW_ALL=1` or provide a comma-separated `OPAL_CORS_ALLOWLIST`.
+- Request bodies default to a 256 KB limit and can be tuned via `OPAL_REQUEST_BODY_LIMIT` (accepts byte counts like `512kb`). Oversized payloads return `413` with a redacted message.
+- Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`.
+- All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
+
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:
 
