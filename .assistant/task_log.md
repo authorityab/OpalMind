@@ -503,3 +503,7 @@
   args: npm run build --workspaces
   result: TypeScript builds succeeded across API and SDK after back-pressure changes
   artifacts: none
+- tool: shell
+  args: rg "siteId" -n
+  result: Reviewed Matomo siteId usage; confirmed API parses optional parameter without centralized default fallback and README references MATOMO_DEFAULT_SITE_ID
+  artifacts: none
