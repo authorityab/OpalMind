@@ -567,3 +567,15 @@
   args: npm run build --workspaces
   result: Build succeeded for API and SDK after security hardening updates
   artifacts: none
+- tool: apply_patch
+  args: Resolve ESLint violations after security hardening
+  result: Adjusted import grouping, error handler signature, validation helpers, and test utilities to satisfy lint rules and remove unsafe casts
+  artifacts: packages/api/src/server.ts, packages/api/src/validation.ts, packages/api/test/server.test.ts
+- tool: shell
+  args: npm run lint --workspace @opalmind/api
+  result: ESLint passed after code style and typing fixes
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (36 tests) confirming security middleware and lint-driven updates
+  artifacts: none

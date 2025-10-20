@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk';
+
 import { ValidationError, parseToolInvocation } from './validation.js';
 
 function parseOptionalNumber(value: unknown): number | undefined {
@@ -984,8 +985,9 @@ export function buildServer() {
     }
   });
 
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
+      next(err);
       return;
     }
 

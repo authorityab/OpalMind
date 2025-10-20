@@ -119,7 +119,7 @@ const endpointValidators = new Map<string, z.ZodTypeAny>([
 ]);
 
 function pickParameters(source: Record<string, unknown>): Record<string, unknown> {
-  const { parameters, auth, ...rest } = source;
+  const { parameters, ...rest } = source;
   if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
     return parameters as Record<string, unknown>;
   }

@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
-import type { NextFunction } from 'express';
 
-import type { Express } from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
 import httpMocks from 'node-mocks-http';
 import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,6 +36,12 @@ vi.mock('@opalmind/sdk', async () => {
     createMatomoClient: createMatomoClientMock,
   };
 });
+
+type ExpressErrorHandler = (err: unknown, req: Request, res: Response, next: NextFunction) => void;
+
+function isErrorHandlerLayer(layer: { handle: unknown }): layer is { handle: ExpressErrorHandler } {
+  return typeof layer.handle === 'function' && layer.handle.length === 4;
+}
 
 async function createApp(): Promise<Express> {
   const module = await import('../src/server.js');
@@ -282,7 +287,7 @@ describe('security middleware', () => {
   it('rejects payloads exceeding the configured body limit', async () => {
     const app = await createApp();
     const routerStack = (app as unknown as { _router?: { stack: Array<{ handle: unknown }> } })._router?.stack ?? [];
-    const errorLayer = routerStack.find(layer => typeof layer.handle === 'function' && (layer.handle as unknown as Function).length === 4);
+    const errorLayer = routerStack.find(isErrorHandlerLayer);
     if (!errorLayer) {
       throw new Error('Expected error handling middleware to be registered.');
     }
@@ -307,12 +312,12 @@ describe('security middleware', () => {
       });
       res.on('error', reject);
 
-      (errorLayer.handle as unknown as (
-        err: unknown,
-        req: ReturnType<typeof httpMocks.createRequest>,
-        res: ReturnType<typeof httpMocks.createResponse>,
-        next: NextFunction
-      ) => void)(simulatedError, req, res, reject);
+      errorLayer.handle(
+        simulatedError,
+        req as unknown as Request,
+        res as unknown as Response,
+        reject as NextFunction
+      );
     });
 
     expect(result.status).toBe(413);
