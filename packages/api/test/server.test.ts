@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import type { Express } from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
 import httpMocks from 'node-mocks-http';
 import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,6 +37,12 @@ vi.mock('@opalmind/sdk', async () => {
   };
 });
 
+type ExpressErrorHandler = (err: unknown, req: Request, res: Response, next: NextFunction) => void;
+
+function isErrorHandlerLayer(layer: { handle: unknown }): layer is { handle: ExpressErrorHandler } {
+  return typeof layer.handle === 'function' && layer.handle.length === 4;
+}
+
 async function createApp(): Promise<Express> {
   const module = await import('../src/server.js');
   return module.buildServer();
@@ -49,7 +55,13 @@ interface InvokeOptions {
   body?: unknown;
 }
 
-async function invoke(app: Express, options: InvokeOptions): Promise<{ status: number; body: unknown }> {
+interface InvokeResult {
+  status: number;
+  body: unknown;
+  headers: NodeJS.OutgoingHttpHeaders;
+}
+
+async function invoke(app: Express, options: InvokeOptions): Promise<InvokeResult> {
   const { url, method = 'POST', headers = {}, body } = options;
 
   const req = httpMocks.createRequest({
@@ -61,12 +73,13 @@ async function invoke(app: Express, options: InvokeOptions): Promise<{ status: n
 
   const res = httpMocks.createResponse({ eventEmitter: EventEmitter });
 
-  return new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+  return new Promise<InvokeResult>((resolve, reject) => {
     res.on('end', () => {
       const payload = res._isJSON() ? res._getJSONData() : res._getData();
       resolve({
         status: res.statusCode,
         body: payload,
+        headers: res.getHeaders(),
       });
     });
 
@@ -100,6 +113,13 @@ beforeEach(() => {
   mockMatomoClient.trackEvent.mockReset();
   mockMatomoClient.trackGoal.mockReset();
 
+  delete process.env.OPAL_CORS_ALLOWLIST;
+  delete process.env.OPAL_CORS_ALLOW_ALL;
+  delete process.env.OPAL_REQUEST_BODY_LIMIT;
+  delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
+  delete process.env.OPAL_RATE_LIMIT_MAX;
+  delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
+
   process.env.MATOMO_BASE_URL = 'https://matomo.example.com';
   process.env.MATOMO_TOKEN = 'token';
   process.env.MATOMO_DEFAULT_SITE_ID = '1';
@@ -111,6 +131,12 @@ afterEach(() => {
   delete process.env.MATOMO_TOKEN;
   delete process.env.MATOMO_DEFAULT_SITE_ID;
   delete process.env.OPAL_BEARER_TOKEN;
+  delete process.env.OPAL_CORS_ALLOWLIST;
+  delete process.env.OPAL_CORS_ALLOW_ALL;
+  delete process.env.OPAL_REQUEST_BODY_LIMIT;
+  delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
+  delete process.env.OPAL_RATE_LIMIT_MAX;
+  delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
 });
 
 describe('health endpoint', () => {
@@ -194,6 +220,108 @@ describe('health endpoint', () => {
       status: 'unhealthy',
       error: 'Matomo diagnostics unavailable',
     });
+  });
+});
+
+describe('security middleware', () => {
+  it('honors configured CORS allowlist', async () => {
+    process.env.OPAL_CORS_ALLOWLIST = 'https://allowed.example.com';
+    mockMatomoClient.getHealthStatus.mockResolvedValue({ status: 'healthy', checks: [] });
+
+    const app = await createApp();
+    const response = await invoke(app, {
+      url: '/health',
+      method: 'GET',
+      headers: { origin: 'https://allowed.example.com' },
+    });
+
+    expect(response.headers['access-control-allow-origin']).toBe('https://allowed.example.com');
+  });
+
+  it('applies rate limiting to tool endpoints', async () => {
+    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.OPAL_RATE_LIMIT_MAX = '1';
+    mockMatomoClient.getKeyNumbers.mockResolvedValue({ nb_visits: 5 });
+
+    const app = await createApp();
+
+    const first = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+    expect(first.status).toBe(200);
+
+    const second = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+    expect(second.status).toBe(429);
+    expect(second.body).toEqual({ error: 'Too many requests, please try again later.' });
+  });
+
+  it('applies stricter rate limiting to tracking endpoints', async () => {
+    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.OPAL_TRACK_RATE_LIMIT_MAX = '1';
+    mockMatomoClient.trackEvent.mockResolvedValue({ ok: true, status: 204, body: '' });
+
+    const app = await createApp();
+
+    const first = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
+    });
+    expect(first.status).toBe(200);
+
+    const second = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
+    });
+    expect(second.status).toBe(429);
+    expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
+  });
+
+  it('rejects payloads exceeding the configured body limit', async () => {
+    const app = await createApp();
+    const routerStack = (app as unknown as { _router?: { stack: Array<{ handle: unknown }> } })._router?.stack ?? [];
+    const errorLayer = routerStack.find(isErrorHandlerLayer);
+    if (!errorLayer) {
+      throw new Error('Expected error handling middleware to be registered.');
+    }
+
+    const req = httpMocks.createRequest({
+      method: 'POST',
+      url: '/tools/get-key-numbers',
+    });
+    const res = httpMocks.createResponse({ eventEmitter: EventEmitter });
+
+    const simulatedError = Object.assign(new Error('entity too large'), {
+      type: 'entity.too.large',
+      status: 413,
+    });
+
+    const result = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          body: res._isJSON() ? res._getJSONData() : res._getData(),
+        });
+      });
+      res.on('error', reject);
+
+      errorLayer.handle(
+        simulatedError,
+        req as unknown as Request,
+        res as unknown as Response,
+        reject as NextFunction
+      );
+    });
+
+    expect(result.status).toBe(413);
+    expect(result.body).toEqual({ error: 'Request body is too large.' });
   });
 });
 
@@ -714,7 +842,7 @@ describe('tool endpoints', () => {
       body: { parameters: {} },
     });
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(response.body).toEqual({ error: 'url is required' });
     expect(mockMatomoClient.trackPageview).not.toHaveBeenCalled();
   });

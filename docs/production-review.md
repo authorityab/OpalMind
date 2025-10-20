@@ -5,7 +5,7 @@
 - Matomo SDK performs unbounded `fetch` calls without timeouts, allowing any slow Matomo request to wedge the Node event loop and exhaust the worker pool. 【F:packages/sdk/src/httpClient.ts†L167-L205】
 - The upstream `ToolsService` logs every request/response body (including visitor IDs, auth context, and potential secrets) straight to stdout, violating the “no secrets in logs” requirement. 【F:node_modules/@optimizely-opal/opal-tools-sdk/src/service.ts†L37-L74】【2e04ed†L1-L69】
 - Health API fabricates a “tracking-queue” check and never inspects the actual retry queue, so operators get false confidence about ingestion lag. 【F:packages/sdk/src/index.ts†L934-L943】
-- No HTTP hardening (helmet/CORS), schema validation, or rate limiting guards exist at the Express boundary, leaving `/tools/*` and `/track/*` susceptible to malformed payloads and brute force. 【F:packages/api/src/server.ts†L72-L158】
+- Express boundary now enforces security headers, CORS allowlists, request body limits, rate limiting, and Zod validation for `/tools/*` and `/track/*`, reducing exposure to malformed payloads and brute-force attempts. 【F:packages/api/src/server.ts†L200-L323】【F:packages/api/src/validation.ts†L1-L188】
 - Repository lacks production runbook, Matomo troubleshooting guidance, and instructions for GHCR deployment despite containerized workflow expectations.
 - TypeScript compiler still allows implicit anys/loose optionals, and ESLint does not enforce security-sensitive rules (no-console, header validation) used in production paths. 【F:packages/api/src/server.ts†L648-L650】
 - Cache health thresholding uses arbitrary percentages and no alerts/metrics export, limiting observability when cache churn increases. 【F:packages/sdk/src/index.ts†L912-L933】

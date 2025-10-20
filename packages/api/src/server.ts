@@ -7,6 +7,8 @@ import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk';
 
+import { ValidationError, parseToolInvocation } from './validation.js';
+
 function parseOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -23,7 +25,7 @@ function parseOptionalNumber(value: unknown): number | undefined {
 function parseRequiredNumber(value: unknown, field: string): number {
   const parsed = parseOptionalNumber(value);
   if (parsed === undefined) {
-    throw new Error(`${field} is required`);
+    throw new ValidationError(`${field} is required`);
   }
   return parsed;
 }
@@ -37,7 +39,7 @@ function parseOptionalString(value: unknown): string | undefined {
 function requireString(value: unknown, field: string): string {
   const parsed = parseOptionalString(value);
   if (!parsed) {
-    throw new Error(`${field} is required`);
+    throw new ValidationError(`${field} is required`);
   }
   return parsed;
 }
@@ -60,17 +62,22 @@ function configureToolsServiceLogging(service: ToolsService) {
 
     router.post(endpoint, async (req: Request, res: Response) => {
       const startTime = Date.now();
-      const { params, auth, usedFallback } = extractInvocationPayload(req.body);
-      const paramKeys = summarizeParameters(params);
-      logToolInfo('request', {
-        tool: name,
-        endpoint,
-        paramKeys,
-        authProvider: summarizeAuthProvider(auth),
-        fallbackUsed: usedFallback,
-      });
+      let paramKeys: string[] = [];
+      let authProvider: string | undefined;
 
       try {
+        const { params, auth, usedFallback } = extractInvocationPayload(req.body, endpoint);
+        paramKeys = summarizeParameters(params);
+        authProvider = summarizeAuthProvider(auth);
+
+        logToolInfo('request', {
+          tool: name,
+          endpoint,
+          paramKeys,
+          authProvider,
+          fallbackUsed: usedFallback,
+        });
+
         const handlerParamCount = handler.length;
         const result =
           handlerParamCount >= 2 ? await handler(params, auth) : await handler(params);
@@ -93,6 +100,8 @@ function configureToolsServiceLogging(service: ToolsService) {
           message: sanitizedError.message,
           status: sanitizedError.status,
           code: sanitizedError.code,
+          paramKeys,
+          authProvider,
         });
 
         res.status(status).json({ error: sanitizedError.message ?? 'Unknown error' });
@@ -103,20 +112,11 @@ function configureToolsServiceLogging(service: ToolsService) {
   (service as unknown as { registerTool: typeof sanitizedRegisterTool }).registerTool = sanitizedRegisterTool;
 }
 
-function extractInvocationPayload(body: unknown): { params: unknown; auth: unknown; usedFallback: boolean } {
-  if (body && typeof body === 'object' && !Array.isArray(body)) {
-    const record = body as Record<string, unknown>;
-    if ('parameters' in record) {
-      return {
-        params: record.parameters,
-        auth: record.auth,
-        usedFallback: false,
-      };
-    }
-    return { params: body, auth: record.auth, usedFallback: true };
-  }
-
-  return { params: body, auth: undefined, usedFallback: true };
+function extractInvocationPayload(
+  body: unknown,
+  endpoint: string
+): { params: Record<string, unknown>; auth: unknown; usedFallback: boolean } {
+  return parseToolInvocation(body, endpoint);
 }
 
 const SENSITIVE_PARAM_KEY = /(token|secret|password|auth)/i;
@@ -142,6 +142,125 @@ function summarizeAuthProvider(auth: unknown): string | undefined {
     return typeof provider === 'string' ? provider : undefined;
   }
   return undefined;
+}
+
+function parsePositiveIntegerEnv(name: string, defaultValue: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer when provided.`);
+  }
+
+  return parsed;
+}
+
+function parseCorsAllowlist(): string[] {
+  const raw = process.env.OPAL_CORS_ALLOWLIST;
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(origin => origin.length > 0);
+}
+
+function createCorsMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
+  const allowlist = parseCorsAllowlist();
+  const allowAll = process.env.OPAL_CORS_ALLOW_ALL === '1';
+  const allowCredentials = allowAll || allowlist.length > 0;
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+    let allowedOrigin: string | undefined;
+
+    if (allowAll && originHeader) {
+      allowedOrigin = originHeader;
+    } else if (originHeader && allowlist.includes(originHeader)) {
+      allowedOrigin = originHeader;
+    }
+
+    if (allowedOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+      if (allowCredentials) {
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    }
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
+    res.setHeader('Vary', 'Origin');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  };
+}
+
+function applySecurityHeaders(req: Request, res: Response, next: NextFunction) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '0');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+
+  next();
+}
+
+function preventHttpParameterPollution(req: Request, _res: Response, next: NextFunction) {
+  const query = req.query as Record<string, unknown>;
+  for (const key of Object.keys(query)) {
+    const value = query[key];
+    if (Array.isArray(value)) {
+      query[key] = value[value.length - 1];
+    }
+  }
+  next();
+}
+
+function createRateLimiter(options: {
+  windowMs: number;
+  max: number;
+  message: string;
+  useTokenKey?: boolean;
+}): (req: Request, res: Response, next: NextFunction) => void {
+  const buckets = new Map<string, { count: number; expiresAt: number }>();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const now = Date.now();
+    const token = options.useTokenKey && typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+    const key = `${req.ip ?? 'unknown'}:${token}`;
+    const entry = buckets.get(key);
+
+    if (!entry || entry.expiresAt <= now) {
+      buckets.set(key, { count: 1, expiresAt: now + options.windowMs });
+      next();
+      return;
+    }
+
+    if (entry.count >= options.max) {
+      res.status(429).json({ error: options.message });
+      return;
+    }
+
+    entry.count += 1;
+    next();
+  };
 }
 
 function logToolInfo(event: 'request' | 'success', details: Record<string, unknown>) {
@@ -189,7 +308,45 @@ function redactTokens(value: string): string {
 
 export function buildServer() {
   const app = express();
-  app.use(express.json());
+  app.disable('x-powered-by');
+
+  app.use(createCorsMiddleware());
+  app.use(applySecurityHeaders);
+  app.use(preventHttpParameterPollution);
+
+  const requestBodyLimit = process.env.OPAL_REQUEST_BODY_LIMIT?.trim() || '256kb';
+  app.use(
+    express.json({
+      limit: requestBodyLimit,
+      type: ['application/json'],
+    })
+  );
+  app.use(
+    express.urlencoded({
+      extended: false,
+      limit: requestBodyLimit,
+    })
+  );
+
+  const rateLimitWindowMs = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_WINDOW_MS', 60_000);
+  const rateLimitMax = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_MAX', 60);
+  const trackRateLimitMax = parsePositiveIntegerEnv('OPAL_TRACK_RATE_LIMIT_MAX', 120);
+
+  const generalLimiter = createRateLimiter({
+    windowMs: rateLimitWindowMs,
+    max: rateLimitMax,
+    message: 'Too many requests, please try again later.',
+  });
+
+  const trackingLimiter = createRateLimiter({
+    windowMs: rateLimitWindowMs,
+    max: trackRateLimitMax,
+    message: 'Too many tracking requests, please try again later.',
+    useTokenKey: true,
+  });
+
+  app.use('/tools', generalLimiter);
+  app.use('/track', trackingLimiter);
 
   const bearerToken = process.env.OPAL_BEARER_TOKEN?.trim();
   if (!bearerToken || bearerToken === 'change-me') {
@@ -826,6 +983,44 @@ export function buildServer() {
         error: message.includes('token_auth') ? 'Matomo diagnostics unavailable' : message,
       });
     }
+  });
+
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+
+    if (err instanceof ValidationError) {
+      res.status(err.status).json({ error: redactTokens(err.message) });
+      return;
+    }
+
+    if (err && typeof err === 'object' && 'type' in err && (err as { type?: unknown }).type === 'entity.too.large') {
+      res.status(413).json({ error: 'Request body is too large.' });
+      return;
+    }
+
+    if (err instanceof SyntaxError && 'status' in (err as { status?: unknown })) {
+      const syntaxStatus = (err as { status?: number }).status ?? 400;
+      res.status(syntaxStatus).json({ error: 'Invalid JSON payload.' });
+      return;
+    }
+
+    const statusCandidate =
+      err && typeof err === 'object' && 'status' in err
+        ? Number((err as { status?: unknown }).status)
+        : undefined;
+    const status =
+      statusCandidate && Number.isFinite(statusCandidate) && statusCandidate >= 400 && statusCandidate < 600
+        ? statusCandidate
+        : 500;
+    const message =
+      err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string'
+        ? ((err as { message: string }).message as string)
+        : 'Internal server error';
+
+    res.status(status).json({ error: redactTokens(message) });
   });
 
   return app;
