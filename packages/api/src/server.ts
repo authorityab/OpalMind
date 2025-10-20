@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
-import { createMatomoClient } from '@opalmind/sdk';
+import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk';
 
 function parseOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
@@ -214,6 +214,11 @@ export function buildServer() {
     throw new Error('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
   }
 
+  const queueWarnPending = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_PENDING);
+  const queueFailPending = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_PENDING);
+  const queueWarnAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_AGE_MS);
+  const queueFailAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_AGE_MS);
+
   app.use((req: Request, res: Response, next: NextFunction) => {
     const requiresAuth = req.path.startsWith('/tools') || req.path.startsWith('/track');
     if (!requiresAuth) {
@@ -229,10 +234,21 @@ export function buildServer() {
     return next();
   });
 
+  const queueHealthThresholds: Partial<TrackingQueueThresholds> = {};
+  if (queueWarnPending !== undefined) queueHealthThresholds.pendingWarn = queueWarnPending;
+  if (queueFailPending !== undefined) queueHealthThresholds.pendingFail = queueFailPending;
+  if (queueWarnAgeMs !== undefined) queueHealthThresholds.ageWarnMs = queueWarnAgeMs;
+  if (queueFailAgeMs !== undefined) queueHealthThresholds.ageFailMs = queueFailAgeMs;
+
   const matomoClient = createMatomoClient({
     baseUrl: matomoBaseUrl,
     tokenAuth: matomoToken,
     defaultSiteId,
+    tracking: {
+      baseUrl: matomoBaseUrl,
+      healthThresholds:
+        Object.keys(queueHealthThresholds).length > 0 ? queueHealthThresholds : undefined,
+    },
   });
 
   const toolsService = new ToolsService(app);

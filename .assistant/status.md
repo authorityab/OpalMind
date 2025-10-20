@@ -24,6 +24,7 @@ Advance Matomo operational resilience by auto-resolving default site IDs and hon
 
 ## Changelog
 - Honoured Matomo back-pressure in the tracking queue with Retry-After aware backoff, queue metrics, and SDK regression coverage.
+- Surfaced tracking queue depth/age in health checks with configurable warn/fail thresholds, SDK/API tests, and updated operator docs.
 - Replaced ToolsService logging with redacted structured entries and added regression coverage to prove no request/response payload leakage.
 - Added AbortController-driven timeouts and exponential backoff to the Matomo HTTP client with new SDK coverage and configuration knobs.
 - Wired `/health` endpoint to real Matomo diagnostics, surfacing degraded/unhealthy states via HTTP status and adding regression coverage.

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createMatomoClient } from '../src/index.js';
+import { createMatomoClient, TrackingService, type TrackingQueueStats } from '../src/index.js';
 
 const baseUrl = 'https://matomo.example.com';
 const token = 'token';
@@ -982,6 +982,13 @@ describe('MatomoClient', () => {
       expect(matomoCheck?.componentType).toBe('service');
       expect(matomoCheck?.observedUnit).toBe('ms');
       expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
+
+      const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
+      expect(queueCheck?.status).toBe('pass');
+      expect(queueCheck?.observedValue).toBe(0);
+      expect(queueCheck?.details).toEqual(
+        expect.objectContaining({ pending: 0, inflight: 0, backlogAgeMs: 0 })
+      );
     });
 
     it('returns unhealthy status when API fails', async () => {
@@ -1022,6 +1029,91 @@ describe('MatomoClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('method')).toBe('API.getMatomoVersion');
       expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe('API.getVersion');
+    });
+
+    it('marks tracking queue as warn when backlog crosses warn thresholds', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2024-03-01T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const fetchMock = createSequencedFetchMock(['3.14.0']);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+        const tracking = (client as unknown as { tracking: TrackingService }).tracking;
+        const warnStats: TrackingQueueStats = {
+          pending: 9,
+          inflight: 2,
+          totalProcessed: 15,
+          totalRetried: 4,
+          lastError: { message: 'rate limited', status: 429, timestamp: Date.now() - 30_000 },
+          lastRetryAt: Date.now() - 30_000,
+          lastBackoffMs: 2000,
+          cooldownUntil: Date.now() + 15_000,
+          lastRetryStatus: 429,
+          oldestPendingAt: Date.now() - 70_000,
+        };
+        vi.spyOn(tracking, 'getQueueStats').mockReturnValue(warnStats);
+
+        const result = await client.getHealthStatus();
+        const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
+
+        expect(queueCheck?.status).toBe('warn');
+        expect(queueCheck?.observedValue).toBe(11);
+        expect(queueCheck?.output).toContain('backlogAgeMs=70000');
+        expect(queueCheck?.details).toEqual(
+          expect.objectContaining({
+            pending: 9,
+            inflight: 2,
+            backlogAgeMs: 70000,
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('marks tracking queue as fail when backlog age exceeds fail threshold', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2024-03-01T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const fetchMock = createSequencedFetchMock(['3.14.0']);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
+        const tracking = (client as unknown as { tracking: TrackingService }).tracking;
+        const failStats: TrackingQueueStats = {
+          pending: 2,
+          inflight: 0,
+          totalProcessed: 5,
+          totalRetried: 3,
+          lastError: { message: 'Matomo unavailable', status: 503, timestamp: Date.now() - 200_000 },
+          lastRetryAt: Date.now() - 200_000,
+          lastBackoffMs: 4000,
+          cooldownUntil: undefined,
+          lastRetryStatus: 503,
+          oldestPendingAt: Date.now() - 200_000,
+        };
+        vi.spyOn(tracking, 'getQueueStats').mockReturnValue(failStats);
+
+        const result = await client.getHealthStatus();
+        const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
+
+        expect(queueCheck?.status).toBe('fail');
+        expect(queueCheck?.observedValue).toBe(2);
+        expect(queueCheck?.output).toContain('backlogAgeMs=200000');
+        expect(queueCheck?.details).toEqual(
+          expect.objectContaining({
+            pending: 2,
+            backlogAgeMs: 200000,
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('includes site access check when requested', async () => {

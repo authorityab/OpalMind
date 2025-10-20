@@ -149,6 +149,7 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Tracking requests honour Matomo `429`/`5xx` responses, read `Retry-After` headers, and pause the queue with exponential backoff (jitter optional).
 - Inspect queue health via `client.getTrackingQueueStats()` to surface pending items, retry counts, last backoff delay, and cooldown deadlines.
 - Tune behaviour with `tracking.backoff` (e.g., `createMatomoClient({ tracking: { backoff: { baseDelayMs: 250, maxDelayMs: 8000, jitterMs: 250 } } })`).
+- Queue health degrades at 10 pending items or 60s backlog age and fails at 25 pending or 120s backlog by default. Override with `MATOMO_QUEUE_WARN_PENDING`, `MATOMO_QUEUE_FAIL_PENDING`, `MATOMO_QUEUE_WARN_AGE_MS`, and `MATOMO_QUEUE_FAIL_AGE_MS`.
 
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:
@@ -182,6 +183,23 @@ curl -H "Authorization: Bearer your-token" \
       "observedValue": 85.5,
       "observedUnit": "%",
       "output": "Hit rate: 85.5% (342/400 requests)"
+    },
+    {
+      "name": "tracking-queue",
+      "status": "pass",
+      "componentType": "queue",
+      "observedValue": 0,
+      "observedUnit": "pending",
+      "output": "pending=0, inflight=0, backlogAgeMs=0",
+      "details": {
+        "pending": 0,
+        "inflight": 0,
+        "totalProcessed": 128,
+        "totalRetried": 9,
+        "backlogAgeMs": 0,
+        "cooldownUntil": null,
+        "lastRetryStatus": null
+      }
     }
   ]
 }
@@ -190,7 +208,7 @@ curl -H "Authorization: Bearer your-token" \
 ### Health Check Components
 - **Matomo API Connectivity**: Response time and reachability
 - **Reports Cache Performance**: Hit rates with warning thresholds (warn <20%, fail <5%)
-- **Tracking Queue Status**: Queue processing health
+- **Tracking Queue Status**: Queue depth, retry cadence, and cooldown delays (defaults: warn ≥10 pending or 60s backlog age; fail ≥25 pending or 120s backlog age)
 - **Site Access** *(optional)*: Site-specific permission verification
 
 ### Integration

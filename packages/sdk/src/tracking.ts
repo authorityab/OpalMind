@@ -56,6 +56,7 @@ interface QueueStats {
   lastRetryAt?: number;
   lastDelayMs?: number;
   cooldownUntil?: number;
+  oldestPendingAt?: number;
 }
 
 class MatomoTrackingError extends Error {
@@ -164,6 +165,7 @@ interface QueueTask {
   execute: (attempt: number) => Promise<unknown>;
   resolve: (value: unknown, attempts: number) => MaybePromise<void>;
   reject: (reason: unknown, attempts: number) => MaybePromise<void>;
+  enqueuedAt: number;
   key?: string;
 }
 
@@ -213,6 +215,7 @@ class RetryQueue {
       attempt: 0,
       execute: run as (attempt: number) => Promise<unknown>,
       key: idempotencyKey,
+      enqueuedAt: Date.now(),
       resolve: async (value, attempts) => {
         if (idempotencyKey) {
           this.inflight.delete(idempotencyKey);
@@ -312,6 +315,16 @@ class RetryQueue {
   }
 
   getStats(): QueueStats {
+    const oldestPendingAt =
+      this.queue.length > 0
+        ? this.queue.reduce<number | undefined>((oldest, task) => {
+            if (oldest === undefined || task.enqueuedAt < oldest) {
+              return task.enqueuedAt;
+            }
+            return oldest;
+          }, undefined)
+        : undefined;
+
     return {
       pending: this.stats.pending,
       inflight: this.stats.inflight,
@@ -321,6 +334,7 @@ class RetryQueue {
       lastRetryAt: this.stats.lastRetryAt,
       lastDelayMs: this.stats.lastDelayMs,
       cooldownUntil: this.stats.cooldownUntil,
+      oldestPendingAt,
     };
   }
 
@@ -408,6 +422,7 @@ export interface TrackingQueueStats {
   lastBackoffMs?: number;
   cooldownUntil?: number;
   lastRetryStatus?: number;
+  oldestPendingAt?: number;
 }
 
 export interface TrackPayloadBase {
@@ -517,6 +532,7 @@ export class TrackingService {
       lastBackoffMs: this.metrics.lastBackoffMs,
       cooldownUntil: stats.cooldownUntil,
       lastRetryStatus: this.metrics.lastRetryStatus,
+      oldestPendingAt: stats.oldestPendingAt,
     };
   }
 
