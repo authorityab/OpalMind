@@ -157,6 +157,7 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`.
 - All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
 - Bearer authentication accepts case-insensitive tokens, compares them using constant-time checks, and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
+- Cache health thresholds are configurable via `MATOMO_CACHE_WARN_HIT_RATE`, `MATOMO_CACHE_FAIL_HIT_RATE`, and `MATOMO_CACHE_SAMPLE_SIZE`, and the health payload includes hit/miss counters for observability.
 
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:

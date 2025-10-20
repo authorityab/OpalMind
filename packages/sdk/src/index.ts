@@ -69,6 +69,7 @@ export interface MatomoClientConfig {
   cacheTtlMs?: number;
   cache?: CacheConfig;
   rateLimit?: MatomoRateLimitOptions;
+  cacheHealth?: Partial<CacheHealthThresholds>;
 }
 
 export interface TrackingQueueThresholds {
@@ -76,6 +77,12 @@ export interface TrackingQueueThresholds {
   pendingFail: number;
   ageWarnMs: number;
   ageFailMs: number;
+}
+
+export interface CacheHealthThresholds {
+  warnHitRate: number;
+  failHitRate: number;
+  sampleSize: number;
 }
 
 export interface GetKeyNumbersInput {
@@ -498,6 +505,7 @@ export class MatomoClient {
   private readonly tracking: TrackingService;
   private readonly defaultSiteId?: number;
   private readonly queueThresholds: TrackingQueueThresholds;
+  private readonly cacheThresholds: CacheHealthThresholds;
 
   constructor(config: MatomoClientConfig) {
     this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
@@ -538,6 +546,21 @@ export class MatomoClient {
       pendingFail,
       ageWarnMs,
       ageFailMs,
+    };
+
+    const cacheThresholds = config.cacheHealth ?? {};
+    const warnHitRate = clampPercentage(cacheThresholds.warnHitRate ?? 20);
+    let failHitRate = clampPercentage(cacheThresholds.failHitRate ?? 5);
+    if (failHitRate > warnHitRate) {
+      failHitRate = warnHitRate;
+    }
+
+    const sampleSize = Math.max(1, cacheThresholds.sampleSize ?? 20);
+
+    this.cacheThresholds = {
+      warnHitRate,
+      failHitRate,
+      sampleSize,
     };
   }
 
@@ -958,13 +981,27 @@ export class MatomoClient {
     const cacheStats = this.getCacheStats();
     const totalRequests = cacheStats.total.hits + cacheStats.total.misses;
     const hitRate = totalRequests > 0 ? (cacheStats.total.hits / totalRequests) * 100 : 0;
-    
+
     let cacheStatus: 'pass' | 'warn' | 'fail' = 'pass';
-    if (hitRate < 20 && totalRequests > 10) {
-      cacheStatus = 'warn';
-    } else if (hitRate < 5 && totalRequests > 20) {
-      cacheStatus = 'fail';
+    if (totalRequests >= this.cacheThresholds.sampleSize) {
+      if (hitRate < this.cacheThresholds.failHitRate) {
+        cacheStatus = 'fail';
+      } else if (hitRate < this.cacheThresholds.warnHitRate) {
+        cacheStatus = 'warn';
+      }
     }
+
+    const cacheDetails: Record<string, unknown> = {
+      hitRate: Math.round(hitRate * 100) / 100,
+      hits: cacheStats.total.hits,
+      misses: cacheStats.total.misses,
+      sets: cacheStats.total.sets,
+      staleEvictions: cacheStats.total.staleEvictions,
+      entries: cacheStats.total.entries,
+      sampleSize: this.cacheThresholds.sampleSize,
+      warnHitRate: this.cacheThresholds.warnHitRate,
+      failHitRate: this.cacheThresholds.failHitRate,
+    };
 
     checks.push({
       name: 'reports-cache',
@@ -974,6 +1011,7 @@ export class MatomoClient {
       observedUnit: '%',
       time: timestamp,
       output: `Hit rate: ${hitRate.toFixed(1)}% (${cacheStats.total.hits}/${totalRequests} requests)`,
+      details: cacheDetails,
     });
 
     // Tracking queue health check
@@ -1139,3 +1177,12 @@ export {
   MatomoNetworkError,
   MatomoParseError,
 } from './errors.js';
+
+function clampPercentage(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) return 0;
+  if (value > 100) return 100;
+  return value;
+}
