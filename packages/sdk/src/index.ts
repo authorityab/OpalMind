@@ -64,10 +64,18 @@ export interface MatomoClientConfig {
     retryDelayMs?: number;
     idempotencyStore?: TrackingIdempotencyStore;
     backoff?: TrackingBackoffOptions;
+    healthThresholds?: Partial<TrackingQueueThresholds>;
   };
   cacheTtlMs?: number;
   cache?: CacheConfig;
   rateLimit?: MatomoRateLimitOptions;
+}
+
+export interface TrackingQueueThresholds {
+  pendingWarn: number;
+  pendingFail: number;
+  ageWarnMs: number;
+  ageFailMs: number;
 }
 
 export interface GetKeyNumbersInput {
@@ -198,6 +206,7 @@ export interface HealthCheck {
   observedUnit?: string;
   time?: string;
   output?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface GetHealthStatusInput {
@@ -488,6 +497,7 @@ export class MatomoClient {
   private readonly reports: ReportsService;
   private readonly tracking: TrackingService;
   private readonly defaultSiteId?: number;
+  private readonly queueThresholds: TrackingQueueThresholds;
 
   constructor(config: MatomoClientConfig) {
     this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
@@ -509,6 +519,26 @@ export class MatomoClient {
       backoff: config.tracking?.backoff,
     });
     this.defaultSiteId = config.defaultSiteId;
+
+    const thresholds = config.tracking?.healthThresholds ?? {};
+    const pendingWarn = Math.max(0, thresholds.pendingWarn ?? 10);
+    let pendingFail = Math.max(0, thresholds.pendingFail ?? 25);
+    if (pendingFail < pendingWarn) {
+      pendingFail = pendingWarn;
+    }
+
+    const ageWarnMs = Math.max(0, thresholds.ageWarnMs ?? 60_000);
+    let ageFailMs = Math.max(0, thresholds.ageFailMs ?? 120_000);
+    if (ageFailMs < ageWarnMs) {
+      ageFailMs = ageWarnMs;
+    }
+
+    this.queueThresholds = {
+      pendingWarn,
+      pendingFail,
+      ageWarnMs,
+      ageFailMs,
+    };
   }
 
   private resolveSiteId(override?: number) {
@@ -946,15 +976,72 @@ export class MatomoClient {
       output: `Hit rate: ${hitRate.toFixed(1)}% (${cacheStats.total.hits}/${totalRequests} requests)`,
     });
 
-    // Tracking queue health check (simulate queue length check)
+    // Tracking queue health check
+    const queueStats = this.tracking.getQueueStats();
+    const queueNow = Date.now();
+    const backlogCount = queueStats.pending + queueStats.inflight;
+    const oldestTimestamp = queueStats.oldestPendingAt ?? queueStats.lastRetryAt;
+    const backlogAgeMs = oldestTimestamp ? Math.max(0, queueNow - oldestTimestamp) : 0;
+    const cooldownMs =
+      queueStats.cooldownUntil && queueStats.cooldownUntil > queueNow
+        ? queueStats.cooldownUntil - queueNow
+        : 0;
+
+    let queueStatus: 'pass' | 'warn' | 'fail' = 'pass';
+    if (
+      backlogCount >= this.queueThresholds.pendingFail ||
+      backlogAgeMs >= this.queueThresholds.ageFailMs
+    ) {
+      queueStatus = 'fail';
+    } else if (
+      backlogCount >= this.queueThresholds.pendingWarn ||
+      backlogAgeMs >= this.queueThresholds.ageWarnMs ||
+      cooldownMs > 0
+    ) {
+      queueStatus = 'warn';
+    }
+
+    const queueDetails: Record<string, unknown> = {
+      pending: queueStats.pending,
+      inflight: queueStats.inflight,
+      totalProcessed: queueStats.totalProcessed,
+      totalRetried: queueStats.totalRetried,
+      lastError: queueStats.lastError,
+      lastRetryAt: queueStats.lastRetryAt,
+      lastBackoffMs: queueStats.lastBackoffMs,
+      cooldownUntil: queueStats.cooldownUntil,
+      lastRetryStatus: queueStats.lastRetryStatus,
+      oldestPendingAt: queueStats.oldestPendingAt,
+      backlogAgeMs: Math.round(backlogAgeMs),
+    };
+
+    const queueOutputParts = [
+      `pending=${queueStats.pending}`,
+      `inflight=${queueStats.inflight}`,
+      `backlogAgeMs=${Math.round(backlogAgeMs)}`,
+    ];
+
+    if (typeof queueStats.lastBackoffMs === 'number') {
+      queueOutputParts.push(`lastBackoffMs=${queueStats.lastBackoffMs}`);
+    }
+
+    if (typeof queueStats.lastRetryStatus === 'number') {
+      queueOutputParts.push(`lastRetryStatus=${queueStats.lastRetryStatus}`);
+    }
+
+    if (cooldownMs > 0) {
+      queueOutputParts.push(`cooldownMs=${Math.round(cooldownMs)}`);
+    }
+
     checks.push({
       name: 'tracking-queue',
-      status: 'pass',
+      status: queueStatus,
       componentType: 'queue',
-      observedValue: 0,
+      observedValue: backlogCount,
       observedUnit: 'pending',
       time: timestamp,
-      output: 'Queue processing normally',
+      output: queueOutputParts.join(', '),
+      details: queueDetails,
     });
 
     // Site access check (if siteId provided and details requested)
@@ -1026,6 +1113,7 @@ export type {
   TrackingIdempotencyRecord,
   TrackingIdempotencyStore,
   TrackingQueueStats,
+  TrackingQueueThresholds,
   TrackingBackoffOptions,
   CacheStatsSnapshot,
   CacheEvent,

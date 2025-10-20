@@ -27,6 +27,15 @@ Container and load-balancer health probes should call this unauthenticated endpo
         "observedUnit": "ms",
         "time": "2025-09-30T15:30:00.000Z",
         "output": "API responded in 145ms"
+      },
+      {
+        "name": "tracking-queue",
+        "status": "pass",
+        "componentType": "queue",
+        "observedValue": 0,
+        "observedUnit": "pending",
+        "time": "2025-09-30T15:30:00.000Z",
+        "output": "pending=0, inflight=0, backlogAgeMs=0"
       }
     ]
   }
@@ -72,7 +81,17 @@ Returns real-time health status with individual component checks.
       "observedValue": 0,
       "observedUnit": "pending",
       "time": "2025-09-30T15:30:00.000Z",
-      "output": "Queue processing normally"
+      "output": "pending=0, inflight=0, backlogAgeMs=0",
+      "details": {
+        "pending": 0,
+        "inflight": 0,
+        "totalProcessed": 128,
+        "totalRetried": 9,
+        "lastBackoffMs": 0,
+        "backlogAgeMs": 0,
+        "cooldownUntil": null,
+        "lastRetryStatus": null
+      }
     }
   ]
 }
@@ -96,9 +115,13 @@ Returns real-time health status with individual component checks.
   - `fail`: Hit rate < 5% (with sufficient requests)
 
 ### 3. Tracking Queue Status
-- **Check**: Monitors tracking queue health
-- **Metrics**: Pending operations count
-- **Status**: `pass` when queue is processing normally
+- **Check**: Monitors tracking queue depth, retry cadence, and cooldown delays
+- **Metrics**: Pending + inflight count, backlog age (ms), last retry status, cooldown deadline
+- **Status**:
+  - `pass`: Backlog below thresholds and no extended cooldown
+  - `warn`: ≥10 combined pending/inflight, backlog age ≥ 60s, or cooldown active
+  - `fail`: ≥25 combined pending/inflight or backlog age ≥ 120s
+- **Configuration**: Override thresholds via `MATOMO_QUEUE_WARN_PENDING`, `MATOMO_QUEUE_FAIL_PENDING`, `MATOMO_QUEUE_WARN_AGE_MS`, `MATOMO_QUEUE_FAIL_AGE_MS`
 
 ### 4. Site Access (Optional)
 - **Check**: Verifies access to specific Matomo site (when `includeDetails=true`)

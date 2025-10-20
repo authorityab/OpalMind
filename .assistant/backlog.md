@@ -35,7 +35,7 @@
       tags: security,logging  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Replace upstream verbose logger with redacted structured logging, ensure request/response bodies never dump tokens/PII, and attest via tests or manual verification under production log level.
-- [ ] B-011 Surface real tracking queue health metrics
+- [x] B-011 Surface real tracking queue health metrics
       tags: security,observability,reliability  priority: high  est: 0.75d
       deps: ADR-0002
       accepts: Health payload reads retry queue depth/age from TrackingService, marks warn/fail thresholds based on backlog, exports metrics, and documents interpretation for SRE runbooks.

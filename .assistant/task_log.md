@@ -507,3 +507,23 @@
   args: rg "siteId" -n
   result: Reviewed Matomo siteId usage; confirmed API parses optional parameter without centralized default fallback and README references MATOMO_DEFAULT_SITE_ID
   artifacts: none
+- tool: shell
+  args: sed -n '760,840p' packages/api/src/server.ts
+  result: Inspected health endpoint; confirmed it delegates to MatomoClient.getHealthStatus with placeholder queue metrics; identified need to pipe real TrackingService stats
+  artifacts: none
+- tool: shell
+  args: "nl -ba packages/sdk/src/index.ts | sed -n '900,980p'"
+  result: Noted getHealthStatus currently returns static tracking-queue check; informs design for B-011 to include real queue depth/age metrics
+  artifacts: none
+- tool: apply_patch
+  args: Surface tracking queue metrics in health checks
+  result: Wired RetryQueue timestamps into TrackingService stats, added configurable warn/fail thresholds, exposed queue details via health endpoint/docs, and updated tests
+  artifacts: packages/sdk/src/tracking.ts, packages/sdk/src/index.ts, packages/api/src/server.ts, packages/sdk/test/matomoClient.test.ts, README.md, packages/api/docs/health-monitoring.md
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: Passed (72 tests) validating queue health thresholds and existing SDK behaviour
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (32 tests) confirming API health endpoint and tooling unaffected by queue metrics update
+  artifacts: none
