@@ -9,7 +9,7 @@
 - Repository lacks production runbook, Matomo troubleshooting guidance, and instructions for GHCR deployment despite containerized workflow expectations.
 - TypeScript compiler still allows implicit anys/loose optionals, and ESLint does not enforce security-sensitive rules (no-console, header validation) used in production paths. 【F:packages/api/src/server.ts†L648-L650】
 - Cache health thresholding uses arbitrary percentages and no alerts/metrics export, limiting observability when cache churn increases. 【F:packages/sdk/src/index.ts†L912-L933】
-- Bearer token comparison is case-sensitive string equality without constant time or error taxonomy, yielding confusing 401s on harmless header differences. 【F:packages/api/src/server.ts†L72-L85】
+- Bearer authentication now performs case-insensitive, constant-time comparisons and returns RFC6750-compliant challenges for missing or invalid tokens, reducing spoofing vectors and improving diagnostics. 【F:packages/api/src/server.ts†L340-L383】
 - Tests cover happy-path tool routing only; there are no contract tests for `/track/*` failure cases, Matomo timeout handling, or `/health` degradation, leaving the main regressions unguarded. 【F:packages/api/test/server.test.ts†L1-L320】
 
 ## 2. Findings by Severity

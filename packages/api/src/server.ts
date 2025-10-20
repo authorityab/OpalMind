@@ -9,6 +9,48 @@ import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk'
 
 import { ValidationError, parseToolInvocation } from './validation.js';
 
+function constantTimeEqual(a: string, b: string): boolean {
+  const length = Math.max(a.length, b.length);
+  let mismatch = a.length ^ b.length;
+
+  for (let index = 0; index < length; index += 1) {
+    const charA = index < a.length ? a.charCodeAt(index) : 0;
+    const charB = index < b.length ? b.charCodeAt(index) : 0;
+    mismatch |= charA ^ charB;
+  }
+
+  return mismatch === 0;
+}
+
+function extractBearerToken(header: string | undefined): { scheme: string; token?: string } {
+  if (!header) {
+    return { scheme: '', token: undefined };
+  }
+
+  const parts = header.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return { scheme: '', token: undefined };
+  }
+
+  const [scheme, ...rest] = parts;
+  const token = rest.join(' ').trim();
+  return {
+    scheme,
+    token: token.length > 0 ? token : undefined,
+  };
+}
+
+function formatAuthChallenge(details: { error?: string; description?: string }): string {
+  const attributes = [`realm="MatomoTools"`];
+  if (details.error) {
+    attributes.push(`error="${details.error}"`);
+  }
+  if (details.description) {
+    attributes.push(`error_description="${details.description}"`);
+  }
+  return `Bearer ${attributes.join(', ')}`;
+}
+
 function parseOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -352,6 +394,7 @@ export function buildServer() {
   if (!bearerToken || bearerToken === 'change-me') {
     throw new Error('OPAL_BEARER_TOKEN must be set to a non-default value before starting the service.');
   }
+  const normalizedBearerToken = bearerToken.toLowerCase();
 
   const matomoBaseUrl = process.env.MATOMO_BASE_URL?.trim();
   if (!matomoBaseUrl) {
@@ -383,9 +426,23 @@ export function buildServer() {
     }
 
     const header = req.headers.authorization;
-    if (!header || header !== `Bearer ${bearerToken}`) {
-      res.setHeader('WWW-Authenticate', 'Bearer realm="MatomoTools"');
-      return res.status(401).json({ error: 'Unauthorized' });
+    const { scheme, token } = extractBearerToken(header);
+
+    if (!header || scheme.toLowerCase() !== 'bearer' || !token) {
+      res.setHeader(
+        'WWW-Authenticate',
+        formatAuthChallenge({ error: 'invalid_request', description: 'Authorization header missing or malformed.' })
+      );
+      return res.status(401).json({ error: 'Authorization header missing or malformed.' });
+    }
+
+    const normalizedToken = token.toLowerCase();
+    if (!constantTimeEqual(normalizedBearerToken, normalizedToken)) {
+      res.setHeader(
+        'WWW-Authenticate',
+        formatAuthChallenge({ error: 'invalid_token', description: 'Bearer token is invalid.' })
+      );
+      return res.status(401).json({ error: 'Invalid bearer token.' });
     }
 
     return next();

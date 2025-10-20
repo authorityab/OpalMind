@@ -579,3 +579,15 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: Passed (36 tests) confirming security middleware and lint-driven updates
   artifacts: none
+- tool: apply_patch
+  args: Harden bearer authentication (B-014)
+  result: Added constant-time, case-insensitive bearer comparisons with RFC6750 challenges and updated docs/tests
+  artifacts: packages/api/src/server.ts, packages/api/src/validation.ts, packages/api/test/server.test.ts, README.md, docs/production-review.md
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (38 tests) validating bearer auth updates and existing behavior
+  artifacts: none
+- tool: shell
+  args: npm run lint --workspace @opalmind/api
+  result: ESLint passed after bearer auth updates
+  artifacts: none
