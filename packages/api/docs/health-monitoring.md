@@ -6,6 +6,10 @@ The health monitoring feature provides comprehensive status checks for Matomo AP
 
 ## API Endpoint
 
+### `GET /healthz`
+
+Liveness probe that only verifies the API process is running. Returns HTTP `200` with `{ ok: true, status: "alive" }` and does not invoke Matomo.
+
 ### `GET /health`
 
 Container and load-balancer health probes should call this unauthenticated endpoint. It proxies Matomo diagnostics and returns HTTP `200` when the overall status is `healthy` or `degraded`, and `503` when marked `unhealthy`.
@@ -41,6 +45,10 @@ Container and load-balancer health probes should call this unauthenticated endpo
   }
 }
 ```
+
+### `GET /readyz`
+
+Readiness probe aligned with `/health`; fails with HTTP `503` when Matomo or cache checks report `unhealthy`.
 
 ### `GET /tools/get-health-status`
 
