@@ -47,7 +47,7 @@
       tags: security,observability  priority: medium  est: 0.75d
       deps: ADR-0002
       accepts: Cache health checks emit Prometheus-friendly metrics, thresholds driven by configuration/env, warnings/failures logged, and docs guide operators on tuning.
-- [ ] B-014 Normalize bearer token comparison and errors
+- [x] B-014 Normalize bearer token comparison and errors
       tags: security,api,dx  priority: medium  est: 0.5d
       deps: ADR-0003
       accepts: Authorization middleware performs constant-time, case-insensitive comparison, differentiates missing vs invalid tokens with `WWW-Authenticate` headers, and adds regression coverage for header variations.

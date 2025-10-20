@@ -389,7 +389,37 @@ describe('tool endpoints', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Unauthorized' });
+    expect(response.body).toEqual({ error: 'Authorization header missing or malformed.' });
+    expect(response.headers['www-authenticate']).toContain('error="invalid_request"');
+  });
+
+  it('rejects requests with invalid bearer tokens', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      body: { parameters: { period: 'day', date: 'today' } },
+      headers: { authorization: 'Bearer totally-wrong-token' },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Invalid bearer token.' });
+    expect(response.headers['www-authenticate']).toContain('error="invalid_token"');
+  });
+
+  it('accepts bearer tokens regardless of casing', async () => {
+    const app = await createApp();
+    const mockResponse = { nb_visits: 5 };
+    mockMatomoClient.getKeyNumbers.mockResolvedValue(mockResponse);
+
+    const response = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      body: { parameters: { period: 'day', date: 'today' } },
+      headers: { authorization: 'bearer TEST-TOKEN' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(mockResponse);
   });
 
   it('proxies to getKeyNumbers with parsed parameters', async () => {
@@ -909,7 +939,8 @@ describe('tracking endpoints', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Unauthorized' });
+    expect(response.body).toEqual({ error: 'Authorization header missing or malformed.' });
+    expect(response.headers['www-authenticate']).toContain('error="invalid_request"');
   });
 });
 

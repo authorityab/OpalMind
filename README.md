@@ -156,6 +156,7 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Request bodies default to a 256 KB limit and can be tuned via `OPAL_REQUEST_BODY_LIMIT` (accepts byte counts like `512kb`). Oversized payloads return `413` with a redacted message.
 - Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`.
 - All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
+- Bearer authentication accepts case-insensitive tokens, compares them using constant-time checks, and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
 
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:
