@@ -40,6 +40,8 @@ import {
   type TrackResult,
   type TrackingIdempotencyRecord,
   type TrackingIdempotencyStore,
+  type TrackingQueueStats,
+  type TrackingBackoffOptions,
 } from './tracking.js';
 import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
 
@@ -61,6 +63,7 @@ export interface MatomoClientConfig {
     maxRetries?: number;
     retryDelayMs?: number;
     idempotencyStore?: TrackingIdempotencyStore;
+    backoff?: TrackingBackoffOptions;
   };
   cacheTtlMs?: number;
   cache?: CacheConfig;
@@ -503,6 +506,7 @@ export class MatomoClient {
       maxRetries: config.tracking?.maxRetries,
       retryDelayMs: config.tracking?.retryDelayMs,
       idempotencyStore: config.tracking?.idempotencyStore,
+      backoff: config.tracking?.backoff,
     });
     this.defaultSiteId = config.defaultSiteId;
   }
@@ -787,6 +791,10 @@ export class MatomoClient {
     return this.tracking.getIdempotencyRecord(key);
   }
 
+  getTrackingQueueStats(): TrackingQueueStats {
+    return this.tracking.getQueueStats();
+  }
+
   async runDiagnostics(input: RunDiagnosticsInput = {}): Promise<RunDiagnosticsResult> {
     const checks: MatomoDiagnosticCheck[] = [];
 
@@ -1017,6 +1025,8 @@ export type {
   TrackResult,
   TrackingIdempotencyRecord,
   TrackingIdempotencyStore,
+  TrackingQueueStats,
+  TrackingBackoffOptions,
   CacheStatsSnapshot,
   CacheEvent,
   EcommerceRevenueTotals,

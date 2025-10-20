@@ -145,6 +145,11 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Customize the behaviour via `createMatomoClient({ baseUrl, tokenAuth, http: { timeoutMs: 5000, retry: { maxAttempts: 4, baseDelayMs: 500, jitterMs: 250 } } })`.
 - Network timeouts and repeated 5xx responses raise `MatomoNetworkError` with redacted endpoints so operators can trace issues without leaking credentials.
 
+## Tracking Back-pressure
+- Tracking requests honour Matomo `429`/`5xx` responses, read `Retry-After` headers, and pause the queue with exponential backoff (jitter optional).
+- Inspect queue health via `client.getTrackingQueueStats()` to surface pending items, retry counts, last backoff delay, and cooldown deadlines.
+- Tune behaviour with `tracking.backoff` (e.g., `createMatomoClient({ tracking: { backoff: { baseDelayMs: 250, maxDelayMs: 8000, jitterMs: 250 } } })`).
+
 ## Health Monitoring & Observability
 The service provides comprehensive health monitoring for production deployments:
 

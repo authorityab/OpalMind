@@ -55,7 +55,7 @@ describe('TrackingService', () => {
       baseUrl,
       tokenAuth: token,
       defaultSiteId: 2,
-      tracking: { retryDelayMs: 10 },
+      tracking: { retryDelayMs: 10, backoff: { baseDelayMs: 10, jitterMs: 0 } },
     });
 
     const trackPromise = client.trackEvent({
@@ -108,5 +108,114 @@ describe('TrackingService', () => {
     const replay = await client.trackEvent({ category: 'cta', action: 'click', idempotencyKey });
     expect(replay).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('honors Retry-After headers before retrying tracking requests', async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const throttledResponse = {
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      text: async () => 'rate limited',
+      headers: new Headers({ 'Retry-After': '2' }),
+    };
+
+    const success = {
+      ok: true,
+      status: 204,
+      statusText: 'No Content',
+      text: async () => '',
+      headers: new Headers(),
+    };
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(throttledResponse).mockResolvedValueOnce(success);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({
+      baseUrl,
+      tokenAuth: token,
+      defaultSiteId: 5,
+      tracking: {
+        backoff: { jitterMs: 0 },
+      },
+    });
+
+    const promise = client.trackEvent({ category: 'cta', action: 'click' });
+
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const stats = client.getTrackingQueueStats();
+    expect(stats.lastBackoffMs).toBeGreaterThanOrEqual(2000);
+    expect(stats.lastRetryStatus).toBe(429);
+
+    randomSpy.mockRestore();
+  });
+
+  it('applies exponential backoff for repeated server errors', async () => {
+    vi.useFakeTimers();
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const serverError = {
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      text: async () => 'unavailable',
+      headers: new Headers(),
+    };
+
+    const success = {
+      ok: true,
+      status: 204,
+      statusText: 'No Content',
+      text: async () => '',
+      headers: new Headers(),
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(serverError)
+      .mockResolvedValueOnce(serverError)
+      .mockResolvedValueOnce(success);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({
+      baseUrl,
+      tokenAuth: token,
+      defaultSiteId: 6,
+      tracking: {
+        maxRetries: 4,
+        backoff: { baseDelayMs: 100, maxDelayMs: 1000, jitterMs: 0 },
+      },
+    });
+
+    const promise = client.trackGoal({ goalId: 9 });
+
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(200);
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    const stats = client.getTrackingQueueStats();
+    expect(stats.totalRetried).toBeGreaterThanOrEqual(2);
+    expect(stats.lastBackoffMs).toBeGreaterThanOrEqual(200);
+
+    randomSpy.mockRestore();
   });
 });
