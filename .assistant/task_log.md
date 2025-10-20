@@ -611,3 +611,15 @@
   args: npm run build --workspaces
   result: Build succeeded for API and SDK after cache threshold updates
   artifacts: none
+- tool: apply_patch
+  args: Add liveness and readiness endpoints (B-015)
+  result: Introduced `/healthz` and `/readyz`, refactoring readiness handling and reusing diagnostics logic for `/health`
+  artifacts: packages/api/src/server.ts
+- tool: apply_patch
+  args: Extend health endpoint tests and docs for B-015
+  result: Added Vitest coverage for liveness/readiness endpoints and documented the new probes in README and health monitoring guide
+  artifacts: packages/api/test/server.test.ts, README.md, packages/api/docs/health-monitoring.md
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: Passed (41 tests) covering new health probes and existing behavior
+  artifacts: none

@@ -163,7 +163,11 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 The service provides comprehensive health monitoring for production deployments:
 
 ### Health Status Endpoint
-Use `GET /tools/get-health-status` to monitor service health:
+Use the following endpoints to monitor service health:
+
+- `GET /healthz` – liveness; returns 200 when the process is up (no Matomo calls).
+- `GET /readyz` – readiness; mirrors `/health` and fails fast when Matomo or cache dependencies are unhealthy.
+- `GET /tools/get-health-status` – full diagnostic payload with authentication.
 
 ```bash
 curl -H "Authorization: Bearer your-token" \

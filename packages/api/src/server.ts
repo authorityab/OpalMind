@@ -1043,11 +1043,15 @@ export function buildServer() {
     '/track/goal'
   );
 
-  app.get('/health', async (_req: Request, res: Response) => {
+  app.get('/healthz', (_req: Request, res: Response) => {
+    res.status(200).json({ ok: true, status: 'alive' });
+  });
+
+  const handleReadiness = async (_req: Request, res: Response) => {
     try {
       const health = await matomoClient.getHealthStatus();
       const isHealthy = health.status === 'healthy';
-      const statusCode = health.status === 'unhealthy' ? 503 : 200;
+      const statusCode = isHealthy ? 200 : 503;
 
       res.status(statusCode).json({
         ok: isHealthy,
@@ -1062,7 +1066,10 @@ export function buildServer() {
         error: message.includes('token_auth') ? 'Matomo diagnostics unavailable' : message,
       });
     }
-  });
+  };
+
+  app.get('/readyz', handleReadiness);
+  app.get('/health', handleReadiness);
 
   app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {

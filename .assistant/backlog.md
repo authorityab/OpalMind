@@ -51,7 +51,7 @@
       tags: security,api,dx  priority: medium  est: 0.5d
       deps: ADR-0003
       accepts: Authorization middleware performs constant-time, case-insensitive comparison, differentiates missing vs invalid tokens with `WWW-Authenticate` headers, and adds regression coverage for header variations.
-- [ ] B-015 Split liveness and readiness probes
+- [x] B-015 Split liveness and readiness probes
       tags: security,ops  priority: medium  est: 0.5d
       deps: ADR-0002
       accepts: Introduce `/healthz` (process up) and `/readyz` (Matomo/cache success) endpoints, update deployment docs/Kubernetes manifest guidance, and add tests covering readiness failure while liveness stays green.

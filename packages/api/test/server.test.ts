@@ -143,6 +143,50 @@ afterEach(() => {
 });
 
 describe('health endpoint', () => {
+  it('returns liveness without invoking Matomo', async () => {
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/healthz',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, status: 'alive' });
+    expect(mockMatomoClient.getHealthStatus).not.toHaveBeenCalled();
+  });
+
+  it('returns readiness diagnostics when Matomo is healthy', async () => {
+    const app = await createApp();
+    const healthPayload = {
+      status: 'healthy',
+      checks: [
+        {
+          name: 'matomo-api',
+          status: 'pass',
+          componentType: 'service',
+          observedValue: 120,
+          observedUnit: 'ms',
+          time: '2024-03-01T12:00:00.000Z',
+          output: 'API responded in 120ms',
+        },
+      ],
+    };
+    mockMatomoClient.getHealthStatus.mockResolvedValue(healthPayload);
+
+    const response = await invoke(app, {
+      url: '/readyz',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      ok: true,
+      status: 'healthy',
+      health: healthPayload,
+    });
+  });
+
   it('returns health diagnostics when Matomo is healthy', async () => {
     const app = await createApp();
     const healthPayload = {
@@ -195,6 +239,27 @@ describe('health endpoint', () => {
 
     const response = await invoke(app, {
       url: '/health',
+      method: 'GET',
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      ok: false,
+      status: 'unhealthy',
+      health: healthPayload,
+    });
+  });
+
+  it('returns 503 when readiness reports unhealthy', async () => {
+    const app = await createApp();
+    const healthPayload = {
+      status: 'unhealthy',
+      checks: [],
+    };
+    mockMatomoClient.getHealthStatus.mockResolvedValue(healthPayload);
+
+    const response = await invoke(app, {
+      url: '/readyz',
       method: 'GET',
     });
 
