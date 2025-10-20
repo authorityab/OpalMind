@@ -8,6 +8,7 @@ import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from
 import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk';
 
 import { ValidationError, parseToolInvocation } from './validation.js';
+import { logger } from './logger.js';
 
 function constantTimeEqual(a: string, b: string): boolean {
   const length = Math.max(a.length, b.length);
@@ -319,11 +320,11 @@ function createRateLimiter(options: {
 }
 
 function logToolInfo(event: 'request' | 'success', details: Record<string, unknown>) {
-  console.info('[tools]', { event, ...details });
+  logger.info('tools', { event, ...details });
 }
 
 function logToolError(event: 'failure', details: Record<string, unknown>) {
-  console.error('[tools]', { event, ...details });
+  logger.error('tools', { event, ...details });
 }
 
 function determineErrorStatus(error: unknown): number {
@@ -1120,8 +1121,7 @@ async function start() {
   return new Promise<void>((resolve, reject) => {
     app
       .listen(port, host, () => {
-        // eslint-disable-next-line no-console
-        console.log(`Server listening on http://${host}:${port}`);
+        logger.info('server.listening', { address: `http://${host}:${port}` });
         resolve();
       })
       .on('error', reject);
@@ -1132,8 +1132,7 @@ const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   start().catch(err => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    logger.error('server.start_failed', { error: err instanceof Error ? err.message : err });
     process.exit(1);
   });
 }

@@ -44,6 +44,7 @@ import {
   type TrackingBackoffOptions,
 } from './tracking.js';
 import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
+import { sdkLogger } from './logger.js';
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -610,8 +611,9 @@ export class MatomoClient {
     } catch (error) {
       // swallow errors; nb_actions will still be returned
       if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to fetch pageview summary from Actions.get', error);
+        sdkLogger.warn('Failed to fetch pageview summary from Actions.get', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 

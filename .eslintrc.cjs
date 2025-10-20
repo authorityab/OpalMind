@@ -31,8 +31,15 @@ module.exports = {
   rules: {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     'import/order': ['warn', { 'newlines-between': 'always' }],
+    'no-console': 'error',
   },
   overrides: [
+    {
+      files: ['packages/**/src/logger.ts'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
     {
       files: ['**/*.test.ts'],
       env: {

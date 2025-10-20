@@ -2,8 +2,10 @@ import { EventEmitter } from 'node:events';
 
 import type { Express, NextFunction, Request, Response } from 'express';
 import httpMocks from 'node-mocks-http';
-import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MatomoClientError } from '@opalmind/sdk';
+
+import { logger } from '../src/logger.js';
 
 const mockMatomoClient = vi.hoisted(() => ({
   getKeyNumbers: vi.fn(),
@@ -398,8 +400,8 @@ describe('tools logging', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {

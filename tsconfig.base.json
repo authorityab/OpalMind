@@ -22,7 +22,9 @@
         "packages/sdk/src/index.ts"
       ]
     },
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true
   },
   "include": []
 }
