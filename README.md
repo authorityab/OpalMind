@@ -18,6 +18,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 - [Health Monitoring & Observability](#health-monitoring--observability)
 - [Testing](#testing)
 - [Docker Deployment](#docker-deployment)
+- [Production Runbook](#production-runbook)
 - [Next Steps](#next-steps)
 
 ## Features
@@ -71,11 +72,12 @@ This project provides a lightweight SDK and Express-based tool service that make
 ## Environment Variables
 | Variable | Description |
 |----------|-------------|
-| `MATOMO_BASE_URL` | **Required.** Base URL to your Matomo instance (must include protocol and host). |
+| `MATOMO_BASE_URL` | **Required.** Base URL to your Matomo instance (absolute `https://` or `http://` URL; other schemes are rejected). |
 | `MATOMO_TOKEN` | **Required.** Matomo `token_auth` used for Reporting API calls; replace the scaffold placeholder with a real token. |
 | `MATOMO_DEFAULT_SITE_ID` | Optional default `idSite` applied when tool requests omit `siteId`. |
 | `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints (generate securely, e.g., `openssl rand -hex 32`). |
 | `PORT` | Listener port for the API service (default `4000`). |
+| `OPAL_TRUST_PROXY` | Optional trust proxy setting passed to Express (comma-separated CIDRs/hosts, numeric hop count, or `true`/`false`). Defaults to `loopback,linklocal,uniquelocal`. |
 
 > The API refuses to start unless `MATOMO_BASE_URL`, `MATOMO_TOKEN`, and `OPAL_BEARER_TOKEN` are populated with non-placeholder values.
 
@@ -154,7 +156,7 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 ## API Boundary Hardening
 - Express applies security headers, duplicate-parameter stripping, and configurable CORS. Allow cross-origin calls by setting `OPAL_CORS_ALLOW_ALL=1` or provide a comma-separated `OPAL_CORS_ALLOWLIST`.
 - Request bodies default to a 256 KB limit and can be tuned via `OPAL_REQUEST_BODY_LIMIT` (accepts byte counts like `512kb`). Oversized payloads return `413` with a redacted message.
-- Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`.
+- Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`. Responses now surface `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers to aid client backoff, and the limiter honors `X-Forwarded-For` based on `OPAL_TRUST_PROXY`.
 - All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
 - Bearer authentication enforces case-sensitive matches using constant-time comparisons and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
 - Invalid or missing bearer tokens share a defensive rate-limit bucket, so repeated failures from the same address return `429` instead of bypassing throttling.
@@ -241,6 +243,9 @@ The unauthenticated `GET /health` endpoint mirrors this payload (without requiri
 - Launch locally: `docker compose up -d` (reads `.env` for Matomo/Opal secrets and exposes port `3000`).
 - Repo-based deploys (e.g., Portainer stacks) can rely on `stack.env` in the repo; override values through Portainer’s UI or commit a `.env` for environment-specific secrets. Make sure `docker-compose.yml` can see any additional env files you provide.
 - The API refuses to start if `OPAL_BEARER_TOKEN` is unset or still equal to the scaffold value—generate a unique token per environment and inject it via your secret manager.
+
+## Production Runbook
+- Review and follow the operational checklist in [`docs/production-runbook.md`](docs/production-runbook.md) before promoting changes. It includes required secrets, test commands, health verification steps, and rollback guidance for both Docker Compose and Portainer-driven deployments.
 
 ## Next Steps
 - Generate a bearer token (e.g., `openssl rand -hex 32`), store it in your secret manager, and document the rotation procedure for each environment.

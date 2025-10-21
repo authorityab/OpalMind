@@ -10,15 +10,40 @@ function normalizeTrackingUrl(baseUrl: string): string {
   }
 
   const trimmed = baseUrl.trim();
-  if (trimmed.endsWith('matomo.php')) {
-    return trimmed;
+  if (!trimmed) {
+    throw new Error('Matomo base URL is required for tracking');
   }
 
-  if (trimmed.endsWith('piwik.php')) {
-    return trimmed;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Matomo tracking URL must be an absolute http(s) URL');
   }
 
-  return `${trimmed.replace(/\/?$/, '')}/matomo.php`;
+  const protocol = parsed.protocol.toLowerCase();
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new Error('Matomo tracking URL must use http or https');
+  }
+
+  const pathname = parsed.pathname;
+  if (pathname.endsWith('matomo.php') || pathname.endsWith('piwik.php')) {
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  }
+
+  if (pathname.endsWith('index.php')) {
+    parsed.pathname = pathname.replace(/index\.php$/, 'matomo.php');
+  } else {
+    const basePath = pathname.endsWith('/') ? pathname : `${pathname}/`;
+    parsed.pathname = `${basePath}matomo.php`;
+  }
+
+  parsed.search = '';
+  parsed.hash = '';
+
+  return parsed.toString();
 }
 
 function generatePvId(): string {
