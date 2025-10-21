@@ -371,6 +371,30 @@ describe('security middleware', () => {
     expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
   });
 
+  it('throttles repeated requests with invalid bearer tokens on tracking endpoints', async () => {
+    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.OPAL_TRACK_RATE_LIMIT_MAX = '1';
+
+    const app = await createApp();
+
+    const first = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer wrong-token' },
+      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
+    });
+
+    expect(first.status).toBe(401);
+
+    const second = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer another-token' },
+      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
+    });
+
+    expect(second.status).toBe(429);
+    expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
+  });
+
   it('rejects payloads exceeding the configured body limit', async () => {
     const app = await createApp();
     const routerStack = (app as unknown as { _router?: { stack: Array<{ handle: unknown }> } })._router?.stack ?? [];
@@ -503,19 +527,17 @@ describe('tool endpoints', () => {
     expect(response.headers['www-authenticate']).toContain('error="invalid_token"');
   });
 
-  it('accepts bearer tokens regardless of casing', async () => {
+  it('rejects bearer tokens that differ by casing', async () => {
     const app = await createApp();
-    const mockResponse = { nb_visits: 5 };
-    mockMatomoClient.getKeyNumbers.mockResolvedValue(mockResponse);
 
     const response = await invoke(app, {
       url: '/tools/get-key-numbers',
       body: { parameters: { period: 'day', date: 'today' } },
-      headers: { authorization: 'bearer TEST-TOKEN' },
+      headers: { authorization: 'Bearer TEST-TOKEN' },
     });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual(mockResponse);
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Invalid bearer token.' });
   });
 
   it('proxies to getKeyNumbers with parsed parameters', async () => {
