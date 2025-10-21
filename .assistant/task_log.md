@@ -1,5 +1,21 @@
 # Task Log
 ## 2025-10-16
+- tool: list_mcp_resources
+  args: server=context7; server=playwright; server=github
+  result: context7/playwright responded with empty resource lists (servers available); github still reports unknown server.
+  artifacts: none
+- tool: list_mcp_resources
+  args: server=context7; server=playwright; server=github
+  result: Each server lookup returned "unknown MCP server", confirming the MCP connectors are not registered in this environment.
+  artifacts: none
+- tool: apply_patch
+  args: Refresh `.assistant/status.md` to sync Now/Next/Later focus with current plan/backlog.
+  result: Updated focus statement, priority lanes, and risk summary so B-007 leads and completed P-016 is no longer listed.
+  artifacts: .assistant/status.md
+- tool: none
+  args: Drafted updated MCP execution specs for near-term plan steps.
+  result: Documented tooling approach (unavailable MCP connectors vs. local actions) so upcoming work can proceed without automation gaps.
+  artifacts: none
 - tool: apply_patch
   args: Refined structured logging adoption and strict TypeScript handling across API/SDK/logger packages
   result: Reworked optional property assignments, introduced logger build artifacts for type resolution, and adjusted workspace

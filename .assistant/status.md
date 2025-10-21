@@ -1,18 +1,18 @@
 # Status
 
 ## Focus
-Advance Matomo operational resilience by auto-resolving default site IDs and honoring Matomo back-pressure while surfacing actionable queue metrics.
+Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observability improvements.
 
 ## Now / Next / Later
-- Now: B-007 Auto siteId defaults, P-016 Matomo back-pressure handling.
+- Now: B-007 Auto-resolve Matomo siteId defaults.
 - Next: P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
-- Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit.
+- Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit; P-020 Align authentication documentation; B-005 Improve tracking diagnostics; B-006 Support decimal parsing.
 
 ## Risks
-- Default site resolution remains manual until B-007 lands, risking inconsistent reporting defaults.
-- Monitoring platform alignment still pending; SRE must adopt the recommended health alerts to ensure coverage.
-- Persistence backend for cache/queue still undecided; impacts P-005 scope and deployment expectations.
-- Rate-limit handling now exists, but alerting hooks remain manual until monitoring plan lands.
+- Default site resolution remains manual until B-007 ships, risking inconsistent reporting defaults.
+- Tracking queue observability lacks real metrics until P-019 lands, leaving SRE without actionable queue depth/age signals.
+- Persistence backend for cache/queue still undecided, which impacts P-005 scope and deployment expectations.
+- Monitoring platform alignment remains open; alert hooks stay manual until an owner commits.
 
 ## Artifacts
 - Vision & mission: `.assistant/canvas/vision.md`
