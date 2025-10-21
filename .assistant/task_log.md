@@ -9,6 +9,10 @@
   result: Each server lookup returned "unknown MCP server", confirming the MCP connectors are not registered in this environment.
   artifacts: none
 - tool: apply_patch
+  args: Restore TypeScript path mapping to logger dist declarations and add logger prebuild step before linting.
+  result: Updated `tsconfig.base.json` to point `@opalmind/logger` at generated `dist/index.d.ts` and wired root `package.json` with a `prelint` build hook so linting resolves the package without manual builds.
+  artifacts: tsconfig.base.json, package.json
+- tool: apply_patch
   args: Refresh `.assistant/status.md` to sync Now/Next/Later focus with current plan/backlog.
   result: Updated focus statement, priority lanes, and risk summary so B-007 leads and completed P-016 is no longer listed.
   artifacts: .assistant/status.md
