@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 
 import type { Express, NextFunction, Request, Response } from 'express';
 import httpMocks from 'node-mocks-http';
+import type { LogRecord } from '@opalmind/logger';
 import { MatomoClientError } from '@opalmind/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -28,12 +29,30 @@ const mockMatomoClient = vi.hoisted(() => ({
 }));
 
 const createMatomoClientMock = vi.hoisted(() => vi.fn(() => mockMatomoClient));
+const logRecords = vi.hoisted(() => [] as LogRecord[]);
+const testTransport = vi.hoisted(
+  () =>
+    (record: LogRecord) => {
+      logRecords.push(record);
+    }
+);
 
 vi.mock('@opalmind/sdk', async () => {
   const actual = await vi.importActual<typeof import('@opalmind/sdk')>('@opalmind/sdk');
   return {
     ...actual,
     createMatomoClient: createMatomoClientMock,
+  };
+});
+
+vi.mock('@opalmind/logger', async () => {
+  const actual = await vi.importActual<typeof import('@opalmind/logger')>('@opalmind/logger');
+  const transport = testTransport;
+  return {
+    ...actual,
+    logger: actual.createLogger({ service: 'opal' }, transport),
+    createLogger: (bindings: Record<string, unknown> = {}, customTransport = transport) =>
+      actual.createLogger(bindings, customTransport),
   };
 });
 
@@ -394,17 +413,12 @@ describe('security middleware', () => {
 });
 
 describe('tools logging', () => {
-  let infoSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logRecords.length = 0;
   });
 
   afterEach(() => {
-    infoSpy.mockRestore();
-    errorSpy.mockRestore();
+    logRecords.length = 0;
   });
 
   it('redacts sensitive values from request/success logs', async () => {
@@ -419,7 +433,8 @@ describe('tools logging', () => {
       },
     });
 
-    const serialized = JSON.stringify(infoSpy.mock.calls);
+    const infoEntries = logRecords.filter(record => record.level === 'info' && record.message === 'tools');
+    const serialized = JSON.stringify(infoEntries satisfies LogRecord[]);
     expect(serialized).not.toContain('super-secret');
     expect(serialized).not.toContain('token_auth=');
     expect(serialized).toContain('[redacted]');
@@ -428,21 +443,34 @@ describe('tools logging', () => {
   it('redacts sensitive values from error logs and responses', async () => {
     const app = await createApp();
     mockMatomoClient.getKeyNumbers.mockRejectedValue(
-      new Error('Matomo failed with token_auth=super-secret')
+      new MatomoClientError('Failed to fetch key numbers from Matomo. Please try again later.', {
+        status: 500,
+        code: 'matomo.error',
+        response: {
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: new Headers({ 'content-type': 'application/json' }),
+          data: { error: 'Your token_auth=super-secret is invalid' },
+        },
+      })
     );
 
-    const response = await invoke(app, {
+    const result = await invoke(app, {
       url: '/tools/get-key-numbers',
       headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { period: 'day', date: 'today' } },
+      body: {
+        parameters: { period: 'day', date: 'today', token_auth: 'super-secret' },
+      },
     });
 
-    expect(response.status).toBe(500);
-    expect(response.body).toEqual({ error: 'Matomo failed with token_auth=REDACTED' });
+    expect(result.status).toBe(500);
+    expect(result.body).toEqual({ error: 'Failed to fetch key numbers from Matomo. Please try again later.' });
 
-    const serializedErrors = JSON.stringify(errorSpy.mock.calls);
+    const errorEntries = logRecords.filter(record => record.level === 'error' && record.message === 'tools');
+    const serializedErrors = JSON.stringify(errorEntries satisfies LogRecord[]);
     expect(serializedErrors).not.toContain('super-secret');
-    expect(serializedErrors).toContain('token_auth=REDACTED');
+    expect(serializedErrors).not.toContain('token_auth=');
+    expect(serializedErrors).toContain('[redacted]');
   });
 });
 

@@ -114,13 +114,25 @@ export class MatomoApiError extends Error {
   constructor(message: string, guidanceKey: GuidanceKey, details: MatomoErrorDetails = {}) {
     super(message);
     this.name = this.constructor.name;
-    this.status = details.status;
-    this.code = details.code;
-    this.body = details.body;
-    this.endpoint = details.endpoint;
-    this.payload = details.payload;
+    if (details.status !== undefined) {
+      this.status = details.status;
+    }
+    if (details.code !== undefined) {
+      this.code = details.code;
+    }
+    if (details.body !== undefined) {
+      this.body = details.body;
+    }
+    if (details.endpoint !== undefined) {
+      this.endpoint = details.endpoint;
+    }
+    if (details.payload !== undefined) {
+      this.payload = details.payload;
+    }
     this.guidance = resolveGuidance(guidanceKey, message, details.code);
-    this.rateLimit = details.rateLimit;
+    if (details.rateLimit !== undefined) {
+      this.rateLimit = details.rateLimit;
+    }
 
     if (details.cause instanceof Error) {
       type ErrorWithCause = Error & { cause?: unknown };
@@ -205,7 +217,14 @@ export function extractMatomoError(result: unknown): { message?: string; code?: 
   if (normalizedResult === 'error') {
     const message = typeof payload.message === 'string' ? payload.message : undefined;
     const code = typeof payload.code === 'string' || typeof payload.code === 'number' ? payload.code : undefined;
-    return { message, code };
+    const result: { message?: string; code?: MatomoErrorCode } = {};
+    if (message !== undefined) {
+      result.message = message;
+    }
+    if (code !== undefined) {
+      result.code = code;
+    }
+    return result;
   }
 
   return undefined;
@@ -229,12 +248,18 @@ export function classifyMatomoError(context: MatomoHttpErrorContext): MatomoApiE
 
   const details: MatomoErrorDetails = {
     status,
-    code,
-    body: bodyText,
     endpoint,
     payload,
-    rateLimit: context.rateLimit,
   };
+  if (code !== undefined) {
+    details.code = code;
+  }
+  if (bodyText !== undefined) {
+    details.body = bodyText;
+  }
+  if (context.rateLimit !== undefined) {
+    details.rateLimit = context.rateLimit;
+  }
 
   if (status === 401) {
     return new MatomoAuthError(`Matomo authentication failed: ${defaultMessage}`, details);
@@ -265,9 +290,13 @@ export function classifyMatomoResultError(
   const details: MatomoErrorDetails = {
     endpoint,
     payload,
-    code: extracted?.code,
-    rateLimit,
   };
+  if (extracted?.code !== undefined) {
+    details.code = extracted.code;
+  }
+  if (rateLimit !== undefined) {
+    details.rateLimit = rateLimit;
+  }
 
   const normalized = message.toLowerCase();
   if (normalized.includes('token') || normalized.includes('authentication')) {

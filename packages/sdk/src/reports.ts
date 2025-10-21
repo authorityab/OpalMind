@@ -194,7 +194,7 @@ export class ReportsService {
   private readonly cache = new Map<string, { feature: string; expiresAt: number; value: unknown }>();
   private readonly cacheTtlMs: number;
   private readonly featureStats = new Map<string, CacheStatsCounters>();
-  private readonly onCacheEvent?: (event: CacheEvent) => void;
+  private readonly onCacheEvent: ((event: CacheEvent) => void) | undefined;
 
   constructor(private readonly http: MatomoHttpClient, options: ReportsServiceOptions = {}) {
     this.cacheTtlMs = options.cacheTtlMs ?? 60_000;
@@ -447,11 +447,12 @@ export class ReportsService {
 
     const includeSeries = input.includeSeries ?? false;
     const seriesCandidates = parsedEntries.filter(entry => entry.label !== '');
-    const series = includeSeries || seriesCandidates.length > 1
-      ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
-      : undefined;
+    const series =
+      includeSeries || seriesCandidates.length > 1
+        ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
+        : undefined;
 
-    const result: EcommerceRevenueTotals = { totals, series };
+    const result: EcommerceRevenueTotals = series ? { totals, series } : { totals };
     this.setCache(feature, cacheKey, result);
     return result;
   }
@@ -608,18 +609,37 @@ export class ReportsService {
 
     const steps = mergeFunnelSteps(config.steps ?? [], flowSteps);
     const funnelId = config.id ?? normalizeIdentifier(undefined, input.funnelId);
+    const resolvedSteps = steps.length > 0 ? steps : config.steps ?? [];
     const summary: FunnelSummary = {
       id: funnelId,
       label: config.label ?? `Funnel ${funnelId}`,
       period: input.period,
       date: input.date,
-      segment: input.segment,
-      overallConversionRate: firstDefined(metrics.overallConversionRate, config.overallConversionRate),
-      abandonmentRate: firstDefined(metrics.abandonmentRate, config.abandonmentRate),
-      totalConversions: firstDefined(metrics.totalConversions, config.totalConversions),
-      totalVisits: firstDefined(metrics.totalVisits, config.totalVisits),
-      steps: steps.length > 0 ? steps : config.steps ?? [],
+      steps: resolvedSteps,
     };
+    if (input.segment !== undefined) {
+      summary.segment = input.segment;
+    }
+
+    const overall = firstDefined(metrics.overallConversionRate, config.overallConversionRate);
+    if (overall !== undefined) {
+      summary.overallConversionRate = overall;
+    }
+
+    const abandonment = firstDefined(metrics.abandonmentRate, config.abandonmentRate);
+    if (abandonment !== undefined) {
+      summary.abandonmentRate = abandonment;
+    }
+
+    const totalConversions = firstDefined(metrics.totalConversions, config.totalConversions);
+    if (totalConversions !== undefined) {
+      summary.totalConversions = totalConversions;
+    }
+
+    const totalVisits = firstDefined(metrics.totalVisits, config.totalVisits);
+    if (totalVisits !== undefined) {
+      summary.totalVisits = totalVisits;
+    }
 
     if (summary.totalConversions === undefined) {
       const total = sumDefined(summary.steps.map(step => firstDefined(step.totalConversions, step.conversions)));
@@ -900,15 +920,25 @@ function coerceFunnelConfig(raw: unknown, context: FunnelSummaryInput, seen = ne
     steps = normalizeFunnelSteps(record);
   }
 
-  const summary: PartialFunnelSummary = {
-    id,
-    label,
-    totalConversions,
-    totalVisits,
-    overallConversionRate,
-    abandonmentRate,
-    steps,
-  };
+  const summary: PartialFunnelSummary = { id };
+  if (label !== undefined) {
+    summary.label = label;
+  }
+  if (totalConversions !== undefined) {
+    summary.totalConversions = totalConversions;
+  }
+  if (totalVisits !== undefined) {
+    summary.totalVisits = totalVisits;
+  }
+  if (overallConversionRate !== undefined) {
+    summary.overallConversionRate = overallConversionRate;
+  }
+  if (abandonmentRate !== undefined) {
+    summary.abandonmentRate = abandonmentRate;
+  }
+  if (steps.length > 0) {
+    summary.steps = steps;
+  }
 
   if (hasFunnelData(summary)) {
     return summary;
@@ -948,20 +978,40 @@ function normalizeFunnelMetrics(raw: unknown): PartialFunnelSummary {
   const record = raw as Record<string, unknown>;
   const lc = lowerCaseKeys(record);
 
-  return {
-    totalConversions: getNumericFromMap(lc, [
+    const result: PartialFunnelSummary = {};
+    const totalConversions = getNumericFromMap(lc, [
       'nb_conversions',
       'nb_converted',
       'conversions',
       'goalconversions',
       'nb_conversions_total',
-    ]),
-    totalVisits: getNumericFromMap(lc, ['nb_visits', 'nb_entries', 'entries', 'visits', 'nb_entrances', 'nb_visits_total']),
-    overallConversionRate: getPercentageFromMap(lc, ['conversion_rate', 'overall_conversion_rate', 'total_conversion_rate']),
-    abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'overall_abandonment_rate', 'dropoff_rate']),
-    steps: normalizeFunnelSteps(record),
-  };
-}
+    ]);
+    if (totalConversions !== undefined) {
+      result.totalConversions = totalConversions;
+    }
+
+    const totalVisits = getNumericFromMap(lc, ['nb_visits', 'nb_entries', 'entries', 'visits', 'nb_entrances', 'nb_visits_total']);
+    if (totalVisits !== undefined) {
+      result.totalVisits = totalVisits;
+    }
+
+    const overallConversionRate = getPercentageFromMap(lc, ['conversion_rate', 'overall_conversion_rate', 'total_conversion_rate']);
+    if (overallConversionRate !== undefined) {
+      result.overallConversionRate = overallConversionRate;
+    }
+
+    const abandonmentRate = getPercentageFromMap(lc, ['abandonment_rate', 'overall_abandonment_rate', 'dropoff_rate']);
+    if (abandonmentRate !== undefined) {
+      result.abandonmentRate = abandonmentRate;
+    }
+
+    const steps = normalizeFunnelSteps(record);
+    if (steps.length > 0) {
+      result.steps = steps;
+    }
+
+    return result;
+  }
 
 function normalizeFunnelDefinitionSteps(raw: unknown, seen = new Set<unknown>()): FunnelStepSummary[] {
   if (!raw) {
@@ -1403,18 +1453,46 @@ function normalizeFunnelStepRecords(records: Record<string, unknown>[]): FunnelS
     const label = labelCandidate ?? `Step ${index + 1}`;
     const key = `${id.toLowerCase()}|${label.toLowerCase()}`;
 
-    const step: FunnelStepSummary = {
-      id,
-      label,
-      visits: getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'nb_entries', 'nb_entrances', 'visits', 'entries']),
-      conversions: getNumericFromMap(lc, ['nb_conversions', 'nb_converted', 'conversions', 'nb_targets', 'nb_visits_converted']),
-      totalConversions: getNumericFromMap(lc, ['nb_conversions_total', 'total_conversions']),
-      conversionRate: getPercentageFromMap(lc, ['conversion_rate', 'step_conversion_rate']),
-      abandonmentRate: getPercentageFromMap(lc, ['abandonment_rate', 'step_abandonment_rate', 'dropoff_rate']),
-      overallConversionRate: getPercentageFromMap(lc, ['overall_conversion_rate', 'step_overall_conversion_rate']),
-      avgTimeToConvert: getNumericFromMap(lc, ['avg_time_to_convert', 'avg_time']),
-      medianTimeToConvert: getNumericFromMap(lc, ['median_time_to_convert', 'median_time']),
-    };
+      const step: FunnelStepSummary = { id, label };
+      const visits = getNumericFromMap(lc, ['nb_visits_total', 'nb_visits', 'nb_entries', 'nb_entrances', 'visits', 'entries']);
+      if (visits !== undefined) {
+        step.visits = visits;
+      }
+
+      const conversions = getNumericFromMap(lc, ['nb_conversions', 'nb_converted', 'conversions', 'nb_targets', 'nb_visits_converted']);
+      if (conversions !== undefined) {
+        step.conversions = conversions;
+      }
+
+      const totalConversions = getNumericFromMap(lc, ['nb_conversions_total', 'total_conversions']);
+      if (totalConversions !== undefined) {
+        step.totalConversions = totalConversions;
+      }
+
+      const conversionRate = getPercentageFromMap(lc, ['conversion_rate', 'step_conversion_rate']);
+      if (conversionRate !== undefined) {
+        step.conversionRate = conversionRate;
+      }
+
+      const abandonmentRate = getPercentageFromMap(lc, ['abandonment_rate', 'step_abandonment_rate', 'dropoff_rate']);
+      if (abandonmentRate !== undefined) {
+        step.abandonmentRate = abandonmentRate;
+      }
+
+      const overallConversionRate = getPercentageFromMap(lc, ['overall_conversion_rate', 'step_overall_conversion_rate']);
+      if (overallConversionRate !== undefined) {
+        step.overallConversionRate = overallConversionRate;
+      }
+
+      const avgTimeToConvert = getNumericFromMap(lc, ['avg_time_to_convert', 'avg_time']);
+      if (avgTimeToConvert !== undefined) {
+        step.avgTimeToConvert = avgTimeToConvert;
+      }
+
+      const medianTimeToConvert = getNumericFromMap(lc, ['median_time_to_convert', 'median_time']);
+      if (medianTimeToConvert !== undefined) {
+        step.medianTimeToConvert = medianTimeToConvert;
+      }
 
     const existing = map.get(key);
     if (!existing) {

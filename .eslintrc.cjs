@@ -30,6 +30,9 @@ module.exports = {
   ignorePatterns: ['dist/**/*'],
   rules: {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
+    'no-console': 'error',
+    'no-implied-eval': 'error',
+    'no-new-func': 'error',
     'import/order': ['warn', { 'newlines-between': 'always' }],
   },
   overrides: [

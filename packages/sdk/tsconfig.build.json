@@ -5,5 +5,8 @@
     "noEmit": false,
     "declaration": true,
     "emitDeclarationOnly": false
-  }
+  },
+  "references": [
+    { "path": "../logger" }
+  ]
 }
