@@ -5,9 +5,13 @@ import { fileURLToPath } from 'node:url';
 import type { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
-import { createMatomoClient, type TrackingQueueThresholds } from '@opalmind/sdk';
+import { logger as baseLogger, redactSecrets } from '@opalmind/logger';
+import { createMatomoClient, type TrackingQueueThresholds, type MatomoClientConfig } from '@opalmind/sdk';
 
 import { ValidationError, parseToolInvocation } from './validation.js';
+
+export const apiLogger = baseLogger.child({ package: '@opalmind/api' });
+const toolsLogger = apiLogger.child({ component: 'tools-service' });
 
 function constantTimeEqual(a: string, b: string): boolean {
   const length = Math.max(a.length, b.length);
@@ -24,20 +28,23 @@ function constantTimeEqual(a: string, b: string): boolean {
 
 function extractBearerToken(header: string | undefined): { scheme: string; token?: string } {
   if (!header) {
-    return { scheme: '', token: undefined };
+    return { scheme: '' };
   }
 
   const parts = header.split(/\s+/).filter(Boolean);
   if (parts.length === 0) {
-    return { scheme: '', token: undefined };
+    return { scheme: '' };
   }
 
-  const [scheme, ...rest] = parts;
+  const [rawScheme, ...rest] = parts as [string, ...string[]];
+  const scheme = rawScheme ?? '';
   const token = rest.join(' ').trim();
-  return {
-    scheme,
-    token: token.length > 0 ? token : undefined,
-  };
+
+  if (token.length > 0) {
+    return { scheme, token };
+  }
+
+  return { scheme };
 }
 
 function formatAuthChallenge(details: { error?: string; description?: string }): string {
@@ -319,11 +326,11 @@ function createRateLimiter(options: {
 }
 
 function logToolInfo(event: 'request' | 'success', details: Record<string, unknown>) {
-  console.info('[tools]', { event, ...details });
+  toolsLogger.info('tools', { event, ...details });
 }
 
 function logToolError(event: 'failure', details: Record<string, unknown>) {
-  console.error('[tools]', { event, ...details });
+  toolsLogger.error('tools', { event, ...details });
 }
 
 function determineErrorStatus(error: unknown): number {
@@ -340,25 +347,23 @@ function sanitizeErrorForLogs(error: unknown): { message?: string; status?: numb
     const status =
       typeof (error as { status?: unknown }).status === 'number' ? ((error as { status?: number }).status as number) : undefined;
     const code = (error as { code?: unknown }).code;
-    return {
-      message: redactTokens(error.message),
-      status,
-      code,
+    const result: { message?: string; status?: number; code?: unknown } = {
+      message: redactSecrets(error.message),
     };
+    if (status !== undefined) {
+      result.status = status;
+    }
+    if (code !== undefined) {
+      result.code = code;
+    }
+    return result;
   }
 
   if (typeof error === 'string') {
-    return { message: redactTokens(error) };
+    return { message: redactSecrets(error) };
   }
 
   return { message: 'Unknown error' };
-}
-
-function redactTokens(value: string): string {
-  return value
-    .replace(/token_auth=[^&#\s"]+/gi, 'token_auth=REDACTED')
-    .replace(/\btoken[\w-]*\s*[:=]\s*[^,\s]+/gi, match => `${match.split(/[:=]/)[0].trim()}=REDACTED`)
-    .replace(/Bearer\s+[A-Za-z0-9\-._~+/=]+/gi, 'Bearer REDACTED');
 }
 
 export function buildServer() {
@@ -475,17 +480,22 @@ export function buildServer() {
   if (cacheFailHitRate !== undefined) cacheHealthThresholds.failHitRate = cacheFailHitRate;
   if (cacheSampleSize !== undefined) cacheHealthThresholds.sampleSize = cacheSampleSize;
 
-  const matomoClient = createMatomoClient({
+  const trackingConfig: NonNullable<MatomoClientConfig['tracking']> = { baseUrl: matomoBaseUrl };
+  if (Object.keys(queueHealthThresholds).length > 0) {
+    trackingConfig.healthThresholds = queueHealthThresholds;
+  }
+
+  const clientConfig: MatomoClientConfig = {
     baseUrl: matomoBaseUrl,
     tokenAuth: matomoToken,
-    defaultSiteId,
-    tracking: {
-      baseUrl: matomoBaseUrl,
-      healthThresholds:
-        Object.keys(queueHealthThresholds).length > 0 ? queueHealthThresholds : undefined,
-    },
-    cacheHealth: Object.keys(cacheHealthThresholds).length > 0 ? cacheHealthThresholds : undefined,
-  });
+    tracking: trackingConfig,
+    ...(defaultSiteId !== undefined ? { defaultSiteId } : {}),
+    ...(Object.keys(cacheHealthThresholds).length > 0
+      ? { cacheHealth: cacheHealthThresholds }
+      : {}),
+  };
+
+  const matomoClient = createMatomoClient(clientConfig);
 
   const toolsService = new ToolsService(app);
   configureToolsServiceLogging(toolsService);
@@ -550,7 +560,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getKeyNumbers({ siteId, period, date, segment });
+      const request: Parameters<typeof matomoClient.getKeyNumbers>[0] = {};
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (period !== undefined) {
+        request.period = period;
+      }
+      if (date !== undefined) {
+        request.date = date;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      return matomoClient.getKeyNumbers(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-key-numbers'
@@ -561,7 +584,11 @@ export function buildServer() {
     'Runs connectivity and permission checks against the configured Matomo instance.',
     async (parameters: Record<string, unknown>) => {
       const siteId = parseOptionalNumber(parameters?.['siteId']);
-      return matomoClient.runDiagnostics({ siteId });
+      const request: Parameters<typeof matomoClient.runDiagnostics>[0] = {};
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      return matomoClient.runDiagnostics(request);
     },
     [siteIdParam],
     '/tools/diagnose-matomo'
@@ -575,7 +602,11 @@ export function buildServer() {
     async (parameters: Record<string, unknown>) => {
       const siteId = parseOptionalNumber(parameters?.['siteId']);
       const includeDetails = Boolean(parameters?.['includeDetails']);
-      return matomoClient.getHealthStatus({ siteId, includeDetails });
+      const request: Parameters<typeof matomoClient.getHealthStatus>[0] = { includeDetails };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      return matomoClient.getHealthStatus(request);
     },
     [siteIdParam, includeDetailsParam],
     '/tools/get-health-status'
@@ -593,12 +624,17 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getKeyNumbersSeries({
-        siteId,
+      const request: Parameters<typeof matomoClient.getKeyNumbersSeries>[0] = {
         period: period ?? 'day',
         date: date ?? 'last7',
-        segment,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      return matomoClient.getKeyNumbersSeries(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-key-numbers-historical'
@@ -617,7 +653,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getMostPopularUrls({ siteId, period: period ?? 'day', date: date ?? 'today', segment, limit });
+      const request: Parameters<typeof matomoClient.getMostPopularUrls>[0] = {
+        period: period ?? 'day',
+        date: date ?? 'today',
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getMostPopularUrls(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-most-popular-urls'
@@ -636,7 +685,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getTopReferrers({ siteId, period: period ?? 'day', date: date ?? 'today', segment, limit });
+      const request: Parameters<typeof matomoClient.getTopReferrers>[0] = {
+        period: period ?? 'day',
+        date: date ?? 'today',
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getTopReferrers(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-top-referrers'
@@ -655,13 +717,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getEntryPages({
-        siteId,
+      const request: Parameters<typeof matomoClient.getEntryPages>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getEntryPages(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-entry-pages'
@@ -680,13 +749,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getCampaigns({
-        siteId,
+      const request: Parameters<typeof matomoClient.getCampaigns>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getCampaigns(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-campaigns'
@@ -704,12 +780,17 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getEcommerceOverview({
-        siteId,
+      const request: Parameters<typeof matomoClient.getEcommerceOverview>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      return matomoClient.getEcommerceOverview(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-ecommerce-overview'
@@ -734,13 +815,20 @@ export function buildServer() {
           ? includeSeriesValue.toLowerCase() === 'true'
           : undefined;
 
-      return matomoClient.getEcommerceRevenueTotals({
-        siteId,
+      const request: Parameters<typeof matomoClient.getEcommerceRevenueTotals>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        includeSeries,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (includeSeries !== undefined) {
+        request.includeSeries = includeSeries;
+      }
+      return matomoClient.getEcommerceRevenueTotals(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, includeSeriesParam],
     '/tools/get-ecommerce-revenue'
@@ -760,14 +848,23 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getTrafficChannels({
-        siteId,
+      const request: Parameters<typeof matomoClient.getTrafficChannels>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-        channelType,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      if (channelType !== undefined) {
+        request.channelType = channelType;
+      }
+      return matomoClient.getTrafficChannels(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, channelTypeParam],
     '/tools/get-traffic-channels'
@@ -792,15 +889,26 @@ export function buildServer() {
       const goalIdString = parseOptionalString(goalIdValue);
       const goalId = goalIdString ?? goalIdNumeric;
 
-      return matomoClient.getGoalConversions({
-        siteId,
+      const request: Parameters<typeof matomoClient.getGoalConversions>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-        goalId,
-        goalType,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      if (goalId !== undefined) {
+        request.goalId = goalId;
+      }
+      if (goalType !== undefined) {
+        request.goalType = goalType;
+      }
+      return matomoClient.getGoalConversions(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, goalFilterIdParam, goalTypeFilterParam],
     '/tools/get-goal-conversions'
@@ -827,13 +935,18 @@ export function buildServer() {
         throw new Error('funnelId is required');
       }
 
-      return matomoClient.getFunnelSummary({
-        siteId,
+      const request: Parameters<typeof matomoClient.getFunnelSummary>[0] = {
         funnelId,
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      return matomoClient.getFunnelSummary(request);
     },
     [siteIdParam, funnelIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-funnel-analytics'
@@ -855,16 +968,29 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getEvents({
-        siteId,
+      const request: Parameters<typeof matomoClient.getEvents>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-        category,
-        action,
-        name,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      if (category !== undefined) {
+        request.category = category;
+      }
+      if (action !== undefined) {
+        request.action = action;
+      }
+      if (name !== undefined) {
+        request.name = name;
+      }
+      return matomoClient.getEvents(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam, eventCategoryFilterParam, eventActionFilterParam, eventNameFilterParam],
     '/tools/get-events'
@@ -883,13 +1009,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getEventCategories({
-        siteId,
+      const request: Parameters<typeof matomoClient.getEventCategories>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getEventCategories(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-event-categories'
@@ -908,13 +1041,20 @@ export function buildServer() {
       const date = typeof dateValue === 'string' ? dateValue : undefined;
       const segment = typeof segmentValue === 'string' ? segmentValue : undefined;
 
-      return matomoClient.getDeviceTypes({
-        siteId,
+      const request: Parameters<typeof matomoClient.getDeviceTypes>[0] = {
         period: period ?? 'day',
         date: date ?? 'today',
-        segment,
-        limit,
-      });
+      };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (segment !== undefined) {
+        request.segment = segment;
+      }
+      if (limit !== undefined) {
+        request.limit = limit;
+      }
+      return matomoClient.getDeviceTypes(request);
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-device-types'
@@ -933,16 +1073,29 @@ export function buildServer() {
       const referrer = parseOptionalString(parameters?.['referrer']);
       const timestamp = parseOptionalNumber(parameters?.['timestamp']);
 
-      const result = await matomoClient.trackPageview({
-        siteId,
-        url,
-        actionName,
-        pvId,
-        visitorId,
-        uid,
-        referrer,
-        ts: timestamp,
-      });
+      const request: Parameters<typeof matomoClient.trackPageview>[0] = { url };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (actionName !== undefined) {
+        request.actionName = actionName;
+      }
+      if (pvId !== undefined) {
+        request.pvId = pvId;
+      }
+      if (visitorId !== undefined) {
+        request.visitorId = visitorId;
+      }
+      if (uid !== undefined) {
+        request.uid = uid;
+      }
+      if (referrer !== undefined) {
+        request.referrer = referrer;
+      }
+      if (timestamp !== undefined) {
+        request.ts = timestamp;
+      }
+      const result = await matomoClient.trackPageview(request);
 
       return { ok: result.ok, status: result.status, pvId: result.pvId };
     },
@@ -974,18 +1127,32 @@ export function buildServer() {
       const referrer = parseOptionalString(parameters?.['referrer']);
       const timestamp = parseOptionalNumber(parameters?.['timestamp']);
 
-      const result = await matomoClient.trackEvent({
-        siteId,
-        category,
-        action,
-        name,
-        value,
-        url,
-        visitorId,
-        uid,
-        referrer,
-        ts: timestamp,
-      });
+      const request: Parameters<typeof matomoClient.trackEvent>[0] = { category, action };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (name !== undefined) {
+        request.name = name;
+      }
+      if (value !== undefined) {
+        request.value = value;
+      }
+      if (url !== undefined) {
+        request.url = url;
+      }
+      if (visitorId !== undefined) {
+        request.visitorId = visitorId;
+      }
+      if (uid !== undefined) {
+        request.uid = uid;
+      }
+      if (referrer !== undefined) {
+        request.referrer = referrer;
+      }
+      if (timestamp !== undefined) {
+        request.ts = timestamp;
+      }
+      const result = await matomoClient.trackEvent(request);
 
       return { ok: result.ok, status: result.status };
     },
@@ -1017,16 +1184,29 @@ export function buildServer() {
       const referrer = parseOptionalString(parameters?.['referrer']);
       const timestamp = parseOptionalNumber(parameters?.['timestamp']);
 
-      const result = await matomoClient.trackGoal({
-        siteId,
-        goalId,
-        revenue,
-        url,
-        visitorId,
-        uid,
-        referrer,
-        ts: timestamp,
-      });
+      const request: Parameters<typeof matomoClient.trackGoal>[0] = { goalId };
+      if (siteId !== undefined) {
+        request.siteId = siteId;
+      }
+      if (revenue !== undefined) {
+        request.revenue = revenue;
+      }
+      if (url !== undefined) {
+        request.url = url;
+      }
+      if (visitorId !== undefined) {
+        request.visitorId = visitorId;
+      }
+      if (uid !== undefined) {
+        request.uid = uid;
+      }
+      if (referrer !== undefined) {
+        request.referrer = referrer;
+      }
+      if (timestamp !== undefined) {
+        request.ts = timestamp;
+      }
+      const result = await matomoClient.trackGoal(request);
 
       return { ok: result.ok, status: result.status };
     },
@@ -1078,7 +1258,7 @@ export function buildServer() {
     }
 
     if (err instanceof ValidationError) {
-      res.status(err.status).json({ error: redactTokens(err.message) });
+      res.status(err.status).json({ error: redactSecrets(err.message) });
       return;
     }
 
@@ -1106,7 +1286,7 @@ export function buildServer() {
         ? ((err as { message: string }).message as string)
         : 'Internal server error';
 
-    res.status(status).json({ error: redactTokens(message) });
+    res.status(status).json({ error: redactSecrets(message) });
   });
 
   return app;
@@ -1120,8 +1300,7 @@ async function start() {
   return new Promise<void>((resolve, reject) => {
     app
       .listen(port, host, () => {
-        // eslint-disable-next-line no-console
-        console.log(`Server listening on http://${host}:${port}`);
+        apiLogger.info('server listening', { host, port });
         resolve();
       })
       .on('error', reject);
@@ -1132,8 +1311,7 @@ const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   start().catch(err => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    apiLogger.error('failed to start server', { error: err });
     process.exit(1);
   });
 }

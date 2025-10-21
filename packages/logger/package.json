@@ -1,0 +1,13 @@
+{
+  "name": "@opalmind/logger",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint 'src/**/*.ts'",
+    "test": "echo 'No tests for logger package'",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

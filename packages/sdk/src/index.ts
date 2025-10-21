@@ -1,9 +1,12 @@
+import { logger as baseLogger } from '@opalmind/logger';
+
 import {
   MatomoHttpClient,
   matomoGet,
   type MatomoRateLimitEvent,
   type MatomoRateLimitOptions,
   type MatomoRetryOptions,
+  type MatomoHttpClientOptions,
 } from './httpClient.js';
 import {
   ReportsService,
@@ -42,8 +45,11 @@ import {
   type TrackingIdempotencyStore,
   type TrackingQueueStats,
   type TrackingBackoffOptions,
+  type TrackingOptions,
 } from './tracking.js';
 import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
+
+const sdkLogger = baseLogger.child({ package: '@opalmind/sdk' });
 
 export interface CacheConfig {
   ttlMs?: number;
@@ -332,12 +338,15 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
 
 function toDiagnosticError(error: unknown): MatomoDiagnosticError {
   if (error instanceof MatomoApiError) {
-    return {
+    const diagnostic: MatomoDiagnosticError = {
       type: error instanceof MatomoNetworkError ? 'network' : 'matomo',
       message: error.message,
-      code: error.code,
       guidance: error.guidance,
     };
+    if (typeof error.code === 'string' || typeof error.code === 'number') {
+      diagnostic.code = error.code;
+    }
+    return diagnostic;
   }
 
   if (error instanceof Error) {
@@ -412,10 +421,14 @@ async function fetchMatomoVersionWithFallback(
     const payload = await matomoGet<unknown>(http, {
       method: 'API.getMatomoVersion',
     });
-    return {
-      version: extractMatomoVersion(payload),
+    const version = extractMatomoVersion(payload);
+    const result: { version?: string; method: MatomoVersionMethod } = {
       method: 'API.getMatomoVersion',
     };
+    if (version !== undefined) {
+      result.version = version;
+    }
+    return result;
   } catch (error) {
     if (!isMatomoMethodUnavailable(error, 'getmatomoversion')) {
       throw error;
@@ -425,10 +438,14 @@ async function fetchMatomoVersionWithFallback(
       method: 'API.getVersion',
     });
 
-    return {
-      version: extractMatomoVersion(payload),
+    const version = extractMatomoVersion(payload);
+    const result: { version?: string; method: MatomoVersionMethod } = {
       method: 'API.getVersion',
     };
+    if (version !== undefined) {
+      result.version = version;
+    }
+    return result;
   }
 }
 
@@ -470,10 +487,14 @@ async function fetchMatomoUserWithFallback(
     const payload = await matomoGet<unknown>(http, {
       method: 'UsersManager.getUserByTokenAuth',
     });
-    return {
-      login: extractMatomoUserLogin(payload),
+    const login = extractMatomoUserLogin(payload);
+    const result: { login?: string; method: MatomoUserMethod } = {
       method: 'UsersManager.getUserByTokenAuth',
     };
+    if (login !== undefined) {
+      result.login = login;
+    }
+    return result;
   } catch (error) {
     if (
       !isMatomoMethodUnavailable(error, 'getuserbytokenauth') &&
@@ -487,10 +508,14 @@ async function fetchMatomoUserWithFallback(
     method: 'API.getLoggedInUser',
   });
 
-  return {
-    login: extractMatomoUserLogin(payload),
+  const login = extractMatomoUserLogin(payload);
+  const result: { login?: string; method: MatomoUserMethod } = {
     method: 'API.getLoggedInUser',
   };
+  if (login !== undefined) {
+    result.login = login;
+  }
+  return result;
 }
 
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
@@ -503,29 +528,40 @@ export class MatomoClient {
   private readonly http: MatomoHttpClient;
   private readonly reports: ReportsService;
   private readonly tracking: TrackingService;
-  private readonly defaultSiteId?: number;
+  private readonly defaultSiteId: number | undefined;
   private readonly queueThresholds: TrackingQueueThresholds;
   private readonly cacheThresholds: CacheHealthThresholds;
 
   constructor(config: MatomoClientConfig) {
-    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, {
-      rateLimit: config.rateLimit,
-      timeoutMs: config.http?.timeoutMs,
-      retry: config.http?.retry,
-    });
-    const reportsOptions: ReportsServiceOptions = {
-      cacheTtlMs: config.cache?.ttlMs ?? config.cacheTtlMs,
-      onCacheEvent: config.cache?.onEvent,
+    const httpOptions: MatomoHttpClientOptions = {
+      ...(config.rateLimit ? { rateLimit: config.rateLimit } : {}),
+      ...(config.http?.timeoutMs !== undefined ? { timeoutMs: config.http.timeoutMs } : {}),
+      ...(config.http?.retry ? { retry: config.http.retry } : {}),
     };
+    this.http = new MatomoHttpClient(config.baseUrl, config.tokenAuth, httpOptions);
+
+    const reportsOptions: ReportsServiceOptions = {};
+    const cacheTtl = config.cache?.ttlMs ?? config.cacheTtlMs;
+    if (cacheTtl !== undefined) {
+      reportsOptions.cacheTtlMs = cacheTtl;
+    }
+    if (config.cache?.onEvent) {
+      reportsOptions.onCacheEvent = config.cache.onEvent;
+    }
     this.reports = new ReportsService(this.http, reportsOptions);
-    this.tracking = new TrackingService({
+
+    const trackingOptions = {
       baseUrl: config.tracking?.baseUrl ?? config.baseUrl,
       tokenAuth: config.tokenAuth,
-      maxRetries: config.tracking?.maxRetries,
-      retryDelayMs: config.tracking?.retryDelayMs,
-      idempotencyStore: config.tracking?.idempotencyStore,
-      backoff: config.tracking?.backoff,
-    });
+      ...(config.tracking?.maxRetries !== undefined ? { maxRetries: config.tracking.maxRetries } : {}),
+      ...(config.tracking?.retryDelayMs !== undefined ? { retryDelayMs: config.tracking.retryDelayMs } : {}),
+      ...(config.tracking?.idempotencyStore
+        ? { idempotencyStore: config.tracking.idempotencyStore }
+        : {}),
+      ...(config.tracking?.backoff ? { backoff: config.tracking.backoff } : {}),
+    } satisfies TrackingOptions;
+
+    this.tracking = new TrackingService(trackingOptions);
     this.defaultSiteId = config.defaultSiteId;
 
     const thresholds = config.tracking?.healthThresholds ?? {};
@@ -610,8 +646,12 @@ export class MatomoClient {
     } catch (error) {
       // swallow errors; nb_actions will still be returned
       if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to fetch pageview summary from Actions.get', error);
+        sdkLogger.warn('Failed to fetch pageview summary from Actions.get', {
+          error,
+          siteId,
+          period: input.period ?? 'day',
+          date: input.date ?? 'today',
+        });
       }
     }
 
@@ -681,134 +721,211 @@ export class MatomoClient {
     input: Omit<Parameters<ReportsService['getMostPopularUrls']>[0], 'siteId'> & { siteId?: number }
   ): Promise<MostPopularUrl[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getMostPopularUrls({ ...input, siteId });
+    const request: Parameters<ReportsService['getMostPopularUrls']>[0] = {
+      siteId,
+      period: input.period,
+      date: input.date,
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getMostPopularUrls(request);
   }
 
   async getTopReferrers(
     input: Omit<Parameters<ReportsService['getTopReferrers']>[0], 'siteId'> & { siteId?: number }
   ): Promise<TopReferrer[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getTopReferrers({ ...input, siteId });
+    const request: Parameters<ReportsService['getTopReferrers']>[0] = {
+      siteId,
+      period: input.period,
+      date: input.date,
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getTopReferrers(request);
   }
 
   async getEvents(input: GetEventsInput = {}): Promise<EventSummary[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getEvents({
+    const request: Parameters<ReportsService['getEvents']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-      category: input.category,
-      action: input.action,
-      name: input.name,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    if (input.category !== undefined) {
+      request.category = input.category;
+    }
+    if (input.action !== undefined) {
+      request.action = input.action;
+    }
+    if (input.name !== undefined) {
+      request.name = input.name;
+    }
+    return this.reports.getEvents(request);
   }
 
   async getEntryPages(input: GetEntryPagesInput = {}): Promise<EntryPage[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getEntryPages({
+    const request: Parameters<ReportsService['getEntryPages']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getEntryPages(request);
   }
 
   async getCampaigns(input: GetCampaignsInput = {}): Promise<Campaign[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getCampaigns({
+    const request: Parameters<ReportsService['getCampaigns']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getCampaigns(request);
   }
 
   async getEcommerceOverview(input: GetEcommerceOverviewInput = {}): Promise<EcommerceSummary> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getEcommerceOverview({
+    const request: Parameters<ReportsService['getEcommerceOverview']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    return this.reports.getEcommerceOverview(request);
   }
 
   async getEcommerceRevenueTotals(
     input: GetEcommerceRevenueTotalsInput = {}
   ): Promise<EcommerceRevenueTotals> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getEcommerceRevenueTotals({
+    const request: Parameters<ReportsService['getEcommerceRevenueTotals']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      includeSeries: input.includeSeries,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.includeSeries !== undefined) {
+      request.includeSeries = input.includeSeries;
+    }
+    return this.reports.getEcommerceRevenueTotals(request);
   }
 
   async getEventCategories(input: GetEventCategoriesInput = {}): Promise<EventCategory[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getEventCategories({
+    const request: Parameters<ReportsService['getEventCategories']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getEventCategories(request);
   }
 
   async getDeviceTypes(input: GetDeviceTypesInput = {}): Promise<DeviceTypeSummary[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getDeviceTypes({
+    const request: Parameters<ReportsService['getDeviceTypes']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    return this.reports.getDeviceTypes(request);
   }
 
   async getTrafficChannels(input: GetTrafficChannelsInput = {}): Promise<TrafficChannel[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getTrafficChannels({
+    const request: Parameters<ReportsService['getTrafficChannels']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-      channelType: input.channelType,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    if (input.channelType !== undefined) {
+      request.channelType = input.channelType;
+    }
+    return this.reports.getTrafficChannels(request);
   }
 
   async getGoalConversions(input: GetGoalConversionsInput = {}): Promise<GoalConversion[]> {
     const siteId = this.resolveSiteId(input.siteId);
-    return this.reports.getGoalConversions({
+    const request: Parameters<ReportsService['getGoalConversions']>[0] = {
       siteId,
       period: input.period ?? 'day',
       date: input.date ?? 'today',
-      segment: input.segment,
-      limit: input.limit,
-      goalId: input.goalId,
-      goalType: input.goalType,
-    });
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    if (input.limit !== undefined) {
+      request.limit = input.limit;
+    }
+    if (input.goalId !== undefined) {
+      request.goalId = input.goalId;
+    }
+    if (input.goalType !== undefined) {
+      request.goalType = input.goalType;
+    }
+    return this.reports.getGoalConversions(request);
   }
 
   async getFunnelSummary(input: GetFunnelSummaryInput): Promise<FunnelSummary> {
     const siteId = this.resolveSiteId(input.siteId);
-    const period = input.period ?? 'day';
-    const date = input.date ?? 'today';
-
-    return this.reports.getFunnelSummary({
+    const request: Parameters<ReportsService['getFunnelSummary']>[0] = {
       siteId,
       funnelId: input.funnelId,
-      period,
-      date,
-      segment: input.segment,
-    });
+      period: input.period ?? 'day',
+      date: input.date ?? 'today',
+    };
+    if (input.segment !== undefined) {
+      request.segment = input.segment;
+    }
+    return this.reports.getFunnelSummary(request);
   }
 
   getCacheStats(): CacheStatsSnapshot {

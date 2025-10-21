@@ -55,6 +55,10 @@ Thanks for taking the time to improve OpalMind! This guide walks you through the
 
 - Linting: `npm run lint --workspaces`
 - Type checks: `npm run typecheck --workspaces`
+- Logging: Use the shared `@opalmind/logger` utility for structured logging. Direct `console.*` calls are blocked by ESLint
+  except within the logger implementation and vetted CLI shims.
+- TypeScript strictness: The monorepo enables `noImplicitAny`, `exactOptionalPropertyTypes`, and
+  `noUncheckedIndexedAccess`. Address resulting type errors in-place instead of relaxing compiler settings.
 - Formatting: The project relies on Prettier defaults. When editing files, run `npx prettier --write <files>` as needed.
 - Tests: Always run the affected workspace tests before opening a PR.
   ```bash

@@ -60,8 +60,8 @@ interface QueueStats {
 }
 
 class MatomoTrackingError extends Error {
-  status?: number;
-  retryAfterMs?: number;
+  status: number | undefined;
+  retryAfterMs: number | undefined;
 
   constructor(
     message: string,
@@ -131,7 +131,15 @@ function extractBackoffInfo(error: unknown): { status?: number; retryAfterMs?: n
       ? ((error as { retryAfterMs?: number }).retryAfterMs as number)
       : undefined;
 
-  return { status, retryAfterMs: retryAfter };
+  const result: { status?: number; retryAfterMs?: number } = {};
+  if (status !== undefined) {
+    result.status = status;
+  }
+  if (retryAfter !== undefined) {
+    result.retryAfterMs = retryAfter;
+  }
+
+  return result;
 }
 
 interface IdempotencyRecord<T = unknown> {
@@ -214,7 +222,6 @@ class RetryQueue {
     const task: QueueTask = {
       attempt: 0,
       execute: run as (attempt: number) => Promise<unknown>,
-      key: idempotencyKey,
       enqueuedAt: Date.now(),
       resolve: async (value, attempts) => {
         if (idempotencyKey) {
@@ -236,6 +243,10 @@ class RetryQueue {
         rejectPromise(reason);
       },
     };
+
+    if (idempotencyKey !== undefined) {
+      task.key = idempotencyKey;
+    }
 
     if (idempotencyKey) {
       this.inflight.set(idempotencyKey, promise);
@@ -264,8 +275,9 @@ class RetryQueue {
         this.stats.totalProcessed += 1;
         this.stats.inflight = 0;
         this.stats.pending = this.queue.length;
-        this.stats.cooldownUntil = undefined;
-        this.stats.lastDelayMs = undefined;
+        delete this.stats.cooldownUntil;
+        delete this.stats.lastDelayMs;
+        delete this.stats.lastError;
         if (this.options.onSuccess) {
           this.options.onSuccess({ attempts });
         }
@@ -276,14 +288,16 @@ class RetryQueue {
         if (nextAttempt < this.options.maxRetries) {
           const delay = this.computeDelay(error, nextAttempt);
           this.stats.totalRetried += 1;
-          this.stats.lastError = errorInfo;
+          if (errorInfo) {
+            this.stats.lastError = errorInfo;
+          }
           this.stats.lastRetryAt = Date.now();
           this.stats.lastDelayMs = delay;
           if (delay > 0) {
             this.stats.cooldownUntil = Date.now() + delay;
             await sleep(delay);
           } else {
-            this.stats.cooldownUntil = undefined;
+            delete this.stats.cooldownUntil;
           }
 
           this.queue.push({
@@ -298,10 +312,14 @@ class RetryQueue {
           }
         } else {
           const attempts = task.attempt + 1;
-          this.stats.lastError = errorInfo;
+          if (errorInfo) {
+            this.stats.lastError = errorInfo;
+          } else {
+            delete this.stats.lastError;
+          }
           this.stats.inflight = 0;
           this.stats.pending = this.queue.length;
-          this.stats.cooldownUntil = undefined;
+          delete this.stats.cooldownUntil;
           await task.reject(error, attempts);
           if (this.options.onFailure) {
             this.options.onFailure({ attempts, error });
@@ -325,17 +343,30 @@ class RetryQueue {
           }, undefined)
         : undefined;
 
-    return {
+    const result: QueueStats = {
       pending: this.stats.pending,
       inflight: this.stats.inflight,
       totalProcessed: this.stats.totalProcessed,
       totalRetried: this.stats.totalRetried,
-      lastError: this.stats.lastError ? { ...this.stats.lastError } : undefined,
-      lastRetryAt: this.stats.lastRetryAt,
-      lastDelayMs: this.stats.lastDelayMs,
-      cooldownUntil: this.stats.cooldownUntil,
-      oldestPendingAt,
     };
+
+    if (this.stats.lastError) {
+      result.lastError = { ...this.stats.lastError };
+    }
+    if (this.stats.lastRetryAt !== undefined) {
+      result.lastRetryAt = this.stats.lastRetryAt;
+    }
+    if (this.stats.lastDelayMs !== undefined) {
+      result.lastDelayMs = this.stats.lastDelayMs;
+    }
+    if (this.stats.cooldownUntil !== undefined) {
+      result.cooldownUntil = this.stats.cooldownUntil;
+    }
+    if (oldestPendingAt !== undefined) {
+      result.oldestPendingAt = oldestPendingAt;
+    }
+
+    return result;
   }
 
   private computeDelay(error: unknown, attempt: number): number {
@@ -367,11 +398,14 @@ function extractErrorInfo(error: unknown): QueueStats['lastError'] | undefined {
       typeof (error as { status?: unknown }).status === 'number'
         ? ((error as { status?: number }).status as number)
         : undefined;
-    return {
+    const result: QueueStats['lastError'] = {
       message: error.message,
-      status,
       timestamp,
     };
+    if (status !== undefined) {
+      result.status = status;
+    }
+    return result;
   }
 
   if (typeof error === 'string') {
@@ -383,11 +417,14 @@ function extractErrorInfo(error: unknown): QueueStats['lastError'] | undefined {
       typeof (error as { status?: unknown }).status === 'number'
         ? ((error as { status?: number }).status as number)
         : undefined;
-    return {
+    const result: QueueStats['lastError'] = {
       message: 'Unknown error',
-      status,
       timestamp,
     };
+    if (status !== undefined) {
+      result.status = status;
+    }
+    return result;
   }
 
   return { message: 'Unknown error', timestamp };
@@ -480,19 +517,21 @@ export type TrackingIdempotencyStore = IdempotencyStore<TrackResult>;
 
 export class TrackingService {
   private readonly trackingUrl: string;
-  private readonly tokenAuth?: string;
+  private readonly tokenAuth: string | undefined;
   private readonly queue: RetryQueue;
   private readonly backoff: Required<TrackingBackoffOptions>;
   private readonly metrics: {
     totalRequests: number;
     totalRetries: number;
     lastBackoffMs: number;
-    lastRetryStatus?: number;
-    lastRetryAt?: number;
+    lastRetryStatus: number | undefined;
+    lastRetryAt: number | undefined;
   } = {
     totalRequests: 0,
     totalRetries: 0,
     lastBackoffMs: 0,
+    lastRetryStatus: undefined,
+    lastRetryAt: undefined,
   };
 
   constructor(options: TrackingOptions) {
@@ -509,48 +548,82 @@ export class TrackingService {
     };
 
     const maxRetries = options.maxRetries ?? 4;
-    this.queue = new RetryQueue({
+    const queueOptions: QueueOptions = {
       maxRetries,
       retryDelayMs: this.backoff.baseDelayMs,
-      idempotencyStore: options.idempotencyStore,
       computeDelayMs: ({ attempt, error }) => this.computeBackoffDelay(attempt, error),
       onRetry: event => this.recordRetry(event),
       onFailure: event => this.recordFailure(event),
       onSuccess: event => this.recordSuccess(event),
-    });
+    };
+    if (options.idempotencyStore) {
+      queueOptions.idempotencyStore = options.idempotencyStore;
+    }
+    this.queue = new RetryQueue(queueOptions);
   }
 
   getQueueStats(): TrackingQueueStats {
     const stats = this.queue.getStats();
-    return {
+    const result: TrackingQueueStats = {
       pending: stats.pending,
       inflight: stats.inflight,
       totalProcessed: stats.totalProcessed,
       totalRetried: stats.totalRetried,
-      lastError: stats.lastError,
-      lastRetryAt: stats.lastRetryAt,
       lastBackoffMs: this.metrics.lastBackoffMs,
-      cooldownUntil: stats.cooldownUntil,
-      lastRetryStatus: this.metrics.lastRetryStatus,
-      oldestPendingAt: stats.oldestPendingAt,
     };
+
+    if (stats.lastError) {
+      result.lastError = stats.lastError;
+    }
+    if (stats.lastRetryAt !== undefined) {
+      result.lastRetryAt = stats.lastRetryAt;
+    }
+    if (stats.cooldownUntil !== undefined) {
+      result.cooldownUntil = stats.cooldownUntil;
+    }
+    if (this.metrics.lastRetryStatus !== undefined) {
+      result.lastRetryStatus = this.metrics.lastRetryStatus;
+    }
+    if (stats.oldestPendingAt !== undefined) {
+      result.oldestPendingAt = stats.oldestPendingAt;
+    }
+
+    return result;
   }
 
   async trackPageview(input: TrackPageviewInput): Promise<TrackPageviewResult> {
     const pvId = input.pvId ?? generatePvId();
     const idempotencyKey = input.idempotencyKey ?? pvId;
 
-    const params = this.buildBaseParams({
+    const baseInput: Parameters<TrackingService['buildBaseParams']>[0] = {
       idSite: input.siteId,
-      url: input.url,
-      visitorId: input.visitorId,
-      uid: input.uid,
-      ts: input.ts,
-      referrer: input.referrer,
-      userAgent: input.userAgent,
-      language: input.language,
-      customVars: input.customVars,
-    });
+    };
+    if (input.url !== undefined) {
+      baseInput.url = input.url;
+    }
+    if (input.visitorId !== undefined) {
+      baseInput.visitorId = input.visitorId;
+    }
+    if (input.uid !== undefined) {
+      baseInput.uid = input.uid;
+    }
+    if (input.ts !== undefined) {
+      baseInput.ts = input.ts;
+    }
+    if (input.referrer !== undefined) {
+      baseInput.referrer = input.referrer;
+    }
+    if (input.userAgent !== undefined) {
+      baseInput.userAgent = input.userAgent;
+    }
+    if (input.language !== undefined) {
+      baseInput.language = input.language;
+    }
+    if (input.customVars !== undefined) {
+      baseInput.customVars = input.customVars;
+    }
+
+    const params = this.buildBaseParams(baseInput);
 
     params.set('action_name', input.actionName ?? input.url);
     params.set('pv_id', pvId);
@@ -561,17 +634,35 @@ export class TrackingService {
 
   async trackEvent(input: TrackEventInput): Promise<TrackResult> {
     const idempotencyKey = input.idempotencyKey ?? generateIdempotencyKey();
-    const params = this.buildBaseParams({
+    const baseInput: Parameters<TrackingService['buildBaseParams']>[0] = {
       idSite: input.siteId,
-      url: input.url,
-      visitorId: input.visitorId,
-      uid: input.uid,
-      ts: input.ts,
-      referrer: input.referrer,
-      userAgent: input.userAgent,
-      language: input.language,
-      customVars: input.customVars,
-    });
+    };
+    if (input.url !== undefined) {
+      baseInput.url = input.url;
+    }
+    if (input.visitorId !== undefined) {
+      baseInput.visitorId = input.visitorId;
+    }
+    if (input.uid !== undefined) {
+      baseInput.uid = input.uid;
+    }
+    if (input.ts !== undefined) {
+      baseInput.ts = input.ts;
+    }
+    if (input.referrer !== undefined) {
+      baseInput.referrer = input.referrer;
+    }
+    if (input.userAgent !== undefined) {
+      baseInput.userAgent = input.userAgent;
+    }
+    if (input.language !== undefined) {
+      baseInput.language = input.language;
+    }
+    if (input.customVars !== undefined) {
+      baseInput.customVars = input.customVars;
+    }
+
+    const params = this.buildBaseParams(baseInput);
 
     params.set('e_c', input.category);
     params.set('e_a', input.action);
@@ -583,17 +674,35 @@ export class TrackingService {
 
   async trackGoal(input: TrackGoalInput): Promise<TrackResult> {
     const idempotencyKey = input.idempotencyKey ?? generateIdempotencyKey();
-    const params = this.buildBaseParams({
+    const baseInput: Parameters<TrackingService['buildBaseParams']>[0] = {
       idSite: input.siteId,
-      url: input.url,
-      visitorId: input.visitorId,
-      uid: input.uid,
-      ts: input.ts,
-      referrer: input.referrer,
-      userAgent: input.userAgent,
-      language: input.language,
-      customVars: input.customVars,
-    });
+    };
+    if (input.url !== undefined) {
+      baseInput.url = input.url;
+    }
+    if (input.visitorId !== undefined) {
+      baseInput.visitorId = input.visitorId;
+    }
+    if (input.uid !== undefined) {
+      baseInput.uid = input.uid;
+    }
+    if (input.ts !== undefined) {
+      baseInput.ts = input.ts;
+    }
+    if (input.referrer !== undefined) {
+      baseInput.referrer = input.referrer;
+    }
+    if (input.userAgent !== undefined) {
+      baseInput.userAgent = input.userAgent;
+    }
+    if (input.language !== undefined) {
+      baseInput.language = input.language;
+    }
+    if (input.customVars !== undefined) {
+      baseInput.customVars = input.customVars;
+    }
+
+    const params = this.buildBaseParams(baseInput);
 
     params.set('idgoal', String(input.goalId));
     if (typeof input.revenue === 'number') {
@@ -698,12 +807,16 @@ export class TrackingService {
             parseRetryAfterHeader(headers.get('Retry-After')) ??
             parseRateLimitResetHeader(headers.get('X-Matomo-Rate-Limit-Reset'));
 
+          const errorDetails: { status: number; retryAfterMs?: number } = {
+            status: response.status,
+          };
+          if (retryAfterMs !== undefined) {
+            errorDetails.retryAfterMs = retryAfterMs;
+          }
+
           throw new MatomoTrackingError(
             `Matomo tracking request failed (${response.status} ${response.statusText})`,
-            {
-              status: response.status,
-              retryAfterMs,
-            }
+            errorDetails
           );
         }
 

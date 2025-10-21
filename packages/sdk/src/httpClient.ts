@@ -8,6 +8,7 @@ import {
   classifyMatomoResultError,
   extractMatomoError,
   type MatomoRateLimitInfo,
+  type MatomoHttpErrorContext,
 } from './errors.js';
 
 export interface MatomoRequestOptions {
@@ -158,14 +159,14 @@ export class MatomoHttpClient {
   private readonly baseEndpoint: string;
   private readonly token: string;
   private readonly rateLimitMinDelayMs: number;
-  private readonly onRateLimit?: (event: MatomoRateLimitEvent) => void;
+  private readonly onRateLimit: ((event: MatomoRateLimitEvent) => void) | undefined;
   private readonly timeoutMs: number;
   private readonly retryMaxAttempts: number;
   private readonly retryBaseDelayMs: number;
   private readonly retryMaxDelayMs: number;
   private readonly retryJitterMs: number;
   private rateLimitCooldownUntil = 0;
-  private lastRateLimitEvent?: MatomoRateLimitEvent;
+  private lastRateLimitEvent: MatomoRateLimitEvent | undefined;
 
   constructor(baseUrl: string, tokenAuth: string, options: MatomoHttpClientOptions = {}) {
     this.baseEndpoint = normalizeBaseUrl(baseUrl);
@@ -245,14 +246,22 @@ export class MatomoHttpClient {
         });
       }
 
-      throw classifyMatomoError({
+      const errorContext: MatomoHttpErrorContext = {
         status: res.status,
         statusText: res.statusText,
         endpoint: redactedEndpoint,
-        bodyText,
-        payload,
-        rateLimit: rateLimitFromHeaders,
-      });
+      };
+      if (bodyText !== undefined) {
+        errorContext.bodyText = bodyText;
+      }
+      if (payload !== undefined) {
+        errorContext.payload = payload;
+      }
+      if (rateLimitFromHeaders !== undefined) {
+        errorContext.rateLimit = rateLimitFromHeaders;
+      }
+
+      throw classifyMatomoError(errorContext);
     }
 
     if (payload && typeof payload === 'object') {
@@ -260,9 +269,11 @@ export class MatomoHttpClient {
       if (extracted) {
         const error = classifyMatomoResultError(redactedEndpoint, payload, rateLimitFromHeaders);
         if (error instanceof MatomoRateLimitError) {
-          this.applyRateLimit(rateLimitFromHeaders, 'payload', {
-            message: extracted.message,
-          });
+          const payloadMeta: { status?: number; message?: string } = {};
+          if (extracted.message !== undefined) {
+            payloadMeta.message = extracted.message;
+          }
+          this.applyRateLimit(rateLimitFromHeaders, 'payload', payloadMeta);
         }
         throw error;
       }
@@ -272,10 +283,20 @@ export class MatomoHttpClient {
       if (rateLimitFromHeaders.remaining <= 0) {
         this.applyRateLimit(rateLimitFromHeaders, 'response-headers');
       } else {
-        this.lastRateLimitEvent = {
-          ...rateLimitFromHeaders,
-          source: 'response-headers',
-        };
+        const lastEvent: MatomoRateLimitEvent = { source: 'response-headers' };
+        if (rateLimitFromHeaders.limit !== undefined) {
+          lastEvent.limit = rateLimitFromHeaders.limit;
+        }
+        if (rateLimitFromHeaders.remaining !== undefined) {
+          lastEvent.remaining = rateLimitFromHeaders.remaining;
+        }
+        if (rateLimitFromHeaders.resetAt !== undefined) {
+          lastEvent.resetAt = rateLimitFromHeaders.resetAt;
+        }
+        if (rateLimitFromHeaders.retryAfterMs !== undefined) {
+          lastEvent.retryAfterMs = rateLimitFromHeaders.retryAfterMs;
+        }
+        this.lastRateLimitEvent = lastEvent;
       }
     }
 
@@ -303,12 +324,25 @@ export class MatomoHttpClient {
     source: MatomoRateLimitEvent['source'],
     meta: { status?: number; message?: string } = {}
   ): void {
-    const event: MatomoRateLimitEvent = {
-      ...info,
-      source,
-      status: meta.status,
-      message: meta.message,
-    };
+    const event: MatomoRateLimitEvent = { source };
+    if (info?.limit !== undefined) {
+      event.limit = info.limit;
+    }
+    if (info?.remaining !== undefined) {
+      event.remaining = info.remaining;
+    }
+    if (info?.resetAt !== undefined) {
+      event.resetAt = info.resetAt;
+    }
+    if (info?.retryAfterMs !== undefined) {
+      event.retryAfterMs = info.retryAfterMs;
+    }
+    if (meta.status !== undefined) {
+      event.status = meta.status;
+    }
+    if (meta.message !== undefined) {
+      event.message = meta.message;
+    }
 
     const shouldThrottle = this.shouldThrottle(event);
 
