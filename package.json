@@ -8,9 +8,9 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "npm run build --workspace=@opalmind/logger && npm run --workspaces --if-present test",
     "typecheck": "npm run typecheck --workspaces",
-    "test:ci": "npm run test --workspaces -- --run",
+    "test:ci": "npm run build --workspace=@opalmind/logger && npm run --workspaces --if-present test -- --run",
     "clean": "rimraf node_modules packages/*/node_modules"
   },
   "devDependencies": {
