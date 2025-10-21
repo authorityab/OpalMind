@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@opalmind/sdk': resolve(__dirname, '../sdk/src'),
+      '@opalmind/logger': resolve(__dirname, '../logger/src'),
     },
   },
   test: {

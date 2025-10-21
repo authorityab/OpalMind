@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, Response, Router } from 'express';
@@ -295,18 +296,32 @@ function preventHttpParameterPollution(req: Request, _res: Response, next: NextF
   next();
 }
 
+function hashToken(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
 function createRateLimiter(options: {
   windowMs: number;
   max: number;
   message: string;
-  useTokenKey?: boolean;
+  keyGenerator?: (req: Request) => string;
 }): (req: Request, res: Response, next: NextFunction) => void {
   const buckets = new Map<string, { count: number; expiresAt: number }>();
+  let lastCleanup = 0;
 
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
-    const token = options.useTokenKey && typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-    const key = `${req.ip ?? 'unknown'}:${token}`;
+
+    if (now - lastCleanup >= options.windowMs) {
+      lastCleanup = now;
+      for (const [bucketKey, entry] of buckets) {
+        if (entry.expiresAt <= now) {
+          buckets.delete(bucketKey);
+        }
+      }
+    }
+
+    const key = options.keyGenerator ? options.keyGenerator(req) : req.ip ?? 'unknown';
     const entry = buckets.get(key);
 
     if (!entry || entry.expiresAt <= now) {
@@ -388,31 +403,10 @@ export function buildServer() {
     })
   );
 
-  const rateLimitWindowMs = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_WINDOW_MS', 60_000);
-  const rateLimitMax = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_MAX', 60);
-  const trackRateLimitMax = parsePositiveIntegerEnv('OPAL_TRACK_RATE_LIMIT_MAX', 120);
-
-  const generalLimiter = createRateLimiter({
-    windowMs: rateLimitWindowMs,
-    max: rateLimitMax,
-    message: 'Too many requests, please try again later.',
-  });
-
-  const trackingLimiter = createRateLimiter({
-    windowMs: rateLimitWindowMs,
-    max: trackRateLimitMax,
-    message: 'Too many tracking requests, please try again later.',
-    useTokenKey: true,
-  });
-
-  app.use('/tools', generalLimiter);
-  app.use('/track', trackingLimiter);
-
   const bearerToken = process.env.OPAL_BEARER_TOKEN?.trim();
   if (!bearerToken || bearerToken === 'change-me') {
     throw new Error('OPAL_BEARER_TOKEN must be set to a non-default value before starting the service.');
   }
-  const normalizedBearerToken = bearerToken.toLowerCase();
 
   const matomoBaseUrl = process.env.MATOMO_BASE_URL?.trim();
   if (!matomoBaseUrl) {
@@ -431,6 +425,40 @@ export function buildServer() {
   if (defaultSiteIdEnv && (Number.isNaN(defaultSiteId) || !Number.isFinite(defaultSiteId))) {
     throw new Error('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
   }
+
+  const rateLimitWindowMs = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_WINDOW_MS', 60_000);
+  const rateLimitMax = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_MAX', 60);
+  const trackRateLimitMax = parsePositiveIntegerEnv('OPAL_TRACK_RATE_LIMIT_MAX', 120);
+
+  const generalLimiter = createRateLimiter({
+    windowMs: rateLimitWindowMs,
+    max: rateLimitMax,
+    message: 'Too many requests, please try again later.',
+  });
+
+  const trackingLimiter = createRateLimiter({
+    windowMs: rateLimitWindowMs,
+    max: trackRateLimitMax,
+    message: 'Too many tracking requests, please try again later.',
+    keyGenerator: (req: Request) => {
+      const ip = req.ip ?? 'unknown';
+      const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+      const { token } = extractBearerToken(header);
+
+      if (!token) {
+        return `${ip}:invalid`;
+      }
+
+      if (constantTimeEqual(bearerToken, token)) {
+        return `${ip}:valid:${hashToken(token)}`;
+      }
+
+      return `${ip}:invalid`;
+    },
+  });
+
+  app.use('/tools', generalLimiter);
+  app.use('/track', trackingLimiter);
 
   const queueWarnPending = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_PENDING);
   const queueFailPending = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_PENDING);
@@ -457,8 +485,7 @@ export function buildServer() {
       return res.status(401).json({ error: 'Authorization header missing or malformed.' });
     }
 
-    const normalizedToken = token.toLowerCase();
-    if (!constantTimeEqual(normalizedBearerToken, normalizedToken)) {
+    if (!constantTimeEqual(bearerToken, token)) {
       res.setHeader(
         'WWW-Authenticate',
         formatAuthChallenge({ error: 'invalid_token', description: 'Bearer token is invalid.' })

@@ -115,7 +115,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
-All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`.
+All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.
 
 Sample responses and curl snippets are documented in `packages/api/docs/sample-responses.md`.
 
@@ -156,7 +156,8 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Request bodies default to a 256 KB limit and can be tuned via `OPAL_REQUEST_BODY_LIMIT` (accepts byte counts like `512kb`). Oversized payloads return `413` with a redacted message.
 - Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`.
 - All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
-- Bearer authentication accepts case-insensitive tokens, compares them using constant-time checks, and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
+- Bearer authentication enforces case-sensitive matches using constant-time comparisons and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
+- Invalid or missing bearer tokens share a defensive rate-limit bucket, so repeated failures from the same address return `429` instead of bypassing throttling.
 - Cache health thresholds are configurable via `MATOMO_CACHE_WARN_HIT_RATE`, `MATOMO_CACHE_FAIL_HIT_RATE`, and `MATOMO_CACHE_SAMPLE_SIZE`, and the health payload includes hit/miss counters for observability.
 
 ## Health Monitoring & Observability
