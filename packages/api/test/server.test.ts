@@ -72,6 +72,7 @@ interface InvokeOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
+  remoteAddress?: string;
 }
 
 interface InvokeResult {
@@ -81,7 +82,7 @@ interface InvokeResult {
 }
 
 async function invoke(app: Express, options: InvokeOptions): Promise<InvokeResult> {
-  const { url, method = 'POST', headers = {}, body } = options;
+  const { url, method = 'POST', headers = {}, body, remoteAddress } = options;
 
   const req = httpMocks.createRequest({
     method,
@@ -89,6 +90,28 @@ async function invoke(app: Express, options: InvokeOptions): Promise<InvokeResul
     headers: { 'content-type': 'application/json', ...headers },
     body,
   });
+
+  if (remoteAddress) {
+    const socket = req.socket as { remoteAddress?: string } | undefined;
+    if (socket) {
+      socket.remoteAddress = remoteAddress;
+    }
+    const connection = (req as unknown as { connection?: { remoteAddress?: string } }).connection;
+    if (connection) {
+      connection.remoteAddress = remoteAddress;
+    }
+  }
+
+  const forwardedFor = headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string') {
+    const forwardedIps = forwardedFor
+      .split(',')
+      .map(value => value.trim())
+      .filter(value => value.length > 0);
+    if (forwardedIps.length > 0) {
+      (req as unknown as { ips?: string[] }).ips = forwardedIps;
+    }
+  }
 
   const res = httpMocks.createResponse({ eventEmitter: EventEmitter });
 
@@ -138,6 +161,7 @@ beforeEach(() => {
   delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
   delete process.env.OPAL_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
+  delete process.env.OPAL_TRUST_PROXY;
   delete process.env.MATOMO_CACHE_WARN_HIT_RATE;
   delete process.env.MATOMO_CACHE_FAIL_HIT_RATE;
   delete process.env.MATOMO_CACHE_SAMPLE_SIZE;
@@ -159,6 +183,7 @@ afterEach(() => {
   delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
   delete process.env.OPAL_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
+  delete process.env.OPAL_TRUST_PROXY;
 });
 
 describe('health endpoint', () => {
@@ -346,6 +371,9 @@ describe('security middleware', () => {
     });
     expect(second.status).toBe(429);
     expect(second.body).toEqual({ error: 'Too many requests, please try again later.' });
+    expect(Number(second.headers['retry-after'])).toBeGreaterThan(0);
+    expect(second.headers['x-ratelimit-limit']).toBe('1');
+    expect(second.headers['x-ratelimit-remaining']).toBe('0');
   });
 
   it('applies stricter rate limiting to tracking endpoints', async () => {
@@ -369,6 +397,51 @@ describe('security middleware', () => {
     });
     expect(second.status).toBe(429);
     expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
+    expect(Number(second.headers['retry-after'])).toBeGreaterThan(0);
+    expect(second.headers['x-ratelimit-limit']).toBe('1');
+    expect(second.headers['x-ratelimit-remaining']).toBe('0');
+  });
+
+  it('derives rate limit keys from the forwarded client IP when behind a proxy', async () => {
+    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.OPAL_RATE_LIMIT_MAX = '1';
+    process.env.OPAL_TRUST_PROXY = 'true';
+    mockMatomoClient.getKeyNumbers.mockResolvedValue({ nb_visits: 5 });
+
+    const app = await createApp();
+
+    const first = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: {
+        authorization: 'Bearer test-token',
+        'x-forwarded-for': '198.51.100.10',
+      },
+      remoteAddress: '127.0.0.1',
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+    expect(first.status).toBe(200);
+
+    const second = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: {
+        authorization: 'Bearer test-token',
+        'x-forwarded-for': '198.51.100.11',
+      },
+      remoteAddress: '127.0.0.1',
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+    expect(second.status).toBe(200);
+
+    const third = await invoke(app, {
+      url: '/tools/get-key-numbers',
+      headers: {
+        authorization: 'Bearer test-token',
+        'x-forwarded-for': '198.51.100.11',
+      },
+      remoteAddress: '127.0.0.1',
+      body: { parameters: { period: 'day', date: 'today' } },
+    });
+    expect(third.status).toBe(429);
   });
 
   it('throttles repeated requests with invalid bearer tokens on tracking endpoints', async () => {

@@ -41,6 +41,23 @@ describe('TrackingService', () => {
     expect(body).toContain('pv_id=');
   });
 
+  it('normalizes tracking URLs when baseUrl includes index.php', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(successResponse);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({
+      baseUrl,
+      tokenAuth: token,
+      defaultSiteId: 3,
+      tracking: { baseUrl },
+    });
+
+    await client.trackEvent({ category: 'cta', action: 'click' });
+
+    const [url] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://matomo.example.com/matomo.php');
+  });
+
   it('retries failed requests before rejecting', async () => {
     vi.useFakeTimers();
 
@@ -108,6 +125,16 @@ describe('TrackingService', () => {
     const replay = await client.trackEvent({ category: 'cta', action: 'click', idempotencyKey });
     expect(replay).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects tracking base URLs that use unsupported schemes', () => {
+    expect(() =>
+      createMatomoClient({
+        baseUrl,
+        tokenAuth: token,
+        tracking: { baseUrl: 'ftp://matomo.example.com/matomo.php' },
+      })
+    ).toThrow('Matomo tracking URL must use http or https');
   });
 
   it('honors Retry-After headers before retrying tracking requests', async () => {

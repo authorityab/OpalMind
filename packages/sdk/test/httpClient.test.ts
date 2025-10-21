@@ -43,6 +43,18 @@ describe('MatomoHttpClient', () => {
     expect(requestUrl.pathname.endsWith('/index.php')).toBe(true);
   });
 
+  it('rejects base URLs without an HTTP(S) scheme', () => {
+    expect(() => new MatomoHttpClient('matomo.example.com', token)).toThrow(
+      'Matomo base URL must be an absolute http(s) URL'
+    );
+  });
+
+  it('rejects base URLs that use unsupported schemes', () => {
+    expect(() => new MatomoHttpClient('ftp://matomo.example.com', token)).toThrow(
+      'Matomo base URL must use http or https'
+    );
+  });
+
   it('builds the correct query string for API requests', async () => {
     const fetchMock = createFetchMock({ visits: 10 });
     vi.stubGlobal('fetch', fetchMock);

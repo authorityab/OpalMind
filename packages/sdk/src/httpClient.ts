@@ -134,11 +134,31 @@ function normalizeBaseUrl(baseUrl: string): string {
   }
 
   const trimmed = baseUrl.trim();
-  if (trimmed.endsWith('index.php')) {
-    return trimmed;
+  if (!trimmed) {
+    throw new Error('Matomo base URL is required');
   }
 
-  return `${trimmed.replace(/\/?$/, '')}/index.php`;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Matomo base URL must be an absolute http(s) URL');
+  }
+
+  const protocol = parsed.protocol.toLowerCase();
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new Error('Matomo base URL must use http or https');
+  }
+
+  if (!parsed.pathname.endsWith('index.php')) {
+    const basePath = parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`;
+    parsed.pathname = `${basePath}index.php`;
+  }
+
+  parsed.search = '';
+  parsed.hash = '';
+
+  return parsed.toString();
 }
 
 function redactMatomoToken(input: string): string {

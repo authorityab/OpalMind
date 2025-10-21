@@ -269,6 +269,58 @@ function createCorsMiddleware(): (req: Request, res: Response, next: NextFunctio
   };
 }
 
+type TrustProxySetting = boolean | number | string | string[];
+
+function parseTrustProxySetting(value: string | undefined): TrustProxySetting {
+  if (!value) {
+    return ['loopback', 'linklocal', 'uniquelocal'];
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return ['loopback', 'linklocal', 'uniquelocal'];
+  }
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'false' || lowered === '0') {
+    return false;
+  }
+
+  if (lowered === 'true') {
+    return true;
+  }
+
+  const numeric = Number.parseInt(trimmed, 10);
+  if (!Number.isNaN(numeric)) {
+    return numeric;
+  }
+
+  return trimmed
+    .split(',')
+    .map(part => part.trim())
+    .filter(part => part.length > 0);
+}
+
+function getClientIp(req: Request): string {
+  if (Array.isArray(req.ips) && req.ips.length > 0) {
+    const [firstIp] = req.ips;
+    if (firstIp) {
+      return firstIp;
+    }
+  }
+
+  if (typeof req.ip === 'string' && req.ip.length > 0) {
+    return req.ip;
+  }
+
+  const connection = req.socket || req.connection;
+  if (connection && typeof connection.remoteAddress === 'string') {
+    return connection.remoteAddress;
+  }
+
+  return 'unknown';
+}
+
 function applySecurityHeaders(req: Request, res: Response, next: NextFunction) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -321,21 +373,32 @@ function createRateLimiter(options: {
       }
     }
 
-    const key = options.keyGenerator ? options.keyGenerator(req) : req.ip ?? 'unknown';
-    const entry = buckets.get(key);
+    const key = options.keyGenerator ? options.keyGenerator(req) : getClientIp(req);
+    let bucket = buckets.get(key);
 
-    if (!entry || entry.expiresAt <= now) {
-      buckets.set(key, { count: 1, expiresAt: now + options.windowMs });
-      next();
-      return;
+    if (!bucket || bucket.expiresAt <= now) {
+      bucket = { count: 0, expiresAt: now + options.windowMs };
+      buckets.set(key, bucket);
     }
 
-    if (entry.count >= options.max) {
+    const limit = options.max;
+
+    if (bucket.count >= limit) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((bucket.expiresAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      res.setHeader('X-RateLimit-Limit', String(limit));
+      res.setHeader('X-RateLimit-Remaining', '0');
+      res.setHeader('X-RateLimit-Reset', String(Math.max(0, Math.floor(bucket.expiresAt / 1000))));
       res.status(429).json({ error: options.message });
       return;
     }
 
-    entry.count += 1;
+    bucket.count += 1;
+    const remaining = Math.max(0, limit - bucket.count);
+    res.setHeader('X-RateLimit-Limit', String(limit));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+    res.setHeader('X-RateLimit-Reset', String(Math.max(0, Math.floor(bucket.expiresAt / 1000))));
+
     next();
   };
 }
@@ -384,6 +447,9 @@ function sanitizeErrorForLogs(error: unknown): { message?: string; status?: numb
 export function buildServer() {
   const app = express();
   app.disable('x-powered-by');
+
+  const trustProxySetting = parseTrustProxySetting(process.env.OPAL_TRUST_PROXY);
+  app.set('trust proxy', trustProxySetting);
 
   app.use(createCorsMiddleware());
   app.use(applySecurityHeaders);
@@ -441,7 +507,7 @@ export function buildServer() {
     max: trackRateLimitMax,
     message: 'Too many tracking requests, please try again later.',
     keyGenerator: (req: Request) => {
-      const ip = req.ip ?? 'unknown';
+      const ip = getClientIp(req);
       const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
       const { token } = extractBearerToken(header);
 
@@ -1267,10 +1333,11 @@ export function buildServer() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Matomo diagnostics unavailable';
+      const safeMessage = redactSecrets(message);
       res.status(503).json({
         ok: false,
         status: 'unhealthy',
-        error: message.includes('token_auth') ? 'Matomo diagnostics unavailable' : message,
+        error: safeMessage.includes('token_auth') ? 'Matomo diagnostics unavailable' : safeMessage,
       });
     }
   };
