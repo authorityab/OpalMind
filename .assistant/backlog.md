@@ -102,9 +102,9 @@
 - [ ] P-010 Support multi-site indexing and configuration
       tags: feature,config,multi-tenant  priority: high  est: 2d
       deps: ADR-0001
-      accepts: As a deployment operator, I can configure multiple websites within one Matomo instance by defining environment-variable pairs for each siteId and site name (shared base URL) so the containerized app routes events correctly, with docs covering the env schema and limits.
+      accepts: As a deployment operator, I can configure multiple websites within one Matomo instance by supplying a JSON or YAML site map (shared base URL) so the containerized app routes events correctly, with docs covering the file schema, mounting strategy, and limits.
       notes:
-        1. Define a site-name → siteId mapping (JSON/YAML file, lightweight datastore, or hardcoded map for small footprints); refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
+        1. Define a site-name → siteId mapping in a JSON/YAML document, referenced via env var or well-known path; refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
 - [x] P-016 Honor Matomo back-pressure in tracking retries
       tags: reliability,queue  priority: high  est: 1.5d
