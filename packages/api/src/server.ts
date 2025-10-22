@@ -10,7 +10,7 @@ import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { logger as baseLogger, redactSecrets } from '@opalmind/logger';
 import { createMatomoClient, type TrackingQueueThresholds, type MatomoClientConfig } from '@opalmind/sdk';
-import yaml from 'js-yaml';
+import { load as loadYaml } from 'js-yaml';
 
 import { ValidationError, parseToolInvocation } from './validation.js';
 
@@ -380,14 +380,14 @@ function loadMatomoSiteMap(): LoadedSiteMap {
   let parsed: unknown;
   try {
     if (lowerPath.endsWith('.yaml') || lowerPath.endsWith('.yml')) {
-      parsed = yaml.load(fileContents);
+      parsed = loadYaml(fileContents);
     } else if (lowerPath.endsWith('.json')) {
       parsed = JSON.parse(fileContents) as unknown;
     } else {
       try {
         parsed = JSON.parse(fileContents) as unknown;
-      } catch (jsonError) {
-        parsed = yaml.load(fileContents);
+      } catch {
+        parsed = loadYaml(fileContents);
       }
     }
   } catch (error) {
