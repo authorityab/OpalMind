@@ -399,7 +399,7 @@ function loadMatomoSiteMap(): LoadedSiteMap {
   return { map: normalizeSiteMapDocument(parsed, source), source: { type: 'file', path: resolvedPath } };
 }
 
-type SiteIdResolver = (input: { siteId?: number; siteName?: string }) => number | undefined;
+type SiteIdResolver = (input: { siteId?: number | undefined; siteName?: string | undefined }) => number | undefined;
 
 function createSiteIdResolver(siteMap: Map<string, SiteMapEntry>, defaultSiteId: number | undefined): SiteIdResolver {
   return ({ siteId, siteName }) => {
