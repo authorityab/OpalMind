@@ -75,6 +75,7 @@ const pageviewParametersSchema = z
   .object({
     url: requiredString('url'),
     siteId: optionalInteger('siteId'),
+    siteName: optionalString('siteName'),
     actionName: optionalString('actionName'),
     pvId: optionalString('pvId'),
     visitorId: optionalString('visitorId'),
@@ -92,6 +93,7 @@ const eventParametersSchema = z
     value: optionalInteger('value'),
     url: optionalString('url'),
     siteId: optionalInteger('siteId'),
+    siteName: optionalString('siteName'),
     visitorId: optionalString('visitorId'),
     uid: optionalString('uid'),
     referrer: optionalString('referrer'),
@@ -105,6 +107,7 @@ const goalParametersSchema = z
     revenue: optionalInteger('revenue'),
     url: optionalString('url'),
     siteId: optionalInteger('siteId'),
+    siteName: optionalString('siteName'),
     visitorId: optionalString('visitorId'),
     uid: optionalString('uid'),
     referrer: optionalString('referrer'),

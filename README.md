@@ -54,6 +54,8 @@ This project provides a lightweight SDK and Express-based tool service that make
    MATOMO_BASE_URL=https://matomo.example.com
    MATOMO_TOKEN=your-matomo-token
    MATOMO_DEFAULT_SITE_ID=1
+   # Optional: point to JSON/YAML file or inline JSON for multi-site support.
+   MATOMO_SITE_MAP_PATH=./config/site-mapping.example.json
    OPAL_BEARER_TOKEN=<generate-with-openssl-rand-hex-32>
    PORT=4000
    ```
@@ -74,12 +76,45 @@ This project provides a lightweight SDK and Express-based tool service that make
 |----------|-------------|
 | `MATOMO_BASE_URL` | **Required.** Base URL to your Matomo instance (absolute `https://` or `http://` URL; other schemes are rejected). |
 | `MATOMO_TOKEN` | **Required.** Matomo `token_auth` used for Reporting API calls; replace the scaffold placeholder with a real token. |
-| `MATOMO_DEFAULT_SITE_ID` | Optional default `idSite` applied when tool requests omit `siteId`. |
+| `MATOMO_DEFAULT_SITE_ID` | Optional default `idSite` applied when neither `siteId` nor `siteName` is supplied. |
+| `MATOMO_SITE_MAP_PATH` | Optional path (absolute or relative to the working directory) to a JSON/YAML file mapping human-readable site names to Matomo site IDs. |
+| `MATOMO_SITE_MAP_JSON` | Optional inline JSON document defining the same site map. Takes precedence over `MATOMO_SITE_MAP_PATH` when both are present. |
 | `OPAL_BEARER_TOKEN` | Bearer token required on `/tools/*` endpoints (generate securely, e.g., `openssl rand -hex 32`). |
 | `PORT` | Listener port for the API service (default `4000`). |
 | `OPAL_TRUST_PROXY` | Optional trust proxy setting passed to Express (comma-separated CIDRs/hosts, numeric hop count, or `true`/`false`). Defaults to `loopback,linklocal,uniquelocal`. |
 
 > The API refuses to start unless `MATOMO_BASE_URL`, `MATOMO_TOKEN`, and `OPAL_BEARER_TOKEN` are populated with non-placeholder values.
+
+### Matomo site map configuration
+
+OpalMind can route requests to different Matomo sites using a simple map of **site name → numeric Matomo `idSite`**.
+
+- Provide the map via `MATOMO_SITE_MAP_PATH` (JSON, `.yaml`, or `.yml`) or inline JSON with `MATOMO_SITE_MAP_JSON`. Inline JSON wins if both are set.
+- Keys are trimmed and matched case-insensitively at runtime, but the original casing is preserved for logs and error messages.
+- Values must be positive integers. Empty names, non-numeric IDs, duplicate names (ignoring case), or two names pointing at the same Matomo site ID cause startup to fail with a descriptive message.
+- The resolver only accepts one site per request today (`siteId` or `siteName`). Multi-site comparisons remain a future enhancement.
+- The map is loaded at process startup—restart the API after updating the file or secret. Contents are never logged, but load success and entry counts are.
+- Every `/tools/*` and `/track/*` endpoint accepts an optional `siteName` parameter that resolves through this map alongside the existing `siteId` override.
+
+Example JSON file (`config/site-mapping.example.json`):
+
+```json
+{
+  "Marketing": 7,
+  "Main": 1,
+  "Blog": 5
+}
+```
+
+Equivalent YAML (`config/site-mapping.example.yaml`):
+
+```yaml
+Marketing: 7
+Main: 1
+Blog: 5
+```
+
+Mount the file read-only in production (e.g., `/config/site-mapping.json`) or inject the JSON string via your secret manager. When neither `siteId` nor `siteName` is provided, the API falls back to `MATOMO_DEFAULT_SITE_ID` (if set) just as before.
 
 ## Available Scripts
 From the repo root:

@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import type { Express, NextFunction, Request, Response } from 'express';
 import httpMocks from 'node-mocks-http';
@@ -162,6 +165,8 @@ beforeEach(() => {
   delete process.env.OPAL_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRUST_PROXY;
+  delete process.env.MATOMO_SITE_MAP_PATH;
+  delete process.env.MATOMO_SITE_MAP_JSON;
   delete process.env.MATOMO_CACHE_WARN_HIT_RATE;
   delete process.env.MATOMO_CACHE_FAIL_HIT_RATE;
   delete process.env.MATOMO_CACHE_SAMPLE_SIZE;
@@ -184,6 +189,8 @@ afterEach(() => {
   delete process.env.OPAL_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRUST_PROXY;
+  delete process.env.MATOMO_SITE_MAP_PATH;
+  delete process.env.MATOMO_SITE_MAP_JSON;
 });
 
 describe('health endpoint', () => {
@@ -506,6 +513,118 @@ describe('security middleware', () => {
 
     expect(result.status).toBe(413);
     expect(result.body).toEqual({ error: 'Request body is too large.' });
+  });
+});
+
+describe('site resolution', () => {
+  function createSiteMapFile(contents: string, extension = '.json'): string {
+    const dir = mkdtempSync(join(tmpdir(), 'opalmind-site-map-'));
+    const filePath = join(dir, `site-map${extension}`);
+    writeFileSync(filePath, contents, 'utf8');
+    return filePath;
+  }
+
+  function cleanupPath(filePath: string) {
+    try {
+      rmSync(dirname(filePath), { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors in tests
+    }
+  }
+
+  it('loads a YAML site map and resolves siteName for tool requests', async () => {
+    const filePath = createSiteMapFile('Primary: 12\nMarketing: 7\n', '.yaml');
+    process.env.MATOMO_SITE_MAP_PATH = filePath;
+
+    try {
+      mockMatomoClient.getTopReferrers.mockResolvedValue([{ label: 'Search', nb_visits: 5 }]);
+      const app = await createApp();
+
+      const response = await invoke(app, {
+        url: '/tools/get-top-referrers',
+        headers: { authorization: 'Bearer test-token' },
+        body: { parameters: { siteName: 'primary', period: 'day', date: 'today' } },
+      });
+
+      expect(response.status).toBe(200);
+      expect(mockMatomoClient.getTopReferrers).toHaveBeenCalledWith({
+        siteId: 12,
+        period: 'day',
+        date: 'today',
+        segment: undefined,
+        limit: undefined,
+      });
+    } finally {
+      cleanupPath(filePath);
+    }
+  });
+
+  it('fails startup when the site map contains a non-numeric id', async () => {
+    process.env.MATOMO_SITE_MAP_JSON = JSON.stringify({ primary: 'abc' });
+
+    await expect(createApp()).rejects.toThrow(/must map to a numeric Matomo site id/i);
+  });
+
+  it('fails startup when inline site map JSON is malformed', async () => {
+    process.env.MATOMO_SITE_MAP_JSON = '{invalid';
+
+    await expect(createApp()).rejects.toThrow(/must contain valid JSON/i);
+  });
+
+  it('fails startup when the site map defines duplicate names ignoring case', async () => {
+    process.env.MATOMO_SITE_MAP_JSON = JSON.stringify({ main: 1, Main: 2 });
+
+    await expect(createApp()).rejects.toThrow(/duplicate entries/i);
+  });
+
+  it('fails startup when the site map file cannot be parsed', async () => {
+    const filePath = createSiteMapFile('Primary: [unclosed', '.yml');
+    process.env.MATOMO_SITE_MAP_PATH = filePath;
+
+    await expect(createApp()).rejects.toThrow(/Failed to parse Matomo site map/);
+
+    cleanupPath(filePath);
+  });
+
+  it('routes tracking requests by siteName when provided', async () => {
+    process.env.MATOMO_SITE_MAP_JSON = JSON.stringify({ marketing: 9 });
+    mockMatomoClient.trackEvent.mockResolvedValue({ ok: true, status: 204, body: '' });
+
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/track/event',
+      headers: { authorization: 'Bearer test-token' },
+      body: {
+        parameters: {
+          siteName: 'Marketing',
+          category: 'cta',
+          action: 'click',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockMatomoClient.trackEvent).toHaveBeenCalledWith({
+      siteId: 9,
+      category: 'cta',
+      action: 'click',
+    });
+  });
+
+  it('rejects requests when siteId and siteName do not match', async () => {
+    process.env.MATOMO_SITE_MAP_JSON = JSON.stringify({ main: 2 });
+    const app = await createApp();
+
+    const response = await invoke(app, {
+      url: '/tools/get-top-referrers',
+      headers: { authorization: 'Bearer test-token' },
+      body: { parameters: { siteName: 'main', siteId: 5, period: 'day', date: 'today' } },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'siteId 5 does not match siteName "main" (2).' });
+    expect(mockMatomoClient.getTopReferrers).not.toHaveBeenCalled();
   });
 });
 

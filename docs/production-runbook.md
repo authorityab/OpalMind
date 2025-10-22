@@ -9,8 +9,10 @@ This runbook documents the operational steps required to deploy and maintain the
    - `MATOMO_TOKEN` — Matomo `token_auth` with view access to the target site(s).
    - `OPAL_BEARER_TOKEN` — 32+ byte random token (generate with `openssl rand -hex 32`).
    - Optional: `MATOMO_DEFAULT_SITE_ID`, cache/queue thresholds, `OPAL_TRUST_PROXY`.
+   - Optional: `MATOMO_SITE_MAP_PATH`/`MATOMO_SITE_MAP_JSON` — provide one to enable name → site ID lookups.
 2. **Config validation**
    - Ensure `.env`, `stack.env`, or secret manager entries are populated with non-placeholder values.
+   - If using `MATOMO_SITE_MAP_PATH`, mount the JSON/YAML map into the container and confirm the numeric IDs/keys are unique.
    - Confirm `OPAL_TRUST_PROXY` reflects the number of trusted hops (e.g., `true`, `1`, or a comma-separated list of CIDRs) when the service runs behind load balancers.
 3. **Tests** (run from repo root)
    ```bash
