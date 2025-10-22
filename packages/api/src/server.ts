@@ -1,6 +1,8 @@
 import 'dotenv/config';
 
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, Response, Router } from 'express';
@@ -8,6 +10,7 @@ import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { logger as baseLogger, redactSecrets } from '@opalmind/logger';
 import { createMatomoClient, type TrackingQueueThresholds, type MatomoClientConfig } from '@opalmind/sdk';
+import yaml from 'js-yaml';
 
 import { ValidationError, parseToolInvocation } from './validation.js';
 
@@ -97,6 +100,53 @@ function parseOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
+}
+
+function parseOptionalSiteId(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+      throw new ValidationError('siteId must be an integer.');
+    }
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      throw new ValidationError('siteId must not be empty.');
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      throw new ValidationError('siteId must be an integer.');
+    }
+    const numeric = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(numeric)) {
+      throw new ValidationError('siteId must be an integer.');
+    }
+    return numeric;
+  }
+
+  throw new ValidationError('siteId must be an integer.');
+}
+
+function parseOptionalSiteName(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new ValidationError('siteName must be a string.');
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError('siteName must not be empty.');
+  }
+
+  return trimmed;
 }
 
 function requireString(value: unknown, field: string): string {
@@ -197,6 +247,184 @@ function summarizeParameters(params: unknown): string[] {
     return [];
   }
   return ['[primitive]'];
+}
+
+type SiteMapEntry = { originalName: string; siteId: number };
+
+type SiteMapSource =
+  | { type: 'env' }
+  | {
+      type: 'file';
+      path: string;
+    };
+
+interface LoadedSiteMap {
+  map: Map<string, SiteMapEntry>;
+  source?: SiteMapSource;
+}
+
+const SITE_MAP_JSON_ENV = 'MATOMO_SITE_MAP_JSON';
+const SITE_MAP_PATH_ENV = 'MATOMO_SITE_MAP_PATH';
+
+function normalizeSiteName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function coerceMatomoSiteId(value: unknown, siteName: string, source: string): number {
+  if (value === undefined || value === null || value === '') {
+    throw new Error(`${source}: site "${siteName}" must map to a Matomo site id.`);
+  }
+
+  let numeric: number;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      throw new Error(`${source}: site "${siteName}" must map to a Matomo site id.`);
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error(`${source}: site "${siteName}" must map to a numeric Matomo site id.`);
+    }
+    numeric = Number.parseInt(trimmed, 10);
+  } else {
+    throw new Error(`${source}: site "${siteName}" must map to a numeric Matomo site id.`);
+  }
+
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric <= 0) {
+    throw new Error(`${source}: site "${siteName}" must map to a positive integer Matomo site id.`);
+  }
+
+  return numeric;
+}
+
+function normalizeSiteMapDocument(document: unknown, source: string): Map<string, SiteMapEntry> {
+  if (document === undefined || document === null) {
+    throw new Error(`${source} must describe at least one site mapping.`);
+  }
+
+  let entries: Iterable<[string, unknown]>;
+  if (document instanceof Map) {
+    entries = document as Map<string, unknown>;
+  } else if (typeof document === 'object' && !Array.isArray(document)) {
+    entries = Object.entries(document as Record<string, unknown>);
+  } else {
+    throw new Error(`${source} must be a JSON or YAML object mapping site names to Matomo site ids.`);
+  }
+
+  const map = new Map<string, SiteMapEntry>();
+  const idToName = new Map<number, string>();
+
+  for (const [rawName, rawId] of entries) {
+    if (typeof rawName !== 'string') {
+      throw new Error(`${source} must use string keys for site names.`);
+    }
+
+    const trimmedName = rawName.trim();
+    if (trimmedName.length === 0) {
+      throw new Error(`${source} includes an empty site name.`);
+    }
+
+    const normalizedName = normalizeSiteName(trimmedName);
+    if (map.has(normalizedName)) {
+      const existing = map.get(normalizedName);
+      throw new Error(
+        `${source} defines duplicate entries for "${trimmedName}" and "${existing?.originalName ?? trimmedName}".`
+      );
+    }
+
+    const siteId = coerceMatomoSiteId(rawId, trimmedName, source);
+    if (idToName.has(siteId)) {
+      const otherName = idToName.get(siteId);
+      throw new Error(
+        `${source}: site "${trimmedName}" conflicts with "${otherName}" for Matomo site id ${siteId}.`
+      );
+    }
+
+    map.set(normalizedName, { originalName: trimmedName, siteId });
+    idToName.set(siteId, trimmedName);
+  }
+
+  return map;
+}
+
+function loadMatomoSiteMap(): LoadedSiteMap {
+  const inline = process.env[SITE_MAP_JSON_ENV]?.trim();
+  const path = process.env[SITE_MAP_PATH_ENV]?.trim();
+
+  if (inline) {
+    try {
+      const parsed = JSON.parse(inline) as unknown;
+      return { map: normalizeSiteMapDocument(parsed, SITE_MAP_JSON_ENV), source: { type: 'env' } };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`${SITE_MAP_JSON_ENV} must contain valid JSON: ${message}`);
+    }
+  }
+
+  if (!path) {
+    return { map: new Map() };
+  }
+
+  const resolvedPath = resolvePath(process.cwd(), path);
+
+  let fileContents: string;
+  try {
+    fileContents = readFileSync(resolvedPath, 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to read Matomo site map from ${resolvedPath}: ${message}`);
+  }
+
+  const lowerPath = path.toLowerCase();
+  let parsed: unknown;
+  try {
+    if (lowerPath.endsWith('.yaml') || lowerPath.endsWith('.yml')) {
+      parsed = yaml.load(fileContents);
+    } else if (lowerPath.endsWith('.json')) {
+      parsed = JSON.parse(fileContents) as unknown;
+    } else {
+      try {
+        parsed = JSON.parse(fileContents) as unknown;
+      } catch (jsonError) {
+        parsed = yaml.load(fileContents);
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to parse Matomo site map from ${resolvedPath}: ${message}`);
+  }
+
+  const source = `${SITE_MAP_PATH_ENV} (${resolvedPath})`;
+  return { map: normalizeSiteMapDocument(parsed, source), source: { type: 'file', path: resolvedPath } };
+}
+
+type SiteIdResolver = (input: { siteId?: number; siteName?: string }) => number | undefined;
+
+function createSiteIdResolver(siteMap: Map<string, SiteMapEntry>, defaultSiteId: number | undefined): SiteIdResolver {
+  return ({ siteId, siteName }) => {
+    if (siteName !== undefined) {
+      const normalized = normalizeSiteName(siteName);
+      const match = siteMap.get(normalized);
+      if (!match) {
+        throw new ValidationError(`Unknown siteName "${siteName}".`);
+      }
+
+      if (siteId !== undefined && siteId !== match.siteId) {
+        throw new ValidationError(
+          `siteId ${siteId} does not match siteName "${match.originalName}" (${match.siteId}).`
+        );
+      }
+
+      return match.siteId;
+    }
+
+    if (siteId !== undefined) {
+      return siteId;
+    }
+
+    return defaultSiteId;
+  };
 }
 
 function summarizeAuthProvider(auth: unknown): string | undefined {
@@ -492,6 +720,17 @@ export function buildServer() {
     throw new Error('MATOMO_DEFAULT_SITE_ID must be a valid integer when provided.');
   }
 
+  const { map: siteMap, source: siteMapSource } = loadMatomoSiteMap();
+  if (siteMapSource) {
+    const details =
+      siteMapSource.type === 'env'
+        ? { source: 'env' as const }
+        : { source: 'file' as const, path: siteMapSource.path };
+    apiLogger.info('Matomo site map loaded', { ...details, entries: siteMap.size });
+  } else if (process.env[SITE_MAP_JSON_ENV] || process.env[SITE_MAP_PATH_ENV]) {
+    apiLogger.info('Matomo site map loaded', { source: 'none', entries: siteMap.size });
+  }
+
   const rateLimitWindowMs = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_WINDOW_MS', 60_000);
   const rateLimitMax = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_MAX', 60);
   const trackRateLimitMax = parsePositiveIntegerEnv('OPAL_TRACK_RATE_LIMIT_MAX', 120);
@@ -593,7 +832,16 @@ export function buildServer() {
   const toolsService = new ToolsService(app);
   configureToolsServiceLogging(toolsService);
 
+  const resolveMatomoSiteId = createSiteIdResolver(siteMap, defaultSiteId);
+
   const siteIdParam = new Parameter('siteId', ParameterType.Integer, 'Override site ID (defaults to MATOMO_DEFAULT_SITE_ID)', false);
+  const siteNameParam = new Parameter(
+    'siteName',
+    ParameterType.String,
+    'Resolve site ID from a human-readable name defined in MATOMO_SITE_MAP',
+    false
+  );
+  const siteSelectionParams = [siteIdParam, siteNameParam];
   const periodParam = new Parameter('period', ParameterType.String, 'Matomo period (day, week, month, year, range)', false);
   const dateParam = new Parameter('date', ParameterType.String, 'Date or range (YYYY-MM-DD, today, yesterday, last7, etc.)', false);
   const segmentParam = new Parameter('segment', ParameterType.String, 'Matomo segment expression', false);
@@ -641,11 +889,28 @@ export function buildServer() {
   );
   const funnelIdParam = new Parameter('funnelId', ParameterType.String, 'Matomo funnel identifier', true);
 
+  const resolveRequestSiteId = (parameters: Record<string, unknown>): number | undefined => {
+    const rawSiteId = parameters?.['siteId'];
+    const rawSiteName = parameters?.['siteName'];
+
+    const hasExplicitSiteId = rawSiteId !== undefined && rawSiteId !== null && rawSiteId !== '';
+    const hasExplicitSiteName = rawSiteName !== undefined && rawSiteName !== null;
+
+    const siteId = parseOptionalSiteId(rawSiteId);
+    const siteName = parseOptionalSiteName(rawSiteName);
+
+    if (hasExplicitSiteId || hasExplicitSiteName) {
+      return resolveMatomoSiteId({ siteId, siteName });
+    }
+
+    return undefined;
+  };
+
   toolsService.registerTool(
     'GetKeyNumbers',
     'Returns Matomo key metrics for the selected period and date.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -668,7 +933,7 @@ export function buildServer() {
       }
       return matomoClient.getKeyNumbers(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam],
     '/tools/get-key-numbers'
   );
 
@@ -676,14 +941,14 @@ export function buildServer() {
     'DiagnoseMatomo',
     'Runs connectivity and permission checks against the configured Matomo instance.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const request: Parameters<typeof matomoClient.runDiagnostics>[0] = {};
       if (siteId !== undefined) {
         request.siteId = siteId;
       }
       return matomoClient.runDiagnostics(request);
     },
-    [siteIdParam],
+    siteSelectionParams,
     '/tools/diagnose-matomo'
   );
 
@@ -693,7 +958,7 @@ export function buildServer() {
     'GetHealthStatus',
     'Returns comprehensive health status for Matomo API, cache, and dependencies.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const includeDetails = Boolean(parameters?.['includeDetails']);
       const request: Parameters<typeof matomoClient.getHealthStatus>[0] = { includeDetails };
       if (siteId !== undefined) {
@@ -701,7 +966,7 @@ export function buildServer() {
       }
       return matomoClient.getHealthStatus(request);
     },
-    [siteIdParam, includeDetailsParam],
+    [...siteSelectionParams, includeDetailsParam],
     '/tools/get-health-status'
   );
 
@@ -709,7 +974,7 @@ export function buildServer() {
     'GetKeyNumbersHistorical',
     'Returns key metrics broken down per period for multi-day comparisons.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -729,7 +994,7 @@ export function buildServer() {
       }
       return matomoClient.getKeyNumbersSeries(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam],
     '/tools/get-key-numbers-historical'
   );
 
@@ -737,7 +1002,7 @@ export function buildServer() {
     'GetMostPopularUrls',
     'Retrieves the most visited pages for the selected period and date.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -761,7 +1026,7 @@ export function buildServer() {
       }
       return matomoClient.getMostPopularUrls(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-most-popular-urls'
   );
 
@@ -769,7 +1034,7 @@ export function buildServer() {
     'GetTopReferrers',
     'Lists the top referrers driving traffic for the selected period.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -793,7 +1058,7 @@ export function buildServer() {
       }
       return matomoClient.getTopReferrers(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-top-referrers'
   );
 
@@ -801,7 +1066,7 @@ export function buildServer() {
     'GetEntryPages',
     'Returns the most common entry pages for the selected time range.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -825,7 +1090,7 @@ export function buildServer() {
       }
       return matomoClient.getEntryPages(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-entry-pages'
   );
 
@@ -833,7 +1098,7 @@ export function buildServer() {
     'GetCampaigns',
     'Lists campaign-level referrer metrics.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -857,7 +1122,7 @@ export function buildServer() {
       }
       return matomoClient.getCampaigns(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-campaigns'
   );
 
@@ -865,7 +1130,7 @@ export function buildServer() {
     'GetEcommerceOverview',
     'Returns ecommerce order revenue and conversion metrics for the selected period.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -885,7 +1150,7 @@ export function buildServer() {
       }
       return matomoClient.getEcommerceOverview(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam],
     '/tools/get-ecommerce-overview'
   );
 
@@ -893,7 +1158,7 @@ export function buildServer() {
     'GetEcommerceRevenue',
     'Aggregates ecommerce revenue totals with optional per-period breakdown.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -923,7 +1188,7 @@ export function buildServer() {
       }
       return matomoClient.getEcommerceRevenueTotals(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, includeSeriesParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, includeSeriesParam],
     '/tools/get-ecommerce-revenue'
   );
 
@@ -931,7 +1196,7 @@ export function buildServer() {
     'GetTrafficChannels',
     'Provides a high-level breakdown of traffic sources (direct, search, social, referrals, campaigns).',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -959,7 +1224,7 @@ export function buildServer() {
       }
       return matomoClient.getTrafficChannels(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam, channelTypeParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam, channelTypeParam],
     '/tools/get-traffic-channels'
   );
 
@@ -967,7 +1232,7 @@ export function buildServer() {
     'GetGoalConversions',
     'Returns goal conversion metrics with optional filtering by goal or type.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -1003,7 +1268,7 @@ export function buildServer() {
       }
       return matomoClient.getGoalConversions(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam, goalFilterIdParam, goalTypeFilterParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam, goalFilterIdParam, goalTypeFilterParam],
     '/tools/get-goal-conversions'
   );
 
@@ -1011,7 +1276,7 @@ export function buildServer() {
     'GetFunnelAnalytics',
     'Returns funnel conversion metrics and step breakdown for a Matomo funnel.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -1041,7 +1306,7 @@ export function buildServer() {
       }
       return matomoClient.getFunnelSummary(request);
     },
-    [siteIdParam, funnelIdParam, periodParam, dateParam, segmentParam],
+    [...siteSelectionParams, funnelIdParam, periodParam, dateParam, segmentParam],
     '/tools/get-funnel-analytics'
   );
 
@@ -1049,7 +1314,7 @@ export function buildServer() {
     'GetEvents',
     'Returns aggregate event metrics optionally filtered by category, action, or name.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -1085,7 +1350,7 @@ export function buildServer() {
       }
       return matomoClient.getEvents(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam, eventCategoryFilterParam, eventActionFilterParam, eventNameFilterParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam, eventCategoryFilterParam, eventActionFilterParam, eventNameFilterParam],
     '/tools/get-events'
   );
 
@@ -1093,7 +1358,7 @@ export function buildServer() {
     'GetEventCategories',
     'Summarizes events grouped by category with aggregate counts and values.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -1117,7 +1382,7 @@ export function buildServer() {
       }
       return matomoClient.getEventCategories(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-event-categories'
   );
 
@@ -1125,7 +1390,7 @@ export function buildServer() {
     'GetDeviceTypes',
     'Breaks down visits by high-level device categories (desktop, mobile, tablet).',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const periodValue = parameters?.['period'];
       const dateValue = parameters?.['date'];
       const segmentValue = parameters?.['segment'];
@@ -1149,7 +1414,7 @@ export function buildServer() {
       }
       return matomoClient.getDeviceTypes(request);
     },
-    [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
+    [...siteSelectionParams, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-device-types'
   );
 
@@ -1157,7 +1422,7 @@ export function buildServer() {
     'TrackPageview',
     'Records a server-side pageview with optional pv_id continuity.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const url = requireString(parameters?.['url'], 'url');
       const actionName = parseOptionalString(parameters?.['actionName']);
       const pvId = parseOptionalString(parameters?.['pvId']);
@@ -1193,7 +1458,7 @@ export function buildServer() {
       return { ok: result.ok, status: result.status, pvId: result.pvId };
     },
     [
-      siteIdParam,
+      ...siteSelectionParams,
       pageUrlParam,
       actionNameParam,
       pvIdParam,
@@ -1209,7 +1474,7 @@ export function buildServer() {
     'TrackEvent',
     'Records a Matomo custom event.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const category = requireString(parameters?.['category'], 'category');
       const action = requireString(parameters?.['action'], 'action');
       const name = parseOptionalString(parameters?.['name']);
@@ -1250,7 +1515,7 @@ export function buildServer() {
       return { ok: result.ok, status: result.status };
     },
     [
-      siteIdParam,
+      ...siteSelectionParams,
       categoryParam,
       actionParam,
       nameParam,
@@ -1268,7 +1533,7 @@ export function buildServer() {
     'TrackGoal',
     'Records a goal conversion.',
     async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
+      const siteId = resolveRequestSiteId(parameters);
       const goalId = parseRequiredNumber(parameters?.['goalId'], 'goalId');
       const revenue = parseOptionalNumber(parameters?.['revenue']);
       const url = parseOptionalString(parameters?.['url']);
@@ -1304,7 +1569,7 @@ export function buildServer() {
       return { ok: result.ok, status: result.status };
     },
     [
-      siteIdParam,
+      ...siteSelectionParams,
       goalIdParam,
       revenueParam,
       eventUrlParam,
