@@ -47,7 +47,13 @@ import {
   type TrackingBackoffOptions,
   type TrackingOptions,
 } from './tracking.js';
-import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
+import {
+  MatomoApiError,
+  MatomoClientError,
+  MatomoNetworkError,
+  MatomoPermissionError,
+  type MatomoErrorDetails,
+} from './errors.js';
 
 const sdkLogger = baseLogger.child({ package: '@opalmind/sdk' });
 
@@ -451,20 +457,33 @@ async function fetchMatomoVersionWithFallback(
 
 type MatomoUserMethod = 'UsersManager.getUserByTokenAuth' | 'API.getLoggedInUser';
 
-function createUsersManagerPermissionError(error: MatomoPermissionError): MatomoPermissionError {
-  const details = {
-    status: error.status,
-    code: error.code,
-    body: error.body,
-    endpoint: error.endpoint,
-    payload: error.payload,
-    rateLimit: error.rateLimit,
-    cause: error,
-  };
+function toMatomoErrorDetails(error: MatomoApiError): MatomoErrorDetails {
+  const details: MatomoErrorDetails = { cause: error };
+  if (error.status !== undefined) {
+    details.status = error.status;
+  }
+  if (error.code !== undefined) {
+    details.code = error.code;
+  }
+  if (error.body !== undefined) {
+    details.body = error.body;
+  }
+  if (error.endpoint !== undefined) {
+    details.endpoint = error.endpoint;
+  }
+  if (error.payload !== undefined) {
+    details.payload = error.payload;
+  }
+  if (error.rateLimit !== undefined) {
+    details.rateLimit = error.rateLimit;
+  }
+  return details;
+}
 
+function createUsersManagerPermissionError(error: MatomoPermissionError): MatomoPermissionError {
   return new MatomoPermissionError(
     'Matomo token lacks permission to call UsersManager.getUserByTokenAuth. Enable the UsersManager plugin and grant the token user at least view access to the required sites.',
-    details
+    toMatomoErrorDetails(error)
   );
 }
 
@@ -537,19 +556,9 @@ async function fetchMatomoUserWithFallback(
     return result;
   } catch (error) {
     if (isMatomoMethodUnavailable(error, 'getloggedinuser')) {
-      const details = {
-        status: error instanceof MatomoApiError ? error.status : undefined,
-        code: error instanceof MatomoApiError ? error.code : undefined,
-        body: error instanceof MatomoApiError ? error.body : undefined,
-        endpoint: error instanceof MatomoApiError ? error.endpoint : undefined,
-        payload: error instanceof MatomoApiError ? error.payload : undefined,
-        rateLimit: error instanceof MatomoApiError ? error.rateLimit : undefined,
-        cause: error,
-      };
-
       throw new MatomoClientError(
         'Matomo instance does not expose API.getLoggedInUser. Upgrade Matomo or enable the API plugin, or rely on UsersManager.getUserByTokenAuth with the appropriate permissions.',
-        details
+        toMatomoErrorDetails(error)
       );
     }
 
