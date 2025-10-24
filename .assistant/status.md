@@ -23,6 +23,7 @@ Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observab
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 
 ## Changelog
+- Hardened Matomo diagnostics to require UsersManager token permissions, surfaced guidance when legacy methods are missing, refreshed README/runbook docs, and added SDK regression coverage (B-018).
 - Honoured Matomo back-pressure in the tracking queue with Retry-After aware backoff, queue metrics, and SDK regression coverage.
 - Surfaced tracking queue depth/age in health checks with configurable warn/fail thresholds, SDK/API tests, and updated operator docs.
 - Hardened Express boundary with custom security headers, CORS allowlists, rate limiting, payload size guards, and Zod validation for `/tools/*` and `/track/*`, including regression coverage and documentation updates.

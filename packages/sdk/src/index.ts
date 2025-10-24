@@ -451,6 +451,23 @@ async function fetchMatomoVersionWithFallback(
 
 type MatomoUserMethod = 'UsersManager.getUserByTokenAuth' | 'API.getLoggedInUser';
 
+function createUsersManagerPermissionError(error: MatomoPermissionError): MatomoPermissionError {
+  const details = {
+    status: error.status,
+    code: error.code,
+    body: error.body,
+    endpoint: error.endpoint,
+    payload: error.payload,
+    rateLimit: error.rateLimit,
+    cause: error,
+  };
+
+  return new MatomoPermissionError(
+    'Matomo token lacks permission to call UsersManager.getUserByTokenAuth. Enable the UsersManager plugin and grant the token user at least view access to the required sites.',
+    details
+  );
+}
+
 function extractMatomoUserLogin(payload: unknown): string | undefined {
   if (!payload) return undefined;
 
@@ -496,26 +513,48 @@ async function fetchMatomoUserWithFallback(
     }
     return result;
   } catch (error) {
-    if (
-      !isMatomoMethodUnavailable(error, 'getuserbytokenauth') &&
-      !(error instanceof MatomoPermissionError)
-    ) {
+    if (error instanceof MatomoPermissionError) {
+      throw createUsersManagerPermissionError(error);
+    }
+
+    if (!isMatomoMethodUnavailable(error, 'getuserbytokenauth')) {
       throw error;
     }
   }
 
-  const payload = await matomoGet<unknown>(http, {
-    method: 'API.getLoggedInUser',
-  });
+  try {
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getLoggedInUser',
+    });
 
-  const login = extractMatomoUserLogin(payload);
-  const result: { login?: string; method: MatomoUserMethod } = {
-    method: 'API.getLoggedInUser',
-  };
-  if (login !== undefined) {
-    result.login = login;
+    const login = extractMatomoUserLogin(payload);
+    const result: { login?: string; method: MatomoUserMethod } = {
+      method: 'API.getLoggedInUser',
+    };
+    if (login !== undefined) {
+      result.login = login;
+    }
+    return result;
+  } catch (error) {
+    if (isMatomoMethodUnavailable(error, 'getloggedinuser')) {
+      const details = {
+        status: error instanceof MatomoApiError ? error.status : undefined,
+        code: error instanceof MatomoApiError ? error.code : undefined,
+        body: error instanceof MatomoApiError ? error.body : undefined,
+        endpoint: error instanceof MatomoApiError ? error.endpoint : undefined,
+        payload: error instanceof MatomoApiError ? error.payload : undefined,
+        rateLimit: error instanceof MatomoApiError ? error.rateLimit : undefined,
+        cause: error,
+      };
+
+      throw new MatomoClientError(
+        'Matomo instance does not expose API.getLoggedInUser. Upgrade Matomo or enable the API plugin, or rely on UsersManager.getUserByTokenAuth with the appropriate permissions.',
+        details
+      );
+    }
+
+    throw error;
   }
-  return result;
 }
 
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
