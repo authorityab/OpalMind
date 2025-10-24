@@ -433,6 +433,7 @@ const keyNumberNumericFields: Array<keyof KeyNumbers> = [
   'max_actions',
   'nb_pageviews',
   'nb_uniq_pageviews',
+  'avg_time_on_site',
 ];
 
 function toFiniteNumber(value: unknown): number | undefined {
@@ -482,6 +483,66 @@ function sumSeriesValues(series: unknown): number | undefined {
   return seen ? total : undefined;
 }
 
+function parseDurationSeconds(value: unknown): number | undefined {
+  const numeric = toFiniteNumber(value);
+  if (numeric !== undefined) {
+    return numeric;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const colonParts = trimmed.split(':');
+  if (colonParts.length >= 2 && colonParts.length <= 3 && colonParts.every(part => /^\d+$/.test(part))) {
+    if (colonParts.length === 3) {
+      const [hoursStr, minutesStr, secondsStr] = colonParts as [string, string, string];
+      const hours = Number.parseInt(hoursStr, 10);
+      const minutes = Number.parseInt(minutesStr, 10);
+      const seconds = Number.parseInt(secondsStr, 10);
+      if ([hours, minutes, seconds].some(value => !Number.isFinite(value))) {
+        return undefined;
+      }
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    const [minutesStr, secondsStr] = colonParts as [string, string];
+    const minutes = Number.parseInt(minutesStr, 10);
+    const seconds = Number.parseInt(secondsStr, 10);
+    if ([minutes, seconds].some(value => !Number.isFinite(value))) {
+      return undefined;
+    }
+
+    return minutes * 60 + seconds;
+  }
+
+  const simpleMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds)$/i);
+  if (simpleMatch) {
+    const seconds = Number.parseFloat(simpleMatch[1]!);
+    return Number.isFinite(seconds) ? seconds : undefined;
+  }
+
+  const verboseMatch =
+    trimmed.match(
+      /^(?:(\d+)\s*h(?:ours?)?\s*)?(?:(\d+)\s*m(?:in(?:ute)?s?)?\s*)?(?:(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?)?$/i
+    );
+  if (verboseMatch) {
+    const hours = verboseMatch[1] ? Number.parseInt(verboseMatch[1], 10) : 0;
+    const minutes = verboseMatch[2] ? Number.parseInt(verboseMatch[2], 10) : 0;
+    const secondsPart = verboseMatch[3] ? Number.parseFloat(verboseMatch[3]) : 0;
+    if ([hours, minutes, secondsPart].every(Number.isFinite)) {
+      return hours * 3600 + minutes * 60 + secondsPart;
+    }
+  }
+
+  return undefined;
+}
+
 function unwrapMatomoValue(raw: unknown): unknown {
   if (Array.isArray(raw)) {
     if (raw.length === 0) return undefined;
@@ -527,6 +588,23 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
     } else {
       delete sanitized[field as string];
     }
+  }
+
+  const computedDuration = (() => {
+    const totalDuration = typeof sanitized.sum_visit_length === 'number' ? sanitized.sum_visit_length : undefined;
+    const visits = typeof sanitized.nb_visits === 'number' ? sanitized.nb_visits : undefined;
+
+    if (totalDuration !== undefined && visits !== undefined && visits > 0) {
+      return totalDuration / visits;
+    }
+
+    return parseDurationSeconds(raw['avg_time_on_site']);
+  })();
+
+  if (computedDuration !== undefined && Number.isFinite(computedDuration)) {
+    sanitized.avg_time_on_site = computedDuration;
+  } else {
+    delete sanitized.avg_time_on_site;
   }
 
   return sanitized;

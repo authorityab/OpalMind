@@ -55,6 +55,30 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: API Vitest suite passed (43 tests) with updated currency-aware fixtures.
   artifacts: none
+- tool: apply_patch
+  args: Normalize Matomo `avg_time_on_site` to seconds and add duration parsing.
+  result: Parsed duration strings, derived averages from `sum_visit_length`, and exposed seconds-aligned metrics with schema updates and SDK regression coverage.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Refresh sample responses and README notes for average time metrics.
+  result: Documented seconds-based average visit duration and updated key number examples.
+  artifacts: packages/api/docs/sample-responses.md, README.md
+- tool: apply_patch
+  args: Mark B-020 complete in backlog.
+  result: Updated backlog entry after fixing Matomo average time mismatch.
+  artifacts: .assistant/backlog.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after average-time normalization updates.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (81 tests) validating duration handling.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: API Vitest suite passed (43 tests) confirming compatibility with seconds-based average duration outputs.
+  artifacts: none
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github
