@@ -12,15 +12,15 @@ import {
   goalConversionsSchema,
 } from './schemas.js';
 import type {
-  Campaign,
+  RawCampaign,
   DeviceTypeSummary,
-  EcommerceSummary,
+  RawEcommerceSummary,
   EntryPage,
   EventCategory,
   EventSummary,
   MostPopularUrl,
   TopReferrer,
-  TrafficChannel,
+  RawTrafficChannel,
   RawGoalConversion,
 } from './schemas.js';
 
@@ -78,14 +78,16 @@ export interface EcommerceRevenueTotalsInput extends EcommerceOverviewInput {
   includeSeries?: boolean;
 }
 
-export interface EcommerceRevenueSeriesPoint extends EcommerceSummary {
+export interface RawEcommerceRevenueSeriesPoint extends RawEcommerceSummary {
   label: string;
 }
 
-export interface EcommerceRevenueTotals {
-  totals: EcommerceSummary;
-  series?: EcommerceRevenueSeriesPoint[];
+export interface RawEcommerceRevenueTotals {
+  totals: RawEcommerceSummary;
+  series?: RawEcommerceRevenueSeriesPoint[];
 }
+
+export type { RawCampaign, RawEcommerceSummary, RawTrafficChannel, RawGoalConversion } from './schemas.js';
 
 export interface EventCategoriesInput {
   siteId: number;
@@ -374,13 +376,13 @@ export class ReportsService {
     return parsed;
   }
 
-  async getCampaigns(input: CampaignsInput): Promise<Campaign[]> {
+  async getCampaigns(input: CampaignsInput): Promise<RawCampaign[]> {
     const feature = 'campaigns';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<Campaign[]>(feature, cacheKey);
+    const cached = this.getFromCache<RawCampaign[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<Campaign[]>(this.http, {
+    const data = await matomoGet<RawCampaign[]>(this.http, {
       method: 'Referrers.getCampaigns',
       params: {
         idSite: input.siteId,
@@ -396,10 +398,10 @@ export class ReportsService {
     return parsed;
   }
 
-  async getEcommerceOverview(input: EcommerceOverviewInput): Promise<EcommerceSummary> {
+  async getEcommerceOverview(input: EcommerceOverviewInput): Promise<RawEcommerceSummary> {
     const feature = 'ecommerceOverview';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<EcommerceSummary>(feature, cacheKey);
+    const cached = this.getFromCache<RawEcommerceSummary>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<unknown>(this.http, {
@@ -419,10 +421,10 @@ export class ReportsService {
     return parsed;
   }
 
-  async getEcommerceRevenueTotals(input: EcommerceRevenueTotalsInput): Promise<EcommerceRevenueTotals> {
+  async getEcommerceRevenueTotals(input: EcommerceRevenueTotalsInput): Promise<RawEcommerceRevenueTotals> {
     const feature = 'ecommerceRevenueTotals';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<EcommerceRevenueTotals>(feature, cacheKey);
+    const cached = this.getFromCache<RawEcommerceRevenueTotals>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<unknown>(this.http, {
@@ -452,7 +454,7 @@ export class ReportsService {
         ? seriesCandidates.map(entry => ({ label: entry.label, ...entry.summary }))
         : undefined;
 
-    const result: EcommerceRevenueTotals = series ? { totals, series } : { totals };
+    const result: RawEcommerceRevenueTotals = series ? { totals, series } : { totals };
     this.setCache(feature, cacheKey, result);
     return result;
   }
@@ -502,13 +504,13 @@ export class ReportsService {
     return parsed;
   }
 
-  async getTrafficChannels(input: TrafficChannelsInput): Promise<TrafficChannel[]> {
+  async getTrafficChannels(input: TrafficChannelsInput): Promise<RawTrafficChannel[]> {
     const feature = 'trafficChannels';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<TrafficChannel[]>(feature, cacheKey);
+    const cached = this.getFromCache<RawTrafficChannel[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<TrafficChannel[]>(this.http, {
+    const data = await matomoGet<RawTrafficChannel[]>(this.http, {
       method: 'Referrers.getReferrerType',
       params: {
         idSite: input.siteId,
@@ -707,7 +709,7 @@ function isEcommerceSummaryCandidate(record: Record<string, unknown>): boolean {
   );
 }
 
-const numericEcommerceFields: Array<keyof EcommerceSummary> = [
+const numericEcommerceFields: Array<keyof RawEcommerceSummary> = [
   'nb_conversions',
   'nb_visits',
   'nb_visits_converted',
@@ -722,7 +724,7 @@ const numericEcommerceFields: Array<keyof EcommerceSummary> = [
   'revenue_discount',
 ];
 
-function aggregateEcommerceSummaries(summaries: EcommerceSummary[]): EcommerceSummary {
+function aggregateEcommerceSummaries(summaries: RawEcommerceSummary[]): RawEcommerceSummary {
   const totals: Record<string, number> = {};
 
   for (const summary of summaries) {

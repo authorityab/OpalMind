@@ -805,7 +805,7 @@ describe('tool endpoints', () => {
 
   it('returns ecommerce overview with defaults', async () => {
     const app = await createApp();
-    const ecommerceResponse = { revenue: 120, nb_conversions: 3 };
+    const ecommerceResponse = { revenue: { value: 120, currency: 'USD' }, nb_conversions: 3 };
     mockMatomoClient.getEcommerceOverview.mockResolvedValue(ecommerceResponse);
 
     const response = await invoke(app, {
@@ -827,8 +827,8 @@ describe('tool endpoints', () => {
   it('returns ecommerce revenue totals with optional series', async () => {
     const app = await createApp();
     const payload = {
-      totals: { revenue: 150, nb_conversions: 3 },
-      series: [{ label: '2025-09-25', revenue: 100, nb_conversions: 2 }],
+      totals: { revenue: { value: 150, currency: 'USD' }, nb_conversions: 3 },
+      series: [{ label: '2025-09-25', revenue: { value: 100, currency: 'USD' }, nb_conversions: 2 }],
     };
     mockMatomoClient.getEcommerceRevenueTotals.mockResolvedValue(payload);
 
@@ -852,8 +852,8 @@ describe('tool endpoints', () => {
   it('returns traffic channels with optional filtering', async () => {
     const app = await createApp();
     const channelsPayload = [
-      { label: 'Direct Entry', nb_visits: 120 },
-      { label: 'Search Engines', nb_visits: 80 },
+      { label: 'Direct Entry', nb_visits: 120, revenue: { value: 250, currency: 'USD' } },
+      { label: 'Search Engines', nb_visits: 80, revenue: { value: 500, currency: 'USD' } },
     ];
     mockMatomoClient.getTrafficChannels.mockResolvedValue(channelsPayload);
 

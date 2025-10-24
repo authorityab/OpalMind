@@ -106,7 +106,7 @@ export const campaignsSchema = z.array(
     .passthrough()
 );
 
-export type Campaign = z.infer<typeof campaignsSchema>[number];
+export type RawCampaign = z.infer<typeof campaignsSchema>[number];
 
 export const ecommerceSummarySchema = z
   .object({
@@ -126,7 +126,7 @@ export const ecommerceSummarySchema = z
   })
   .passthrough();
 
-export type EcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
+export type RawEcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
 
 export const eventCategoriesSchema = z.array(
   z
@@ -174,11 +174,12 @@ export const trafficChannelsSchema = z.array(
       sum_visit_length: numeric.optional(),
       nb_hits: numeric.optional(),
       bounce_rate: z.string().optional(),
+      revenue: numeric.optional(),
     })
     .passthrough()
 );
 
-export type TrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
+export type RawTrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
 
 export const goalConversionsSchema = z.array(
   z
