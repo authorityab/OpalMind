@@ -71,7 +71,7 @@
       tags: analytics,api,dx  priority: medium  est: 1d
       deps: ADR-0003
       accepts: Fetch Matomo site currency (e.g., via `SitesManager.getSiteFromId`) per `siteId`, enrich `GetTrafficChannels` and `GetEcommerceOverview` responses so monetary fields return structured `{ value, currency }`, apply the same format to any other revenue-bearing tools, handle missing currency with clear fallbacks/logging, and add regression coverage plus docs for the new schema.
-- [ ] B-020 Fix `avg_time_on_site` unit mismatch
+- [x] B-020 Fix `avg_time_on_site` unit mismatch
       tags: analytics,bug  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Investigate `GetKeyNumbers` parsing of Matomo `avg_time_on_site`, correct unit interpretation so values match Matomo’s average visit duration (seconds), add regression coverage, and document the metric behaviour.

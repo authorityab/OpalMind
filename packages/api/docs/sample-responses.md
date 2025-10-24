@@ -27,7 +27,7 @@ curl -X POST http://localhost:4000/tools/get-key-numbers \
   "bounce_rate": "0%",
   "nb_actions_per_visit": 0,
   "bounce_count": 0,
-  "avg_time_on_site": 0
+  "avg_time_on_site": 3
 }
 ```
 

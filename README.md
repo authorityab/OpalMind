@@ -117,6 +117,8 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 > Revenue-bearing fields (campaigns, traffic channels, ecommerce summaries/totals, goal conversions) now return structured objects in the form `{ "value": number, "currency": "<ISO code>" }`, using the site currency resolved from Matomo. When Matomo does not expose a currency, the `currency` property is `null` and the numeric value remains available under `value`.
 
+> `avg_time_on_site` within `GetKeyNumbers` is reported in raw seconds so downstream consumers can apply their own duration formatting while staying aligned with Matomo’s “average visit duration”.
+
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
 All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.

@@ -123,6 +123,34 @@ describe('MatomoClient', () => {
     expect(result.nb_pageviews).toBeUndefined();
   });
 
+  it('normalizes avg_time_on_site duration strings to seconds', async () => {
+    const fetchMock = createSequencedFetchMock([
+      { nb_visits: '2', sum_visit_length: '6', avg_time_on_site: '00:00:03' },
+      { nb_pageviews: '0', nb_uniq_pageviews: '0' },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 7 });
+    const result = await client.getKeyNumbers();
+
+    expect(result.avg_time_on_site).toBeCloseTo(3);
+  });
+
+  it('derives avg_time_on_site from total visit length when Matomo omits the metric', async () => {
+    const fetchMock = createSequencedFetchMock([
+      { nb_visits: 4, sum_visit_length: 18 },
+      { nb_pageviews: 0, nb_uniq_pageviews: 0 },
+    ]);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 15 });
+    const result = await client.getKeyNumbers();
+
+    expect(result.avg_time_on_site).toBeCloseTo(4.5);
+  });
+
   it('coerces scalar key number payloads into objects', async () => {
     const fetchMock = createSequencedFetchMock(['0', { nb_pageviews: '0' }]);
 
