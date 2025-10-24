@@ -151,14 +151,14 @@ curl -X POST http://localhost:4000/tools/get-campaigns \
     "nb_visits": 120,
     "nb_actions": 265,
     "nb_visits_converted": 18,
-    "revenue": 5400
+    "revenue": { "value": 5400, "currency": "USD" }
   },
   {
     "label": "Retargeting",
     "nb_visits": 84,
     "nb_actions": 143,
     "nb_visits_converted": 9,
-    "revenue": 2250
+    "revenue": { "value": 2250, "currency": "USD" }
   }
 ]
 ```
@@ -181,14 +181,16 @@ curl -X POST http://localhost:4000/tools/get-traffic-channels \
     "nb_visits": 480,
     "nb_actions": 1310,
     "nb_visits_converted": 42,
-    "sum_visit_length": 86400
+    "sum_visit_length": 86400,
+    "revenue": { "value": 18250, "currency": "USD" }
   },
   {
     "label": "Direct Entry",
     "nb_visits": 320,
     "nb_actions": 720,
     "nb_visits_converted": 18,
-    "sum_visit_length": 54000
+    "sum_visit_length": 54000,
+    "revenue": { "value": 4200, "currency": "USD" }
   }
 ]
 ```
@@ -212,7 +214,7 @@ curl -X POST http://localhost:4000/tools/get-goal-conversions \
     "type": "ecommerce",
     "nb_conversions": 48,
     "nb_visits_converted": 32,
-    "revenue": 16420
+    "revenue": { "value": 16420, "currency": "USD" }
   },
   {
     "id": "2",
@@ -239,14 +241,14 @@ curl -X POST http://localhost:4000/tools/get-ecommerce-overview \
 {
   "nb_conversions": 7,
   "nb_visits_converted": 5,
-  "revenue": 1349.75,
-  "revenue_per_conversion": 192.8214,
-  "avg_order_revenue": 192.8214,
+  "revenue": { "value": 1349.75, "currency": "USD" },
+  "revenue_per_conversion": { "value": 192.8214, "currency": "USD" },
+  "avg_order_revenue": { "value": 192.8214, "currency": "USD" },
   "items": 21,
-  "revenue_subtotal": 1299.75,
-  "revenue_tax": 30,
-  "revenue_shipping": 40,
-  "revenue_discount": 20
+  "revenue_subtotal": { "value": 1299.75, "currency": "USD" },
+  "revenue_tax": { "value": 30, "currency": "USD" },
+  "revenue_shipping": { "value": 40, "currency": "USD" },
+  "revenue_discount": { "value": 20, "currency": "USD" }
 }
 ```
 
@@ -265,23 +267,23 @@ curl -X POST http://localhost:4000/tools/get-ecommerce-revenue \
 {
   "totals": {
     "nb_conversions": 32,
-    "revenue": 4820,
-    "avg_order_revenue": 150.625,
+    "revenue": { "value": 4820, "currency": "USD" },
+    "avg_order_revenue": { "value": 150.625, "currency": "USD" },
     "items": 96
   },
   "series": [
     {
       "label": "2025-09-20",
       "nb_conversions": 4,
-      "revenue": 600,
-      "avg_order_revenue": 150,
+      "revenue": { "value": 600, "currency": "USD" },
+      "avg_order_revenue": { "value": 150, "currency": "USD" },
       "items": 12
     },
     {
       "label": "2025-09-21",
       "nb_conversions": 6,
-      "revenue": 930,
-      "avg_order_revenue": 155,
+      "revenue": { "value": 930, "currency": "USD" },
+      "avg_order_revenue": { "value": 155, "currency": "USD" },
       "items": 18
     }
   ]

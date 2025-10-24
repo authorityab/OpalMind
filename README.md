@@ -115,6 +115,8 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `TrackGoal` | `POST /track/goal` | Captures goal conversions with optional revenue. |
 | `*` | Responses surface guidance via `MatomoApiError` when Matomo rejects a request (auth, permissions, rate limits, etc.). |
 
+> Revenue-bearing fields (campaigns, traffic channels, ecommerce summaries/totals, goal conversions) now return structured objects in the form `{ "value": number, "currency": "<ISO code>" }`, using the site currency resolved from Matomo. When Matomo does not expose a currency, the `currency` property is `null` and the numeric value remains available under `value`.
+
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
 All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.

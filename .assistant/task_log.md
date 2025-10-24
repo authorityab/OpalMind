@@ -35,6 +35,26 @@
   args: Add backlog task for `avg_time_on_site` unit mismatch.
   result: Logged B-020 to investigate and align `GetKeyNumbers` average time with Matomo’s second-based metric.
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Enrich Matomo revenue outputs with currency-aware structures across SDK.
+  result: Added site currency caching, converted campaign/traffic/ecommerce/goal responses to `{ value, currency }`, extended Zod schemas, and updated SDK unit tests.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/reports.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Align API expectations and docs with structured currency outputs.
+  result: Updated server tests, README guidance, and sample response docs to reflect monetary `{ value, currency }` objects.
+  artifacts: packages/api/test/server.test.ts, README.md, packages/api/docs/sample-responses.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after currency enrichment changes.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (79 tests) validating currency transformations.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: API Vitest suite passed (43 tests) with updated currency-aware fixtures.
+  artifacts: none
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github

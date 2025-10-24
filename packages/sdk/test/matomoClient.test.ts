@@ -42,6 +42,18 @@ const createSequencedFetchMock = (responses: unknown[]) => {
   return mock;
 };
 
+const createCurrencyAwareFetchMock = (data: unknown, currency = 'USD') =>
+  vi.fn((input: RequestInfo) => {
+    const url = new URL(typeof input === 'string' ? input : (input as Request).url);
+    const method = url.searchParams.get('method');
+
+    if (method === 'SitesManager.getSiteFromId') {
+      return Promise.resolve(createJsonResponse([{ currency }]));
+    }
+
+    return Promise.resolve(createJsonResponse(data));
+  });
+
 const createMethodMissingResponse = (method: string) =>
   createJsonResponse(
     {
@@ -581,14 +593,18 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('flat')).toBe('1');
   });
 
-  it('fetches campaigns with overrides and numeric coercion', async () => {
-    const fetchMock = createFetchMock([{ label: 'Spring Campaign', nb_visits: '12' }]);
+  it('fetches campaigns with overrides, numeric coercion, and currency metadata', async () => {
+    const fetchMock = createCurrencyAwareFetchMock(
+      [{ label: 'Spring Campaign', nb_visits: '12', revenue: '340.5' }],
+      'eur'
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 9 });
     const result = await client.getCampaigns({ siteId: 11, period: 'month', date: '2025-01-01', limit: 25 });
 
     expect(result[0].nb_visits).toBe(12);
+    expect(result[0].revenue).toEqual({ value: 340.5, currency: 'EUR' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('method')).toBe('Referrers.getCampaigns');
@@ -596,6 +612,12 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('period')).toBe('month');
     expect(url.searchParams.get('date')).toBe('2025-01-01');
     expect(url.searchParams.get('filter_limit')).toBe('25');
+
+    const siteRequest = fetchMock.mock.calls.find(call => {
+      const siteUrl = new URL(call[0] as string);
+      return siteUrl.searchParams.get('method') === 'SitesManager.getSiteFromId';
+    });
+    expect(siteRequest).toBeTruthy();
   });
 
   it('tracks cache stats and emits events', async () => {
@@ -660,7 +682,7 @@ describe('MatomoClient', () => {
       '2025-09-25': { nb_conversions: '2', revenue: '100', items: '5' },
       '2025-09-26': { nb_conversions: '1', revenue: '50', items: '2' },
     };
-    const fetchMock = createFetchMock(payload);
+    const fetchMock = createCurrencyAwareFetchMock(payload, 'usd');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
@@ -670,12 +692,12 @@ describe('MatomoClient', () => {
       includeSeries: true,
     });
 
-    expect(result.totals.revenue).toBe(150);
+    expect(result.totals.revenue).toEqual({ value: 150, currency: 'USD' });
     expect(result.totals.nb_conversions).toBe(3);
     expect(result.totals.items).toBe(7);
     expect(result.series).toHaveLength(2);
     expect(result.series?.[0].label).toBe('2025-09-25');
-    expect(result.series?.[0].revenue).toBe(100);
+    expect(result.series?.[0].revenue).toEqual({ value: 100, currency: 'USD' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('method')).toBe('Goals.get');
@@ -687,18 +709,18 @@ describe('MatomoClient', () => {
 
   it('omits series when not requested and single summary', async () => {
     const payload = { nb_conversions: '2', revenue: '80' };
-    const fetchMock = createFetchMock(payload);
+    const fetchMock = createCurrencyAwareFetchMock(payload, 'GBP');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
     const result = await client.getEcommerceRevenueTotals();
 
-    expect(result.totals.revenue).toBe(80);
+    expect(result.totals.revenue).toEqual({ value: 80, currency: 'GBP' });
     expect(result.series).toBeUndefined();
   });
 
   it('extracts ecommerce overview from nested responses', async () => {
-    const fetchMock = createFetchMock({
+    const fetchMock = createCurrencyAwareFetchMock({
       '2025-09-25': {
         'idgoal=ecommerceOrder': {
           nb_conversions: '3',
@@ -706,15 +728,15 @@ describe('MatomoClient', () => {
           avg_order_revenue: '40.1666',
         },
       },
-    });
+    }, 'sek');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
     const result = await client.getEcommerceOverview({ date: '2025-09-25' });
 
     expect(result.nb_conversions).toBe(3);
-    expect(result.revenue).toBeCloseTo(120.5);
-    expect(result.avg_order_revenue).toBeCloseTo(40.1666);
+    expect(result.revenue).toEqual({ value: 120.5, currency: 'SEK' });
+    expect(result.avg_order_revenue).toEqual({ value: 40.1666, currency: 'SEK' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('method')).toBe('Goals.get');
@@ -763,9 +785,13 @@ describe('MatomoClient', () => {
   });
 
   it('retrieves traffic channels and supports alias filtering', async () => {
-    const fetchMock = createFetchMock([
-      { label: 'Direct Entry', nb_visits: '120' },
-      { label: 'Search Engines', nb_visits: '80' },
+    const fetchMock = createCurrencyAwareFetchMock([
+      { label: 'Direct Entry', nb_visits: '120', revenue: '100' },
+      {
+        label: 'Search Engines',
+        nb_visits: '80',
+        goals: { ecommerceOrder: { revenue: '75' } },
+      },
       { label: 'Websites', nb_visits: '25' },
     ]);
     vi.stubGlobal('fetch', fetchMock);
@@ -775,6 +801,10 @@ describe('MatomoClient', () => {
     const channels = await client.getTrafficChannels({ period: 'week', date: '2025-09-01' });
     expect(channels).toHaveLength(3);
     expect(channels[0].nb_visits).toBe(120);
+    expect(channels[0].revenue).toEqual({ value: 100, currency: 'USD' });
+    expect((channels[1].goals as Record<string, unknown>).ecommerceOrder).toMatchObject({
+      revenue: { value: 75, currency: 'USD' },
+    });
 
     const filtered = await client.getTrafficChannels({ channelType: 'search', period: 'week', date: '2025-09-01' });
     expect(filtered).toHaveLength(1);
@@ -786,10 +816,13 @@ describe('MatomoClient', () => {
   });
 
   it('fetches goal conversions with filters and normalization', async () => {
-    const fetchMock = createFetchMock([
-      { idgoal: 'ecommerceOrder', goal: 'Orders', type: 'ecommerce', nb_conversions: '12' },
-      { idgoal: 2, name: 'Newsletter Signup', type: 'manually', nb_conversions: '8' },
-    ]);
+    const fetchMock = createCurrencyAwareFetchMock(
+      [
+        { idgoal: 'ecommerceOrder', goal: 'Orders', type: 'ecommerce', nb_conversions: '12', revenue: '45.75' },
+        { idgoal: 2, name: 'Newsletter Signup', type: 'manually', nb_conversions: '8', revenue: '0' },
+      ],
+      'usd'
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
@@ -797,10 +830,10 @@ describe('MatomoClient', () => {
     const allGoals = await client.getGoalConversions({ period: 'month', date: '2025-01-01', limit: 5 });
     expect(allGoals).toHaveLength(2);
     expect(allGoals[0]).toMatchObject({ id: 'ecommerceOrder', type: 'ecommerce', nb_conversions: 12 });
-
     const ecommerceOnly = await client.getGoalConversions({ goalType: 'ecommerce', period: 'month', date: '2025-01-01' });
     expect(ecommerceOnly).toHaveLength(1);
     expect(ecommerceOnly[0].label).toBe('Orders');
+    expect(ecommerceOnly[0].revenue).toEqual({ value: 45.75, currency: 'USD' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('method')).toBe('Goals.get');
@@ -808,9 +841,9 @@ describe('MatomoClient', () => {
   });
 
   it('handles goal conversions returned as an object map', async () => {
-    const fetchMock = createFetchMock({
+    const fetchMock = createCurrencyAwareFetchMock({
       donation: { idgoal: '1', goal: 'Donation', nb_conversions: '4', type: 'manually' },
-    });
+    }, 'cad');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
@@ -825,11 +858,11 @@ describe('MatomoClient', () => {
   });
 
   it('handles goal conversion summaries returned as a single object', async () => {
-    const fetchMock = createFetchMock({
+    const fetchMock = createCurrencyAwareFetchMock({
       nb_conversions: '7',
       nb_visits_converted: '3',
       revenue: '0',
-    });
+    }, 'usd');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 6 });
@@ -837,10 +870,11 @@ describe('MatomoClient', () => {
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ id: '2', nb_conversions: 7 });
+    expect(results[0].revenue).toEqual({ value: 0, currency: 'USD' });
   });
 
   it('filters goal conversions by label when goalId is non-numeric', async () => {
-    const fetchMock = createFetchMock([
+    const fetchMock = createCurrencyAwareFetchMock([
       { idgoal: 1, goal: 'Donation g n f', nb_conversions: '2', nb_visits_converted: '1', revenue: '0' },
       { idgoal: 2, goal: 'Newsletter Signup', nb_conversions: '5', nb_visits_converted: '4', revenue: '0' },
     ]);
@@ -851,29 +885,31 @@ describe('MatomoClient', () => {
 
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ id: '1', label: 'Donation g n f', nb_conversions: 2 });
+    expect(results[0].revenue).toEqual({ value: 0, currency: 'USD' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.has('idGoal')).toBe(false);
   });
 
   it('passes Matomo special goal identifiers through unchanged', async () => {
-    const fetchMock = createFetchMock([
+    const fetchMock = createCurrencyAwareFetchMock([
       { idgoal: 'ecommerceOrder', goal: 'Orders', nb_conversions: '9', revenue: '120.50', type: 'ecommerce' },
-    ]);
+    ], 'gbp');
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
     const results = await client.getGoalConversions({ period: 'week', date: 'last7', goalId: 'ecommerceOrder' });
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ id: 'ecommerceOrder', nb_conversions: 9, revenue: 120.5, type: 'ecommerce' });
+    expect(results[0]).toMatchObject({ id: 'ecommerceOrder', nb_conversions: 9, type: 'ecommerce' });
+    expect(results[0].revenue).toEqual({ value: 120.5, currency: 'GBP' });
 
     const url = new URL(fetchMock.mock.calls[0][0] as string);
     expect(url.searchParams.get('idGoal')).toBe('ecommerceOrder');
   });
 
   it('aggregates goal conversions across nested date buckets', async () => {
-    const fetchMock = createFetchMock({
+    const fetchMock = createCurrencyAwareFetchMock({
       '2025-10-01': [
         { idgoal: 1, goal: 'Donation g n f', nb_conversions: '1', nb_visits_converted: '1', revenue: '0' },
       ],
@@ -898,7 +934,7 @@ describe('MatomoClient', () => {
       label: 'Donation g n f',
       nb_conversions: 2,
       nb_visits_converted: 1,
-      revenue: 0,
+      revenue: { value: 0, currency: 'USD' },
     });
   });
 

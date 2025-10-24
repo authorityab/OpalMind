@@ -67,7 +67,7 @@
       tags: security,devex  priority: low  est: 1d
       deps: ADR-0001
       accepts: Enable `noImplicitAny`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`, resolve resulting errors in API/SDK packages, and document the stricter typing policy in contributor guides.
-- [ ] B-019 Add Matomo currency context to revenue tools
+- [x] B-019 Add Matomo currency context to revenue tools
       tags: analytics,api,dx  priority: medium  est: 1d
       deps: ADR-0003
       accepts: Fetch Matomo site currency (e.g., via `SitesManager.getSiteFromId`) per `siteId`, enrich `GetTrafficChannels` and `GetEcommerceOverview` responses so monetary fields return structured `{ value, currency }`, apply the same format to any other revenue-bearing tools, handle missing currency with clear fallbacks/logging, and add regression coverage plus docs for the new schema.
