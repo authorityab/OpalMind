@@ -142,7 +142,7 @@ Returns real-time health status with individual component checks.
 
 The accompanying diagnostics routine validates API tokens before running site-level checks.
 
-- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted, falling back to legacy `API.getLoggedInUser` when the method is missing or the token lacks UsersManager permissions.
+- **Check**: Calls `UsersManager.getUserByTokenAuth` to confirm the bearer token is accepted. When the method is unavailable on older Matomo releases, diagnostics fall back to legacy `API.getLoggedInUser`. Tokens without UsersManager access now surface guidance to enable the plugin or adjust permissions.
 - **Outcome**: Reports the resolved Matomo user login or surfaces actionable guidance when authentication fails.
 - **Redaction**: Diagnostic errors sanitize Matomo URLs before logging or returning them. Any `token_auth` query parameters are replaced with `REDACTED` so credentials never appear in responses or logs.
 

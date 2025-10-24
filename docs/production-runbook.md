@@ -6,7 +6,7 @@ This runbook documents the operational steps required to deploy and maintain the
 ## Pre-Deployment Checklist
 1. **Secrets**
    - `MATOMO_BASE_URL` — absolute `https://` or `http://` URL pointing to your Matomo instance.
-   - `MATOMO_TOKEN` — Matomo `token_auth` with view access to the target site(s).
+   - `MATOMO_TOKEN` — Matomo `token_auth` with view access to the target site(s) and permission to call `UsersManager.getUserByTokenAuth` (ensure the UsersManager plugin stays enabled).
    - `OPAL_BEARER_TOKEN` — 32+ byte random token (generate with `openssl rand -hex 32`).
    - Optional: `MATOMO_DEFAULT_SITE_ID`, cache/queue thresholds, `OPAL_TRUST_PROXY`.
 2. **Config validation**
@@ -82,4 +82,3 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 - Collect recent logs with `docker compose logs --tail=200 opalmind-api` (secrets redacted automatically).
 - Use `tools/diagnose-matomo` and `tools/get-health-status` to confirm Matomo connectivity before escalating to Matomo admins.
 - Review rate limit headers; adjust request pacing or Matomo archiving schedules if 429 responses persist.
-

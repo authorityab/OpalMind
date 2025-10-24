@@ -410,13 +410,12 @@ describe('MatomoClient', () => {
     expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
   });
 
-  it('falls back to API.getLoggedInUser when UsersManager requires elevated permissions', async () => {
+  it('surfaces guidance when neither user lookup method is available', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(createJsonResponse('5.0.0'))
-      .mockResolvedValueOnce(createPermissionErrorResponse('UsersManager.getUserByTokenAuth'))
-      .mockResolvedValueOnce(createJsonResponse({ login: 'viewer-token' }))
-      .mockResolvedValueOnce(createJsonResponse({ idsite: '2', name: 'Viewer Site' }));
+      .mockResolvedValueOnce(createJsonResponse('4.9.0'))
+      .mockResolvedValueOnce(createMethodMissingResponse('getUserByTokenAuth'))
+      .mockResolvedValueOnce(createMethodMissingResponse('getLoggedInUser'));
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -425,14 +424,44 @@ describe('MatomoClient', () => {
 
     expect(result.checks[1]).toMatchObject({
       id: 'token-auth',
-      status: 'ok',
-      details: { login: 'viewer-token' },
+      status: 'error',
+      error: {
+        type: 'matomo',
+        message:
+          'Matomo instance does not expose API.getLoggedInUser. Upgrade Matomo or enable the API plugin, or rely on UsersManager.getUserByTokenAuth with the appropriate permissions.',
+      },
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
       'UsersManager.getUserByTokenAuth'
     );
     expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get('method')).toBe('API.getLoggedInUser');
+  });
+
+  it('surfaces permission guidance when UsersManager requires elevated permissions', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse('5.0.0'))
+      .mockResolvedValueOnce(createPermissionErrorResponse('UsersManager.getUserByTokenAuth'));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 2 });
+    const result = await client.runDiagnostics();
+
+    expect(result.checks[1]).toMatchObject({
+      id: 'token-auth',
+      status: 'error',
+      error: {
+        type: 'matomo',
+        message:
+          'Matomo token lacks permission to call UsersManager.getUserByTokenAuth. Enable the UsersManager plugin and grant the token user at least view access to the required sites.',
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe(
+      'UsersManager.getUserByTokenAuth'
+    );
   });
 
   it('flags base URL errors and stops further checks', async () => {

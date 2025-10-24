@@ -23,6 +23,10 @@
       tags: dx,api  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Matomo tools prefer caller-provided siteIds, fall back to `MATOMO_DEFAULT_SITE_ID` when unspecified, prompt only when neither is available, centralize default lookup, and cover the trie of scenarios with tests/docs updates.
+- [x] B-018 Resolve Matomo `getLoggedInUser` API failure
+      tags: bug,api,auth  priority: critical  est: 0.5d
+      deps: ADR-0003
+      accepts: Ensure the Matomo API call uses an available user lookup method for the deployed version, verify required plugins/permissions are enabled, update token scope guidance, and add regression coverage that authentication succeeds without 400 errors.
 - [x] B-008 Wire `/health` to real Matomo diagnostics
       tags: security,ops,observability  priority: critical  est: 0.5d
       deps: ADR-0002

@@ -47,7 +47,13 @@ import {
   type TrackingBackoffOptions,
   type TrackingOptions,
 } from './tracking.js';
-import { MatomoApiError, MatomoClientError, MatomoNetworkError, MatomoPermissionError } from './errors.js';
+import {
+  MatomoApiError,
+  MatomoClientError,
+  MatomoNetworkError,
+  MatomoPermissionError,
+  type MatomoErrorDetails,
+} from './errors.js';
 
 const sdkLogger = baseLogger.child({ package: '@opalmind/sdk' });
 
@@ -451,6 +457,36 @@ async function fetchMatomoVersionWithFallback(
 
 type MatomoUserMethod = 'UsersManager.getUserByTokenAuth' | 'API.getLoggedInUser';
 
+function toMatomoErrorDetails(error: MatomoApiError): MatomoErrorDetails {
+  const details: MatomoErrorDetails = { cause: error };
+  if (error.status !== undefined) {
+    details.status = error.status;
+  }
+  if (error.code !== undefined) {
+    details.code = error.code;
+  }
+  if (error.body !== undefined) {
+    details.body = error.body;
+  }
+  if (error.endpoint !== undefined) {
+    details.endpoint = error.endpoint;
+  }
+  if (error.payload !== undefined) {
+    details.payload = error.payload;
+  }
+  if (error.rateLimit !== undefined) {
+    details.rateLimit = error.rateLimit;
+  }
+  return details;
+}
+
+function createUsersManagerPermissionError(error: MatomoPermissionError): MatomoPermissionError {
+  return new MatomoPermissionError(
+    'Matomo token lacks permission to call UsersManager.getUserByTokenAuth. Enable the UsersManager plugin and grant the token user at least view access to the required sites.',
+    toMatomoErrorDetails(error)
+  );
+}
+
 function extractMatomoUserLogin(payload: unknown): string | undefined {
   if (!payload) return undefined;
 
@@ -496,26 +532,38 @@ async function fetchMatomoUserWithFallback(
     }
     return result;
   } catch (error) {
-    if (
-      !isMatomoMethodUnavailable(error, 'getuserbytokenauth') &&
-      !(error instanceof MatomoPermissionError)
-    ) {
+    if (error instanceof MatomoPermissionError) {
+      throw createUsersManagerPermissionError(error);
+    }
+
+    if (!isMatomoMethodUnavailable(error, 'getuserbytokenauth')) {
       throw error;
     }
   }
 
-  const payload = await matomoGet<unknown>(http, {
-    method: 'API.getLoggedInUser',
-  });
+  try {
+    const payload = await matomoGet<unknown>(http, {
+      method: 'API.getLoggedInUser',
+    });
 
-  const login = extractMatomoUserLogin(payload);
-  const result: { login?: string; method: MatomoUserMethod } = {
-    method: 'API.getLoggedInUser',
-  };
-  if (login !== undefined) {
-    result.login = login;
+    const login = extractMatomoUserLogin(payload);
+    const result: { login?: string; method: MatomoUserMethod } = {
+      method: 'API.getLoggedInUser',
+    };
+    if (login !== undefined) {
+      result.login = login;
+    }
+    return result;
+  } catch (error) {
+    if (isMatomoMethodUnavailable(error, 'getloggedinuser')) {
+      throw new MatomoClientError(
+        'Matomo instance does not expose API.getLoggedInUser. Upgrade Matomo or enable the API plugin, or rely on UsersManager.getUserByTokenAuth with the appropriate permissions.',
+        toMatomoErrorDetails(error)
+      );
+    }
+
+    throw error;
   }
-  return result;
 }
 
 function assertSiteId(siteId: number | undefined): asserts siteId is number {
