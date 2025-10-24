@@ -1,4 +1,16 @@
 # Task Log
+## 2025-10-24
+- tool: shell
+  args: |
+    rg "MATOMO_DEFAULT_SITE_ID" -n
+    sed -n '450,650p' packages/api/src/server.ts
+    sed -n '520,660p' packages/sdk/src/index.ts
+  result: Located existing env-driven default siteId wiring in the API and confirmed the SDK currently requires a siteId override or default, erroring otherwise.
+  artifacts: packages/api/src/server.ts, packages/sdk/src/index.ts
+- tool: apply_patch
+  args: Add backlog task for Matomo `getLoggedInUser` 400 failures.
+  result: Logged B-018 to track investigation into missing/invalid Matomo API method, plugin configuration, and token permissions.
+  artifacts: .assistant/backlog.md
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github
