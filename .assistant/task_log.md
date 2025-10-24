@@ -27,6 +27,14 @@
   args: Mark B-018 complete in the backlog.
   result: Updated backlog status after shipping Matomo diagnostics fix.
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add backlog task for Matomo currency context in revenue tools.
+  result: Logged B-019 to track currency-aware responses in `GetTrafficChannels`, `GetEcommerceOverview`, and related Matomo tools.
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add backlog task for `avg_time_on_site` unit mismatch.
+  result: Logged B-020 to investigate and align `GetKeyNumbers` average time with Matomo’s second-based metric.
+  artifacts: .assistant/backlog.md
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github
