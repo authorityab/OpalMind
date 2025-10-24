@@ -138,10 +138,6 @@
       tags: docs,dx  priority: medium  est: 0.5d
       deps: B-003
       accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
-- [ ] B-005 Improve tracking failure diagnostics
-      tags: analytics,api  priority: medium  est: 0.5d
-      deps: P-004
-      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.
 - [ ] B-006 Support decimal inputs in numeric parsing
       tags: bug,api  priority: medium  est: 0.25d
       deps: none
@@ -178,3 +174,9 @@
       tags: feature,analytics  priority: low  est: 1d
       deps: ADR-0001
       accepts: Surface internal site search terms, zero-result queries, and follow-up actions through the API tools with supporting docs/tests.
+
+## Ice Box
+- [ ] B-005 Improve tracking failure diagnostics
+      tags: analytics,api  priority: low  est: 0.5d
+      deps: P-004
+      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.

@@ -24,7 +24,7 @@ Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observab
 
 ## Changelog
 - Added currency metadata to Matomo revenue outputs across SDK/API, fetching site currencies and updating docs/tests (B-019).
-- Normalized Matomo `avg_time_on_site` handling to seconds, parsing duration strings, deriving fallbacks, and refreshing docs/tests (B-020).
+- Normalized Matomo `avg_time_on_site` handling to seconds, parsing duration strings, deriving fallbacks, and returning `{ value, unit }` with docs/tests refreshed (B-020).
 - Hardened Matomo diagnostics to require UsersManager token permissions, surfaced guidance when legacy methods are missing, refreshed README/runbook docs, and added SDK regression coverage (B-018).
 - Honoured Matomo back-pressure in the tracking queue with Retry-After aware backoff, queue metrics, and SDK regression coverage.
 - Surfaced tracking queue depth/age in health checks with configurable warn/fail thresholds, SDK/API tests, and updated operator docs.

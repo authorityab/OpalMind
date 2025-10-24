@@ -134,7 +134,7 @@ describe('MatomoClient', () => {
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 7 });
     const result = await client.getKeyNumbers();
 
-    expect(result.avg_time_on_site).toBeCloseTo(3);
+    expect(result.avg_time_on_site).toEqual({ value: 3, unit: 'seconds' });
   });
 
   it('derives avg_time_on_site from total visit length when Matomo omits the metric', async () => {
@@ -148,7 +148,7 @@ describe('MatomoClient', () => {
     const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 15 });
     const result = await client.getKeyNumbers();
 
-    expect(result.avg_time_on_site).toBeCloseTo(4.5);
+    expect(result.avg_time_on_site).toEqual({ value: 4.5, unit: 'seconds' });
   });
 
   it('coerces scalar key number payloads into objects', async () => {

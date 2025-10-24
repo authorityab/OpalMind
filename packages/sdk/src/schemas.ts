@@ -15,7 +15,15 @@ export const keyNumbersSchema = z
     nb_actions_per_visit: z.union([numeric, z.string()]).optional(),
     nb_pageviews: numeric.optional(),
     nb_uniq_pageviews: numeric.optional(),
-    avg_time_on_site: numeric.optional(),
+    avg_time_on_site: z
+      .union([
+        numeric,
+        z.object({
+          value: numeric,
+          unit: z.enum(['seconds']),
+        }),
+      ])
+      .optional(),
   })
   .passthrough();
 
