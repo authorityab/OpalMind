@@ -79,6 +79,26 @@
   args: npm run test --workspace @opalmind/api -- --run
   result: API Vitest suite passed (43 tests) confirming compatibility with seconds-based average duration outputs.
   artifacts: none
+- tool: apply_patch
+  args: Move B-005 to backlog ice box.
+  result: Reclassified tracking diagnostics improvement as low-priority ice box item.
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add explicit unit metadata to `avg_time_on_site` in GetKeyNumbers.
+  result: Wrapped average visit duration in `{ value, unit }`, updated schema normalization, and refreshed Matomo client tests.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Update documentation samples for seconds-based avg_time_on_site.
+  result: README and API sample responses now show `{ value, unit: "seconds" }` for average visit duration.
+  artifacts: README.md, packages/api/docs/sample-responses.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after schema changes.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (81 tests) covering unit metadata updates.
+  artifacts: none
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github

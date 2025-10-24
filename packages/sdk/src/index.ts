@@ -433,7 +433,6 @@ const keyNumberNumericFields: Array<keyof KeyNumbers> = [
   'max_actions',
   'nb_pageviews',
   'nb_uniq_pageviews',
-  'avg_time_on_site',
 ];
 
 function toFiniteNumber(value: unknown): number | undefined {
@@ -602,7 +601,10 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
   })();
 
   if (computedDuration !== undefined && Number.isFinite(computedDuration)) {
-    sanitized.avg_time_on_site = computedDuration;
+    sanitized.avg_time_on_site = {
+      value: computedDuration,
+      unit: 'seconds',
+    } satisfies { value: number; unit: 'seconds' };
   } else {
     delete sanitized.avg_time_on_site;
   }
