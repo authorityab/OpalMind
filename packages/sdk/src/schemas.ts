@@ -15,6 +15,15 @@ export const keyNumbersSchema = z
     nb_actions_per_visit: z.union([numeric, z.string()]).optional(),
     nb_pageviews: numeric.optional(),
     nb_uniq_pageviews: numeric.optional(),
+    avg_time_on_site: z
+      .union([
+        numeric,
+        z.object({
+          value: numeric,
+          unit: z.enum(['seconds']),
+        }),
+      ])
+      .optional(),
   })
   .passthrough();
 
@@ -106,7 +115,7 @@ export const campaignsSchema = z.array(
     .passthrough()
 );
 
-export type Campaign = z.infer<typeof campaignsSchema>[number];
+export type RawCampaign = z.infer<typeof campaignsSchema>[number];
 
 export const ecommerceSummarySchema = z
   .object({
@@ -126,7 +135,7 @@ export const ecommerceSummarySchema = z
   })
   .passthrough();
 
-export type EcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
+export type RawEcommerceSummary = z.infer<typeof ecommerceSummarySchema>;
 
 export const eventCategoriesSchema = z.array(
   z
@@ -174,11 +183,12 @@ export const trafficChannelsSchema = z.array(
       sum_visit_length: numeric.optional(),
       nb_hits: numeric.optional(),
       bounce_rate: z.string().optional(),
+      revenue: numeric.optional(),
     })
     .passthrough()
 );
 
-export type TrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
+export type RawTrafficChannel = z.infer<typeof trafficChannelsSchema>[number];
 
 export const goalConversionsSchema = z.array(
   z

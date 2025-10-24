@@ -67,11 +67,11 @@
       tags: security,devex  priority: low  est: 1d
       deps: ADR-0001
       accepts: Enable `noImplicitAny`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`, resolve resulting errors in API/SDK packages, and document the stricter typing policy in contributor guides.
-- [ ] B-019 Add Matomo currency context to revenue tools
+- [x] B-019 Add Matomo currency context to revenue tools
       tags: analytics,api,dx  priority: medium  est: 1d
       deps: ADR-0003
       accepts: Fetch Matomo site currency (e.g., via `SitesManager.getSiteFromId`) per `siteId`, enrich `GetTrafficChannels` and `GetEcommerceOverview` responses so monetary fields return structured `{ value, currency }`, apply the same format to any other revenue-bearing tools, handle missing currency with clear fallbacks/logging, and add regression coverage plus docs for the new schema.
-- [ ] B-020 Fix `avg_time_on_site` unit mismatch
+- [x] B-020 Fix `avg_time_on_site` unit mismatch
       tags: analytics,bug  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Investigate `GetKeyNumbers` parsing of Matomo `avg_time_on_site`, correct unit interpretation so values match Matomo’s average visit duration (seconds), add regression coverage, and document the metric behaviour.
@@ -138,10 +138,6 @@
       tags: docs,dx  priority: medium  est: 0.5d
       deps: B-003
       accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
-- [ ] B-005 Improve tracking failure diagnostics
-      tags: analytics,api  priority: medium  est: 0.5d
-      deps: P-004
-      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.
 - [ ] B-006 Support decimal inputs in numeric parsing
       tags: bug,api  priority: medium  est: 0.25d
       deps: none
@@ -178,3 +174,9 @@
       tags: feature,analytics  priority: low  est: 1d
       deps: ADR-0001
       accepts: Surface internal site search terms, zero-result queries, and follow-up actions through the API tools with supporting docs/tests.
+
+## Ice Box
+- [ ] B-005 Improve tracking failure diagnostics
+      tags: analytics,api  priority: low  est: 0.5d
+      deps: P-004
+      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.

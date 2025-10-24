@@ -13,26 +13,22 @@ import {
   type CacheStatsSnapshot,
   type ReportsServiceOptions,
   type CacheEvent,
-  type EcommerceRevenueTotals,
-  type EcommerceRevenueSeriesPoint,
+  type RawEcommerceRevenueSeriesPoint,
   type EcommerceRevenueTotalsInput,
-  type GoalConversion,
   type GoalConversionsInput,
   type FunnelSummary,
   type FunnelStepSummary,
+  type RawEcommerceSummary,
 } from './reports.js';
 import { keyNumbersSchema, keyNumbersSeriesSchema } from './schemas.js';
 import type {
-  Campaign,
   DeviceTypeSummary,
-  EcommerceSummary,
   EntryPage,
   EventCategory,
   EventSummary,
   KeyNumbers,
   MostPopularUrl,
   TopReferrer,
-  TrafficChannel,
 } from './schemas.js';
 import {
   TrackingService,
@@ -233,6 +229,200 @@ export interface GetHealthStatusInput {
   siteId?: number;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+export interface MonetaryValue {
+  value: number;
+  currency: string | null;
+}
+
+export interface Campaign extends UnknownRecord {
+  label: string;
+  nb_visits?: number;
+  nb_actions?: number;
+  nb_visits_converted?: number;
+  revenue?: MonetaryValue;
+}
+
+export interface TrafficChannel extends UnknownRecord {
+  label: string;
+  nb_visits?: number;
+  nb_actions?: number;
+  nb_visits_converted?: number;
+  sum_visit_length?: number;
+  nb_hits?: number;
+  bounce_rate?: string;
+  revenue?: MonetaryValue;
+  goals?: UnknownRecord;
+}
+
+export interface GoalConversion extends UnknownRecord {
+  id: string;
+  label: string;
+  type: string;
+  nb_conversions?: number;
+  nb_visits_converted?: number;
+  revenue?: MonetaryValue;
+}
+
+export interface EcommerceSummary extends UnknownRecord {
+  nb_conversions?: number;
+  nb_visits?: number;
+  nb_visits_converted?: number;
+  conversion_rate?: string;
+  revenue?: MonetaryValue;
+  revenue_per_visit?: MonetaryValue;
+  revenue_per_conversion?: MonetaryValue;
+  avg_order_revenue?: MonetaryValue;
+  items?: number;
+  revenue_subtotal?: MonetaryValue;
+  revenue_tax?: MonetaryValue;
+  revenue_shipping?: MonetaryValue;
+  revenue_discount?: MonetaryValue;
+}
+
+export interface EcommerceRevenueSeriesPoint extends EcommerceSummary {
+  label: string;
+}
+
+export interface EcommerceRevenueTotals {
+  totals: EcommerceSummary;
+  series?: EcommerceRevenueSeriesPoint[];
+}
+
+const monetaryFieldTokens = new Set([
+  'revenue',
+  'revenuepervisit',
+  'revenueperconversion',
+  'avgorderrevenue',
+  'revenuesubtotal',
+  'revenuetax',
+  'revenueshipping',
+  'revenuediscount',
+]);
+
+function normalizeMonetaryKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function isMonetaryField(key: string): boolean {
+  return monetaryFieldTokens.has(normalizeMonetaryKey(key));
+}
+
+function toMonetaryNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function createMonetaryValue(value: number, currency: string | undefined): MonetaryValue {
+  return {
+    value,
+    currency: currency ?? null,
+  };
+}
+
+function transformNestedWithCurrency(value: unknown, currency: string | undefined): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => transformNestedWithCurrency(item, currency));
+  }
+
+  if (value && typeof value === 'object') {
+    return enrichRecordWithCurrency(value as Record<string, unknown>, currency);
+  }
+
+  return value;
+}
+
+function enrichRecordWithCurrency<T extends Record<string, unknown>>(record: T, currency: string | undefined): T {
+  const result: Record<string, unknown> = { ...record };
+
+  for (const [key, current] of Object.entries(record)) {
+    if (current === undefined || current === null) {
+      continue;
+    }
+
+    const numericValue = toMonetaryNumber(current);
+    if (numericValue !== undefined && isMonetaryField(key)) {
+      result[key] = createMonetaryValue(numericValue, currency);
+      continue;
+    }
+
+    if (Array.isArray(current) || (typeof current === 'object' && current !== null)) {
+      result[key] = transformNestedWithCurrency(current, currency);
+    }
+  }
+
+  return result as T;
+}
+
+function adaptEcommerceSummary(summary: RawEcommerceSummary, currency: string | undefined): EcommerceSummary {
+  return enrichRecordWithCurrency(summary as UnknownRecord, currency) as unknown as EcommerceSummary;
+}
+
+function adaptEcommerceRevenueSeriesPoint(
+  point: RawEcommerceRevenueSeriesPoint,
+  currency: string | undefined
+): EcommerceRevenueSeriesPoint {
+  const { label, ...rest } = point;
+  const summary = adaptEcommerceSummary(rest as RawEcommerceSummary, currency);
+  return {
+    label,
+    ...summary,
+  };
+}
+
+function firstSiteRecord(payload: unknown): Record<string, unknown> | undefined {
+  if (!payload) return undefined;
+
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      if (entry && typeof entry === 'object') {
+        return entry as Record<string, unknown>;
+      }
+    }
+    return undefined;
+  }
+
+  if (typeof payload === 'object') {
+    return payload as Record<string, unknown>;
+  }
+
+  return undefined;
+}
+
+function extractSiteCurrency(payload: unknown): string | undefined {
+  const record = firstSiteRecord(payload);
+  if (!record) return undefined;
+
+  const candidates = [
+    record.currency,
+    record.currencyCode,
+    record.currency_symbol,
+    record.currencySymbol,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed.toUpperCase();
+      }
+    }
+  }
+
+  return undefined;
+}
+
 const keyNumberNumericFields: Array<keyof KeyNumbers> = [
   'nb_visits',
   'nb_uniq_visitors',
@@ -292,6 +482,66 @@ function sumSeriesValues(series: unknown): number | undefined {
   return seen ? total : undefined;
 }
 
+function parseDurationSeconds(value: unknown): number | undefined {
+  const numeric = toFiniteNumber(value);
+  if (numeric !== undefined) {
+    return numeric;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const colonParts = trimmed.split(':');
+  if (colonParts.length >= 2 && colonParts.length <= 3 && colonParts.every(part => /^\d+$/.test(part))) {
+    if (colonParts.length === 3) {
+      const [hoursStr, minutesStr, secondsStr] = colonParts as [string, string, string];
+      const hours = Number.parseInt(hoursStr, 10);
+      const minutes = Number.parseInt(minutesStr, 10);
+      const seconds = Number.parseInt(secondsStr, 10);
+      if ([hours, minutes, seconds].some(value => !Number.isFinite(value))) {
+        return undefined;
+      }
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    const [minutesStr, secondsStr] = colonParts as [string, string];
+    const minutes = Number.parseInt(minutesStr, 10);
+    const seconds = Number.parseInt(secondsStr, 10);
+    if ([minutes, seconds].some(value => !Number.isFinite(value))) {
+      return undefined;
+    }
+
+    return minutes * 60 + seconds;
+  }
+
+  const simpleMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds)$/i);
+  if (simpleMatch) {
+    const seconds = Number.parseFloat(simpleMatch[1]!);
+    return Number.isFinite(seconds) ? seconds : undefined;
+  }
+
+  const verboseMatch =
+    trimmed.match(
+      /^(?:(\d+)\s*h(?:ours?)?\s*)?(?:(\d+)\s*m(?:in(?:ute)?s?)?\s*)?(?:(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?)?$/i
+    );
+  if (verboseMatch) {
+    const hours = verboseMatch[1] ? Number.parseInt(verboseMatch[1], 10) : 0;
+    const minutes = verboseMatch[2] ? Number.parseInt(verboseMatch[2], 10) : 0;
+    const secondsPart = verboseMatch[3] ? Number.parseFloat(verboseMatch[3]) : 0;
+    if ([hours, minutes, secondsPart].every(Number.isFinite)) {
+      return hours * 3600 + minutes * 60 + secondsPart;
+    }
+  }
+
+  return undefined;
+}
+
 function unwrapMatomoValue(raw: unknown): unknown {
   if (Array.isArray(raw)) {
     if (raw.length === 0) return undefined;
@@ -337,6 +587,26 @@ function sanitizeKeyNumbers(raw: Record<string, unknown>): Record<string, unknow
     } else {
       delete sanitized[field as string];
     }
+  }
+
+  const computedDuration = (() => {
+    const totalDuration = typeof sanitized.sum_visit_length === 'number' ? sanitized.sum_visit_length : undefined;
+    const visits = typeof sanitized.nb_visits === 'number' ? sanitized.nb_visits : undefined;
+
+    if (totalDuration !== undefined && visits !== undefined && visits > 0) {
+      return totalDuration / visits;
+    }
+
+    return parseDurationSeconds(raw['avg_time_on_site']);
+  })();
+
+  if (computedDuration !== undefined && Number.isFinite(computedDuration)) {
+    sanitized.avg_time_on_site = {
+      value: computedDuration,
+      unit: 'seconds',
+    } satisfies { value: number; unit: 'seconds' };
+  } else {
+    delete sanitized.avg_time_on_site;
   }
 
   return sanitized;
@@ -579,6 +849,7 @@ export class MatomoClient {
   private readonly defaultSiteId: number | undefined;
   private readonly queueThresholds: TrackingQueueThresholds;
   private readonly cacheThresholds: CacheHealthThresholds;
+  private readonly siteCurrencyCache = new Map<number, string | null>();
 
   constructor(config: MatomoClientConfig) {
     const httpOptions: MatomoHttpClientOptions = {
@@ -652,6 +923,32 @@ export class MatomoClient {
     const value = override ?? this.defaultSiteId;
     assertSiteId(value);
     return value;
+  }
+
+  private async resolveSiteCurrency(siteId: number): Promise<string | undefined> {
+    if (this.siteCurrencyCache.has(siteId)) {
+      const cached = this.siteCurrencyCache.get(siteId);
+      return cached ?? undefined;
+    }
+
+    try {
+      const payload = await matomoGet<unknown>(this.http, {
+        method: 'SitesManager.getSiteFromId',
+        params: { idSite: siteId },
+      });
+      const currency = extractSiteCurrency(payload);
+      this.siteCurrencyCache.set(siteId, currency ?? null);
+      return currency ?? undefined;
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        sdkLogger.debug('Failed to resolve Matomo site currency', {
+          siteId,
+          error,
+        });
+      }
+      this.siteCurrencyCache.set(siteId, null);
+      return undefined;
+    }
   }
 
   async getKeyNumbers(input: GetKeyNumbersInput = {}): Promise<KeyNumbers> {
@@ -855,7 +1152,12 @@ export class MatomoClient {
     if (input.limit !== undefined) {
       request.limit = input.limit;
     }
-    return this.reports.getCampaigns(request);
+    const [campaigns, currency] = await Promise.all([
+      this.reports.getCampaigns(request),
+      this.resolveSiteCurrency(siteId),
+    ]);
+
+    return campaigns.map(campaign => enrichRecordWithCurrency(campaign, currency) as unknown as Campaign);
   }
 
   async getEcommerceOverview(input: GetEcommerceOverviewInput = {}): Promise<EcommerceSummary> {
@@ -868,7 +1170,12 @@ export class MatomoClient {
     if (input.segment !== undefined) {
       request.segment = input.segment;
     }
-    return this.reports.getEcommerceOverview(request);
+    const [summary, currency] = await Promise.all([
+      this.reports.getEcommerceOverview(request),
+      this.resolveSiteCurrency(siteId),
+    ]);
+
+    return adaptEcommerceSummary(summary, currency);
   }
 
   async getEcommerceRevenueTotals(
@@ -886,7 +1193,15 @@ export class MatomoClient {
     if (input.includeSeries !== undefined) {
       request.includeSeries = input.includeSeries;
     }
-    return this.reports.getEcommerceRevenueTotals(request);
+    const [totals, currency] = await Promise.all([
+      this.reports.getEcommerceRevenueTotals(request),
+      this.resolveSiteCurrency(siteId),
+    ]);
+
+    const adaptedTotals = adaptEcommerceSummary(totals.totals, currency);
+    const adaptedSeries = totals.series?.map(point => adaptEcommerceRevenueSeriesPoint(point, currency));
+
+    return adaptedSeries ? { totals: adaptedTotals, series: adaptedSeries } : { totals: adaptedTotals };
   }
 
   async getEventCategories(input: GetEventCategoriesInput = {}): Promise<EventCategory[]> {
@@ -937,7 +1252,12 @@ export class MatomoClient {
     if (input.channelType !== undefined) {
       request.channelType = input.channelType;
     }
-    return this.reports.getTrafficChannels(request);
+    const [channels, currency] = await Promise.all([
+      this.reports.getTrafficChannels(request),
+      this.resolveSiteCurrency(siteId),
+    ]);
+
+    return channels.map(channel => enrichRecordWithCurrency(channel, currency) as unknown as TrafficChannel);
   }
 
   async getGoalConversions(input: GetGoalConversionsInput = {}): Promise<GoalConversion[]> {
@@ -959,7 +1279,12 @@ export class MatomoClient {
     if (input.goalType !== undefined) {
       request.goalType = input.goalType;
     }
-    return this.reports.getGoalConversions(request);
+    const [goals, currency] = await Promise.all([
+      this.reports.getGoalConversions(request),
+      this.resolveSiteCurrency(siteId),
+    ]);
+
+    return goals.map(goal => enrichRecordWithCurrency(goal as unknown as UnknownRecord, currency) as unknown as GoalConversion);
   }
 
   async getFunnelSummary(input: GetFunnelSummaryInput): Promise<FunnelSummary> {
@@ -1303,9 +1628,7 @@ export type {
   MostPopularUrl,
   EventSummary,
   EntryPage,
-  Campaign,
   DeviceTypeSummary,
-  EcommerceSummary,
   TopReferrer,
   EventCategory,
   TrackEventInput,
@@ -1319,11 +1642,7 @@ export type {
   TrackingBackoffOptions,
   CacheStatsSnapshot,
   CacheEvent,
-  EcommerceRevenueTotals,
-  EcommerceRevenueSeriesPoint,
   EcommerceRevenueTotalsInput,
-  TrafficChannel,
-  GoalConversion,
   FunnelSummary,
   FunnelStepSummary,
   MatomoRateLimitEvent,

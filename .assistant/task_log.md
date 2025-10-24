@@ -35,6 +35,70 @@
   args: Add backlog task for `avg_time_on_site` unit mismatch.
   result: Logged B-020 to investigate and align `GetKeyNumbers` average time with Matomo’s second-based metric.
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Enrich Matomo revenue outputs with currency-aware structures across SDK.
+  result: Added site currency caching, converted campaign/traffic/ecommerce/goal responses to `{ value, currency }`, extended Zod schemas, and updated SDK unit tests.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/reports.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Align API expectations and docs with structured currency outputs.
+  result: Updated server tests, README guidance, and sample response docs to reflect monetary `{ value, currency }` objects.
+  artifacts: packages/api/test/server.test.ts, README.md, packages/api/docs/sample-responses.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after currency enrichment changes.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (79 tests) validating currency transformations.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: API Vitest suite passed (43 tests) with updated currency-aware fixtures.
+  artifacts: none
+- tool: apply_patch
+  args: Normalize Matomo `avg_time_on_site` to seconds and add duration parsing.
+  result: Parsed duration strings, derived averages from `sum_visit_length`, and exposed seconds-aligned metrics with schema updates and SDK regression coverage.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Refresh sample responses and README notes for average time metrics.
+  result: Documented seconds-based average visit duration and updated key number examples.
+  artifacts: packages/api/docs/sample-responses.md, README.md
+- tool: apply_patch
+  args: Mark B-020 complete in backlog.
+  result: Updated backlog entry after fixing Matomo average time mismatch.
+  artifacts: .assistant/backlog.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after average-time normalization updates.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (81 tests) validating duration handling.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/api -- --run
+  result: API Vitest suite passed (43 tests) confirming compatibility with seconds-based average duration outputs.
+  artifacts: none
+- tool: apply_patch
+  args: Move B-005 to backlog ice box.
+  result: Reclassified tracking diagnostics improvement as low-priority ice box item.
+  artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add explicit unit metadata to `avg_time_on_site` in GetKeyNumbers.
+  result: Wrapped average visit duration in `{ value, unit }`, updated schema normalization, and refreshed Matomo client tests.
+  artifacts: packages/sdk/src/index.ts, packages/sdk/src/schemas.ts, packages/sdk/test/matomoClient.test.ts
+- tool: apply_patch
+  args: Update documentation samples for seconds-based avg_time_on_site.
+  result: README and API sample responses now show `{ value, unit: "seconds" }` for average visit duration.
+  artifacts: README.md, packages/api/docs/sample-responses.md
+- tool: shell
+  args: npm run typecheck --workspace @opalmind/sdk
+  result: TypeScript check succeeded after schema changes.
+  artifacts: none
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suites passed (81 tests) covering unit metadata updates.
+  artifacts: none
 ## 2025-10-16
 - tool: list_mcp_resources
   args: server=context7; server=playwright; server=github
