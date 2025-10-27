@@ -1,18 +1,19 @@
 # Status
 
 ## Focus
-Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observability improvements.
+Deliver cache/queue resilience (P-018, P-019, P-005) and harden funnel analytics outputs for consistent Matomo insights.
 
 ## Now / Next / Later
-- Now: B-007 Auto-resolve Matomo siteId defaults.
-- Next: P-018 Bounded caches, P-019 Health queue metrics, P-005 queue persistence, P-006a funnel hardening, P-011–P-015 analytics expansion.
-- Later: P-007 Publish Opal discovery guide; P-008 Introduce structured logging pipeline; P-009 Lean build and dependency audit; P-020 Align authentication documentation; B-005 Improve tracking diagnostics; B-006 Support decimal parsing.
+- Now: P-018 Bound caches and idempotency stores; P-019 Instrument health endpoint with real queue metrics; P-005 Persist retry queue and cache state.
+- Next: P-006a Harden funnel analytics flow outputs; P-010 Support multi-site indexing and configuration; P-020 Align authentication documentation with implementation.
+- Later: B-016 Enforce structured logging and lint rules; B-017 Tighten TypeScript compiler strictness; P-002c Compute comparative period deltas; B-006 Support decimal parsing; P-007–P-015 analytics expansion.
 
 ## Risks
-- Default site resolution remains manual until B-007 ships, risking inconsistent reporting defaults.
+- Cache and retry queue remain memory-only until P-005/P-018 land, risking data loss on restarts and unbounded resource growth.
 - Tracking queue observability lacks real metrics until P-019 lands, leaving SRE without actionable queue depth/age signals.
 - Persistence backend for cache/queue still undecided, which impacts P-005 scope and deployment expectations.
 - Monitoring platform alignment remains open; alert hooks stay manual until an owner commits.
+- Traffic channel regression looks resolved upstream, so B-001 is parked in On Hold until the next quarterly Matomo validation run.
 
 ## Artifacts
 - Vision & mission: `.assistant/canvas/vision.md`
@@ -22,6 +23,8 @@ Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observab
 - History of milestones: `.assistant/history.md`
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
 - Community standards: `CODE_OF_CONDUCT.md`, `.github/SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/pull_request_template.md`
+- Assistant workflow: `.assistant/README.md`
+- Issue helper script: `scripts/create_backlog_issues.sh`
 
 ## Changelog
 - Added currency metadata to Matomo revenue outputs across SDK/API, fetching site currencies and updating docs/tests (B-019).

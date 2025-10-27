@@ -1,23 +1,25 @@
 # Plan
 
 ## Now
-- B-007 Auto-resolve Matomo siteId defaults
-
-## Next
 - P-018 Bound caches and idempotency stores
 - P-019 Instrument health endpoint with real queue metrics
 - P-005 Persist retry queue and cache state
+
+## Next
 - P-006a Harden funnel analytics flow outputs
+- P-010 Support multi-site indexing and configuration
+- P-020 Align authentication documentation with implementation
+
+## Later
+- B-016 Enforce structured logging and lint rules
+- B-017 Tighten TypeScript compiler strictness
+- P-002c Compute comparative period deltas for reports
+- B-006 Support decimal inputs in numeric parsing
+- P-007 Publish Opal discovery integration guide
+- P-008 Introduce structured logging pipeline
+- P-009 Lean build and dependency audit
 - P-011 Add goal analytics helpers
 - P-012 Add cohort retention analytics
 - P-013 Add campaign acquisition analytics
 - P-014 Add event flow analytics
 - P-015 Add site search analytics helpers
-
-## Later
-- P-007 Publish Opal discovery integration guide
-- P-008 Introduce structured logging pipeline
-- P-009 Lean build and dependency audit
-- P-020 Align authentication documentation with implementation
-- B-005 Improve tracking failure diagnostics
-- B-006 Support decimal inputs in numeric parsing

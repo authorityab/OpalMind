@@ -27,6 +27,22 @@
   args: Add backlog task issue template
   result: Created `backlog_task.md` issue template to streamline promoting `.assistant/backlog.md` entries into GitHub issues.
   artifacts: .github/ISSUE_TEMPLATE/backlog_task.md
+- tool: apply_patch
+  args: Restructure backlog into Done/Current/Future sections and update assistant docs
+  result: Reorganised `.assistant/backlog.md`, aligned plan/status focus with new lanes, and documented backlog maintenance standards.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md, .assistant/README.md
+- tool: apply_patch
+  args: Park B-001 in On Hold section
+  result: Moved B-001 to a new On Hold backlog section with context note, updated plan/status to drop it from active lanes, and documented the lane in the assistant README.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md, .assistant/README.md
+- tool: apply_patch
+  args: Add GitHub issue creation script and documentation
+  result: Added `scripts/create_backlog_issues.sh` to batch-create GitHub issues from Current/Future backlog items, documented usage in assistant README, and referenced the script from status artifacts.
+  artifacts: scripts/create_backlog_issues.sh, .assistant/README.md, .assistant/status.md
+- tool: apply_patch
+  args: Fix default repo in issue creation script
+  result: Updated script to default to `authorityab/OpalMind` and refreshed assistant README guidance accordingly.
+  artifacts: scripts/create_backlog_issues.sh, .assistant/README.md
 ## 2025-10-24
 - tool: shell
   args: |

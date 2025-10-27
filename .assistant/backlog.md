@@ -1,4 +1,6 @@
 # Backlog
+
+## Done
 - [x] P-001 Harden secret management for OpalMind deployments
       tags: security,ops  priority: high  est: 0.5d
       deps: ADR-0001
@@ -19,10 +21,6 @@
       tags: security,config,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Reject startup when Matomo base URL or token are unset, remove default credentials, surface actionable configuration errors, and cover the guard with tests.
-- [x] B-018 Resolve Matomo `getLoggedInUser` API failure
-      tags: bug,api,auth  priority: critical  est: 0.5d
-      deps: ADR-0003
-      accepts: Ensure the Matomo API call uses an available user lookup method for the deployed version, verify required plugins/permissions are enabled, update token scope guidance, and add regression coverage that authentication succeeds without 400 errors.
 - [x] B-008 Wire `/health` to real Matomo diagnostics
       tags: security,ops,observability  priority: critical  est: 0.5d
       deps: ADR-0002
@@ -55,14 +53,10 @@
       tags: security,ops  priority: medium  est: 0.5d
       deps: ADR-0002
       accepts: Introduce `/healthz` (process up) and `/readyz` (Matomo/cache success) endpoints, update deployment docs/Kubernetes manifest guidance, and add tests covering readiness failure while liveness stays green.
-- [ ] B-016 Enforce structured logging and lint rules
-      tags: security,devex  priority: low  est: 0.75d
-      deps: ADR-0001
-      accepts: Standardize on redacted logger utility, ban raw `console.*` via ESLint with security plugin, migrate existing logs, and ensure CI enforces the rule set.
-- [ ] B-017 Tighten TypeScript compiler strictness
-      tags: security,devex  priority: low  est: 1d
-      deps: ADR-0001
-      accepts: Enable `noImplicitAny`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`, resolve resulting errors in API/SDK packages, and document the stricter typing policy in contributor guides.
+- [x] B-018 Resolve Matomo `getLoggedInUser` API failure
+      tags: bug,api,auth  priority: critical  est: 0.5d
+      deps: ADR-0003
+      accepts: Ensure the Matomo API call uses an available user lookup method for the deployed version, verify required plugins/permissions are enabled, update token scope guidance, and add regression coverage that authentication succeeds without 400 errors.
 - [x] B-019 Add Matomo currency context to revenue tools
       tags: analytics,api,dx  priority: medium  est: 1d
       deps: ADR-0003
@@ -71,38 +65,44 @@
       tags: analytics,bug  priority: high  est: 0.5d
       deps: ADR-0003
       accepts: Investigate `GetKeyNumbers` parsing of Matomo `avg_time_on_site`, correct unit interpretation so values match Matomo’s average visit duration (seconds), add regression coverage, and document the metric behaviour.
-- [ ] P-002c Compute comparative period deltas for reports
-      tags: analytics,ux  priority: medium  est: 1.5d
-      deps: P-002
-      accepts: Reporting tools fetch current and prior periods for each metric, compute percentage deltas with up/down indicators, handle zero-baseline cases, and expose the results through SDK/UI with documentation.
-- [x] P-002b Update Matomo token authentication probe
-      tags: observability,ops  priority: medium  est: 0.5d
-      deps: P-002
-      accepts: Diagnostics use `UsersManager.getUserByTokenAuth` with fallback to legacy `API.getLoggedInUser`; token failures surface actionable guidance; tests/docs updated to reflect new method order.
 - [x] P-002a Swap Matomo version health probe
       tags: observability,ops  priority: medium  est: 0.5d
       deps: P-002
       accepts: Health check uses `API.getMatomoVersion` with fallback to legacy `API.getVersion` when needed; diagnostics no longer report false failures on Matomo 5; docs/tests updated to reflect the probe change.
-- [ ] B-001 Fix traffic channel response parsing
-      tags: bug,analytics  priority: high  est: 1d
-      deps: ADR-0001
-      accepts: Month-period traffic channel and most-popular URL requests succeed when Matomo Cloud returns objects instead of arrays (while on-prem works); schema updated or responses normalized; tests cover the regression scenario.
+- [x] P-002b Update Matomo token authentication probe
+      tags: observability,ops  priority: medium  est: 0.5d
+      deps: P-002
+      accepts: Diagnostics use `UsersManager.getUserByTokenAuth` with fallback to legacy `API.getLoggedInUser`; token failures surface actionable guidance; tests/docs updated to reflect new method order.
 - [x] P-003 Add Matomo rate-limit awareness to SDK
-      tags: reliability,sdk  priority: high  est: 1.5d
+      tags: reliability,sdk  priority: medium  est: 1d
       deps: ADR-0001
-      accepts: Detect limit responses, throttle retries, and surface actionable guidance to API consumers with test coverage.
+      accepts: SDK handles 429 responses with adaptive retry/backoff, exposes retry metadata/logging, and documents rate-limit semantics with tests.
 - [x] P-004 Make tracking retries idempotent
-      tags: reliability,api  priority: medium  est: 1d
+      tags: reliability,queue  priority: high  est: 1.5d
       deps: ADR-0003
       accepts: Tracking queue deduplicates retried events/goals and documents caller requirements for idempotency keys.
-- [ ] P-005 Persist retry queue and cache state
-      tags: infrastructure,reliability  priority: medium  est: 2d
-      deps: ADR-0003
-      accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
 - [x] P-006 Add funnel analytics helpers
       tags: feature,sdk  priority: medium  est: 1.5d
       deps: ADR-0001
       accepts: Provide funnel analytics helpers surfaced through the API tools, covering data retrieval, normalization, and documentation/tests for usage.
+- [x] P-016 Honor Matomo back-pressure in tracking retries
+      tags: reliability,queue  priority: high  est: 1.5d
+      deps: P-004
+      accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.
+- [x] P-017 Add timeout and retry safeguards to Matomo HTTP client
+      tags: reliability,http  priority: high  est: 1d
+      deps: ADR-0001
+      accepts: Wrap fetch calls with AbortController-driven timeouts, add bounded retry logic with circuit breaking for transient failures, and ensure diagnostics/SDK tests cover timeout scenarios.
+- [x] O-001 Enable GitHub content reporting
+      tags: ops,community  priority: medium  est: 0.1d
+      deps: none
+      accepts: Repository administrators enable "Report content" in GitHub community settings and document the policy link for maintainers.
+
+## Current
+- [ ] P-005 Persist retry queue and cache state
+      tags: infrastructure,reliability  priority: medium  est: 2d
+      deps: ADR-0003
+      accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
 - [ ] P-006a Harden funnel analytics flow outputs
       tags: feature,sdk  priority: medium  est: 1d
       deps: P-006
@@ -114,15 +114,7 @@
       notes:
         1. Define a site-name → siteId mapping in a JSON/YAML document, referenced via env var or well-known path; refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
-        Previous work has been done, have a look at an old branch `feature-P010`
-- [x] P-016 Honor Matomo back-pressure in tracking retries
-      tags: reliability,queue  priority: high  est: 1.5d
-      deps: P-004
-      accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.
-- [x] P-017 Add timeout and retry safeguards to Matomo HTTP client
-      tags: reliability,http  priority: high  est: 1d
-      deps: ADR-0001
-      accepts: Wrap fetch calls with AbortController-driven timeouts, add bounded retry logic with circuit breaking for transient failures, and ensure diagnostics/SDK tests cover timeout scenarios.
+        3. Previous work has been done, have a look at an old branch `feature-P010`.
 - [ ] P-018 Bound caches and idempotency stores
       tags: reliability,infra  priority: high  est: 1d
       deps: ADR-0003
@@ -135,10 +127,28 @@
       tags: docs,dx  priority: medium  est: 0.5d
       deps: B-003
       accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
-- [x] O-001 Enable GitHub content reporting
-      tags: ops,community  priority: medium  est: 0.1d
-      deps: none
-      accepts: Repository administrators enable \"Report content\" in GitHub community settings and document the policy link for maintainers.
+
+## On Hold
+- [ ] B-001 Fix traffic channel response parsing
+      tags: bug,analytics  priority: high  est: 1d
+      deps: ADR-0001
+      accepts: Month-period traffic channel and most-popular URL requests succeed when Matomo Cloud returns objects instead of arrays (while on-prem works); schema updated or responses normalized; tests cover the regression scenario.
+      notes:
+        - 2025-10-27: Issue believed resolved upstream; keep for validation until next Matomo regression window.
+
+## Future
+- [ ] B-016 Enforce structured logging and lint rules
+      tags: security,devex  priority: low  est: 0.75d
+      deps: ADR-0001
+      accepts: Standardize on redacted logger utility, ban raw `console.*` via ESLint with security plugin, migrate existing logs, and ensure CI enforces the rule set.
+- [ ] B-017 Tighten TypeScript compiler strictness
+      tags: security,devex  priority: low  est: 1d
+      deps: ADR-0001
+      accepts: Enable `noImplicitAny`, `exactOptionalPropertyTypes`, and `noUncheckedIndexedAccess`, resolve resulting errors in API/SDK packages, and document the stricter typing policy in contributor guides.
+- [ ] P-002c Compute comparative period deltas for reports
+      tags: analytics,ux  priority: medium  est: 1.5d
+      deps: P-002
+      accepts: Reporting tools fetch current and prior periods for each metric, compute percentage deltas with up/down indicators, handle zero-baseline cases, and expose the results through SDK/UI with documentation.
 - [ ] B-006 Support decimal inputs in numeric parsing
       tags: bug,api  priority: medium  est: 0.25d
       deps: none
@@ -177,7 +187,4 @@
       accepts: Surface internal site search terms, zero-result queries, and follow-up actions through the API tools with supporting docs/tests.
 
 ## Ice Box
-- [ ] B-005 Improve tracking failure diagnostics
-      tags: analytics,api  priority: low  est: 0.5d
-      deps: P-004
-      accepts: Include status code, sanitized endpoint, and response body summary when retries fail, without leaking secrets, and add tests asserting the diagnostic payload.
+- [ ] (none) — reserve for low-priority ideas when they emerge.
