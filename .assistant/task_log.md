@@ -41,7 +41,7 @@
   artifacts: scripts/create_backlog_issues.sh, .assistant/README.md, .assistant/status.md
 - tool: apply_patch
   args: Fix issue script defaults and labels
-  result: Updated script to default to `authorityab/OpalMind`, auto-create missing labels when publishing issues, and refreshed assistant README guidance accordingly.
+  result: Updated script to default to `authorityab/OpalMind`, auto-create missing labels when publishing issues (with caching), and refreshed assistant README guidance accordingly.
   artifacts: scripts/create_backlog_issues.sh, .assistant/README.md
 ## 2025-10-24
 - tool: shell

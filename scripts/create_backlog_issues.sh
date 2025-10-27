@@ -53,12 +53,19 @@ declare -A LABEL_DESCRIPTIONS=(
   ["priority:low"]="Opportunistic or nice-to-have"
 )
 
+declare -A CREATED_LABELS=()
+
 ensure_label() {
   local label="$1"
   local color="${LABEL_COLORS[$label]:-ededed}"
   local description="${LABEL_DESCRIPTIONS[$label]:-}"
 
+  if [[ -n "${CREATED_LABELS[$label]:-}" ]]; then
+    return
+  fi
+
   if gh label view "${label}" --repo "${REPO}" >/dev/null 2>&1; then
+    CREATED_LABELS[$label]=1
     return
   fi
 
@@ -69,9 +76,17 @@ ensure_label() {
 
   echo "Creating missing label '${label}'"
   if [[ "${description}" == "-" ]]; then
-    gh label create "${label}" --color "${color}" --repo "${REPO}"
+    if gh label create "${label}" --color "${color}" --repo "${REPO}"; then
+      CREATED_LABELS[$label]=1
+    else
+      echo "[warn] Unable to create label '${label}', continuing..."
+    fi
   else
-    gh label create "${label}" --color "${color}" --description "${description}" --repo "${REPO}"
+    if gh label create "${label}" --color "${color}" --description "${description}" --repo "${REPO}"; then
+      CREATED_LABELS[$label]=1
+    else
+      echo "[warn] Unable to create label '${label}', continuing..."
+    fi
   fi
 }
 
