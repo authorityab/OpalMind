@@ -187,9 +187,23 @@ export interface CacheStatsSnapshot {
   features: Array<CacheStatsCounters & { feature: string; entries: number }>;
 }
 
+export interface CacheEntry<T = unknown> {
+  feature: string;
+  value: T;
+  expiresAt: number;
+}
+
+export interface CacheStore<T = unknown> {
+  get(key: string): Promise<CacheEntry<T> | undefined> | CacheEntry<T> | undefined;
+  set(key: string, entry: CacheEntry<T>): Promise<void> | void;
+  delete(key: string): Promise<void> | void;
+  keys(pattern?: string): Promise<string[]> | string[];
+}
+
 export interface ReportsServiceOptions {
   cacheTtlMs?: number;
   onCacheEvent?: (event: CacheEvent) => void;
+  cacheStore?: CacheStore;
 }
 
 export class ReportsService {
@@ -197,24 +211,46 @@ export class ReportsService {
   private readonly cacheTtlMs: number;
   private readonly featureStats = new Map<string, CacheStatsCounters>();
   private readonly onCacheEvent: ((event: CacheEvent) => void) | undefined;
+  private readonly cacheStore: CacheStore | undefined;
 
   constructor(private readonly http: MatomoHttpClient, options: ReportsServiceOptions = {}) {
     this.cacheTtlMs = options.cacheTtlMs ?? 60_000;
     this.onCacheEvent = options.onCacheEvent;
+    this.cacheStore = options.cacheStore;
   }
 
-  getCacheStats(): CacheStatsSnapshot {
+  async getCacheStats(): Promise<CacheStatsSnapshot> {
     const totals: CacheStatsCounters & { entries: number } = {
       hits: 0,
       misses: 0,
       sets: 0,
       staleEvictions: 0,
-      entries: this.cache.size,
+      entries: 0,
     };
 
+    // Count entries from cache store or in-memory cache
+    if (this.cacheStore) {
+      const keys = await this.cacheStore.keys();
+      totals.entries = keys.length;
+    } else {
+      totals.entries = this.cache.size;
+    }
+
     const featureEntries = new Map<string, number>();
-    for (const entry of this.cache.values()) {
-      featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
+    
+    // Count entries per feature
+    if (this.cacheStore) {
+      const keys = await this.cacheStore.keys();
+      for (const key of keys) {
+        const entry = await this.cacheStore.get(key);
+        if (entry) {
+          featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
+        }
+      }
+    } else {
+      for (const entry of this.cache.values()) {
+        featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
+      }
     }
 
     const features: Array<CacheStatsCounters & { feature: string; entries: number }> = [];
@@ -253,7 +289,30 @@ export class ReportsService {
     }
   }
 
-  private getFromCache<T>(feature: string, key: string): T | undefined {
+  private async getFromCache<T>(feature: string, key: string): Promise<T | undefined> {
+    if (this.cacheStore) {
+      const entry = await this.cacheStore.get(key);
+      if (!entry) {
+        this.record(feature, 'misses');
+        this.emit({ type: 'miss', feature, key });
+        return undefined;
+      }
+
+      if (entry.expiresAt < Date.now()) {
+        await this.cacheStore.delete(key);
+        this.record(feature, 'staleEvictions');
+        this.emit({ type: 'stale-eviction', feature, key });
+        this.record(feature, 'misses');
+        this.emit({ type: 'miss', feature, key });
+        return undefined;
+      }
+
+      this.record(feature, 'hits');
+      this.emit({ type: 'hit', feature, key, expiresAt: entry.expiresAt, ttlMs: entry.expiresAt - Date.now() });
+      return entry.value as T;
+    }
+
+    // Fallback to in-memory cache
     const entry = this.cache.get(key);
     if (!entry) {
       this.record(feature, 'misses');
@@ -275,9 +334,15 @@ export class ReportsService {
     return entry.value as T;
   }
 
-  private setCache<T>(feature: string, key: string, value: T) {
+  private async setCache<T>(feature: string, key: string, value: T): Promise<void> {
     const expiresAt = Date.now() + this.cacheTtlMs;
-    this.cache.set(key, { feature, value, expiresAt });
+    
+    if (this.cacheStore) {
+      await this.cacheStore.set(key, { feature, value, expiresAt });
+    } else {
+      this.cache.set(key, { feature, value, expiresAt });
+    }
+    
     this.record(feature, 'sets');
     this.emit({ type: 'set', feature, key, expiresAt, ttlMs: this.cacheTtlMs });
   }
@@ -285,7 +350,7 @@ export class ReportsService {
   async getMostPopularUrls(input: MostPopularUrlsInput): Promise<MostPopularUrl[]> {
     const feature = 'popularUrls';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<MostPopularUrl[]>(feature, cacheKey);
+    const cached = await this.getFromCache<MostPopularUrl[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<MostPopularUrl[]>(this.http, {
@@ -301,14 +366,14 @@ export class ReportsService {
     });
 
     const parsed = mostPopularUrlsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getTopReferrers(input: TopReferrersInput): Promise<TopReferrer[]> {
     const feature = 'topReferrers';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<TopReferrer[]>(feature, cacheKey);
+    const cached = await this.getFromCache<TopReferrer[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<TopReferrer[]>(this.http, {
@@ -323,14 +388,14 @@ export class ReportsService {
     });
 
     const parsed = topReferrersSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getEvents(input: EventsInput): Promise<EventSummary[]> {
     const feature = 'events';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<EventSummary[]>(feature, cacheKey);
+    const cached = await this.getFromCache<EventSummary[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<EventSummary[]>(this.http, {
@@ -349,14 +414,14 @@ export class ReportsService {
     });
 
     const parsed = eventsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getEntryPages(input: EntryPagesInput): Promise<EntryPage[]> {
     const feature = 'entryPages';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<EntryPage[]>(feature, cacheKey);
+    const cached = await this.getFromCache<EntryPage[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<EntryPage[]>(this.http, {
@@ -372,14 +437,14 @@ export class ReportsService {
     });
 
     const parsed = entryPagesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getCampaigns(input: CampaignsInput): Promise<RawCampaign[]> {
     const feature = 'campaigns';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<RawCampaign[]>(feature, cacheKey);
+    const cached = await this.getFromCache<RawCampaign[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<RawCampaign[]>(this.http, {
@@ -394,14 +459,14 @@ export class ReportsService {
     });
 
     const parsed = campaignsSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getEcommerceOverview(input: EcommerceOverviewInput): Promise<RawEcommerceSummary> {
     const feature = 'ecommerceOverview';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<RawEcommerceSummary>(feature, cacheKey);
+    const cached = await this.getFromCache<RawEcommerceSummary>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<unknown>(this.http, {
@@ -417,14 +482,14 @@ export class ReportsService {
 
     const summary = extractEcommerceSummary(data);
     const parsed = ecommerceSummarySchema.parse(summary ?? {});
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getEcommerceRevenueTotals(input: EcommerceRevenueTotalsInput): Promise<RawEcommerceRevenueTotals> {
     const feature = 'ecommerceRevenueTotals';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<RawEcommerceRevenueTotals>(feature, cacheKey);
+    const cached = await this.getFromCache<RawEcommerceRevenueTotals>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<unknown>(this.http, {
@@ -455,14 +520,14 @@ export class ReportsService {
         : undefined;
 
     const result: RawEcommerceRevenueTotals = series ? { totals, series } : { totals };
-    this.setCache(feature, cacheKey, result);
+    await this.setCache(feature, cacheKey, result);
     return result;
   }
 
   async getEventCategories(input: EventCategoriesInput): Promise<EventCategory[]> {
     const feature = 'eventCategories';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<EventCategory[]>(feature, cacheKey);
+    const cached = await this.getFromCache<EventCategory[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<EventCategory[]>(this.http, {
@@ -478,14 +543,14 @@ export class ReportsService {
     });
 
     const parsed = eventCategoriesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getDeviceTypes(input: DeviceTypesInput): Promise<DeviceTypeSummary[]> {
     const feature = 'deviceTypes';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<DeviceTypeSummary[]>(feature, cacheKey);
+    const cached = await this.getFromCache<DeviceTypeSummary[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<DeviceTypeSummary[]>(this.http, {
@@ -500,14 +565,14 @@ export class ReportsService {
     });
 
     const parsed = deviceTypesSchema.parse(data);
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getTrafficChannels(input: TrafficChannelsInput): Promise<RawTrafficChannel[]> {
     const feature = 'trafficChannels';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<RawTrafficChannel[]>(feature, cacheKey);
+    const cached = await this.getFromCache<RawTrafficChannel[]>(feature, cacheKey);
     if (cached) return cached;
 
     const data = await matomoGet<RawTrafficChannel[]>(this.http, {
@@ -528,14 +593,14 @@ export class ReportsService {
       parsed = parsed.filter(channel => resolveChannelAlias(channel.label) === target);
     }
 
-    this.setCache(feature, cacheKey, parsed);
+    await this.setCache(feature, cacheKey, parsed);
     return parsed;
   }
 
   async getGoalConversions(input: GoalConversionsInput): Promise<GoalConversion[]> {
     const feature = 'goalConversions';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<GoalConversion[]>(feature, cacheKey);
+    const cached = await this.getFromCache<GoalConversion[]>(feature, cacheKey);
     if (cached) return cached;
 
     const goalQuery = resolveGoalLookup(input.goalId);
@@ -572,14 +637,14 @@ export class ReportsService {
       ? withLabelFilter.filter(goal => normalizeGoalType(goal.type, goal.id) === normalizeGoalType(input.goalType))
       : withLabelFilter;
 
-    this.setCache(feature, cacheKey, filtered);
+    await this.setCache(feature, cacheKey, filtered);
     return filtered;
   }
 
   async getFunnelSummary(input: FunnelSummaryInput): Promise<FunnelSummary> {
     const feature = 'funnelSummary';
     const cacheKey = this.makeCacheKey(feature, input);
-    const cached = this.getFromCache<FunnelSummary>(feature, cacheKey);
+    const cached = await this.getFromCache<FunnelSummary>(feature, cacheKey);
     if (cached) return cached;
 
     const baseParams = {
@@ -662,7 +727,7 @@ export class ReportsService {
     }
 
     const result = summary;
-    this.setCache(feature, cacheKey, result);
+    await this.setCache(feature, cacheKey, result);
     return result;
   }
 }

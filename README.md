@@ -16,6 +16,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 - [Development Workflow](#development-workflow)
 - [Cache Monitoring](#cache-monitoring)
 - [Health Monitoring & Observability](#health-monitoring--observability)
+- [Redis Persistence](#redis-persistence)
 - [Testing](#testing)
 - [Docker Deployment](#docker-deployment)
 - [Production Runbook](#production-runbook)
@@ -26,6 +27,7 @@ This project provides a lightweight SDK and Express-based tool service that make
 - Expanded reporting helpers covering ecommerce revenue, event categories, campaigns, entry pages, and device breakdowns.
 - **Service health monitoring** with comprehensive checks for Matomo API connectivity, cache performance, and dependency status.
 - In-memory reporting cache with observable hit/miss metrics and optional event hooks.
+- **Redis persistence** for tracking queue and reports cache - ensures data survives restarts (see [Redis Persistence Guide](docs/redis-persistence.md)).
 - Opal Tools SDK integration exposing `/tools/*` endpoints plus discovery metadata.
 - Bearer-token authenticated Express service ready for Opal integration.
 - Vitest-based unit and integration tests for SDK and API layers.
@@ -237,6 +239,51 @@ curl -H "Authorization: Bearer your-token" \
 
 The unauthenticated `GET /health` endpoint mirrors this payload (without requiring a bearer token) and returns HTTP 503 when the overall status is `unhealthy`, making it suitable for container health probes. See `packages/api/docs/health-monitoring.md` for detailed documentation.
 
+## Redis Persistence
+
+OpalMind supports persisting the tracking retry queue and reports cache to Redis, ensuring that in-flight work and cached data survive service restarts. This is critical for production deployments where uptime and data durability matter.
+
+### Quick Start
+
+1. **Add Redis to docker-compose.yml**:
+   ```yaml
+   services:
+     redis:
+       image: redis:7-alpine
+       volumes:
+         - redis-data:/data
+       command: redis-server --appendonly yes
+   
+   volumes:
+     redis-data:
+   ```
+
+2. **Configure environment variables**:
+   ```bash
+   REDIS_HOST=redis
+   REDIS_PORT=6379
+   ```
+
+3. **Restart the service** - Redis persistence will be automatically enabled
+
+### Benefits
+
+- **Restart Resilience**: Pending tracking requests and cached reports survive restarts
+- **Horizontal Scaling**: Multiple API instances can share Redis for coordinated caching
+- **Storage Visibility**: Operators can inspect Redis to understand storage requirements
+- **Automatic Cleanup**: Redis TTLs ensure stale entries are automatically removed
+
+### Documentation
+
+- **[Redis Persistence Guide](docs/redis-persistence.md)** - Complete configuration and deployment guide
+- **[Redis Integration Example](docs/redis-integration-example.md)** - Code examples and troubleshooting
+
+### Storage Requirements
+
+- **Tracking Queue**: < 1 MB for typical workloads (0-25 pending entries)
+- **Reports Cache**: 10-50 MB depending on traffic and TTL settings
+- **Recommended**: 512 MB Redis instance for production
+
 ## Testing
 - SDK tests rely on mocked `fetch` and validate request construction and response parsing.
 - API tests mock the Matomo client and simulate Express requests via `node-mocks-http`, covering happy paths and error branches.
@@ -254,8 +301,8 @@ The unauthenticated `GET /health` endpoint mirrors this payload (without requiri
 ## Next Steps
 - Generate a bearer token (e.g., `openssl rand -hex 32`), store it in your secret manager, and document the rotation procedure for each environment.
 - **Set up monitoring**: Integrate the health status endpoint with your monitoring stack for production alerting.
+- **Enable Redis persistence**: Follow the [Redis Persistence Guide](docs/redis-persistence.md) to ensure queue and cache durability.
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
-- Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
 - Tune caching defaults based on traffic patterns and monitor Matomo load.
 - Ship cache stats and health metrics to your preferred observability stack (Grafana/Prometheus/etc.) once production traffic is available.

@@ -13,6 +13,7 @@ import {
   type CacheStatsSnapshot,
   type ReportsServiceOptions,
   type CacheEvent,
+  type CacheStore,
   type RawEcommerceRevenueSeriesPoint,
   type EcommerceRevenueTotalsInput,
   type GoalConversionsInput,
@@ -56,6 +57,7 @@ const sdkLogger = baseLogger.child({ package: '@opalmind/sdk' });
 export interface CacheConfig {
   ttlMs?: number;
   onEvent?: (event: CacheEvent) => void;
+  store?: CacheStore;
 }
 
 export interface MatomoClientConfig {
@@ -867,6 +869,9 @@ export class MatomoClient {
     if (config.cache?.onEvent) {
       reportsOptions.onCacheEvent = config.cache.onEvent;
     }
+    if (config.cache?.store) {
+      reportsOptions.cacheStore = config.cache.store;
+    }
     this.reports = new ReportsService(this.http, reportsOptions);
 
     const trackingOptions = {
@@ -1301,7 +1306,7 @@ export class MatomoClient {
     return this.reports.getFunnelSummary(request);
   }
 
-  getCacheStats(): CacheStatsSnapshot {
+  async getCacheStats(): Promise<CacheStatsSnapshot> {
     return this.reports.getCacheStats();
   }
 
@@ -1468,7 +1473,7 @@ export class MatomoClient {
     });
 
     // Cache health check
-    const cacheStats = this.getCacheStats();
+    const cacheStats = await this.getCacheStats();
     const totalRequests = cacheStats.total.hits + cacheStats.total.misses;
     const hitRate = totalRequests > 0 ? (cacheStats.total.hits / totalRequests) * 100 : 0;
 
@@ -1650,7 +1655,10 @@ export type {
 
 export type { MatomoRateLimitOptions } from './httpClient.js';
 
-export { TrackingService } from './tracking.js';
+export { TrackingService, InMemoryIdempotencyStore } from './tracking.js';
+export type { IdempotencyStore, IdempotencyRecord } from './tracking.js';
+export type { CacheStore, CacheEntry } from './reports.js';
+export { RedisIdempotencyStore, RedisCacheStore } from './redis-stores.js';
 export {
   MatomoApiError,
   MatomoAuthError,

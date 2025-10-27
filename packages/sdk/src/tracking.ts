@@ -167,16 +167,16 @@ function extractBackoffInfo(error: unknown): { status?: number; retryAfterMs?: n
   return result;
 }
 
-interface IdempotencyRecord<T = unknown> {
+export interface IdempotencyRecord<T = unknown> {
   key: string;
   value: T;
   attempts: number;
   completedAt: number;
 }
 
-type MaybePromise<T> = T | Promise<T>;
+export type MaybePromise<T> = T | Promise<T>;
 
-interface IdempotencyStore<T = unknown> {
+export interface IdempotencyStore<T = unknown> {
   get(key: string): MaybePromise<IdempotencyRecord<T> | undefined>;
   set(record: IdempotencyRecord<T>): MaybePromise<void>;
 }
@@ -879,4 +879,4 @@ export class TrackingService {
   }
 }
 
-export { generatePvId, normalizeTrackingUrl, generateIdempotencyKey };
+export { generatePvId, normalizeTrackingUrl, generateIdempotencyKey, InMemoryIdempotencyStore };

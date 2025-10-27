@@ -12,6 +12,10 @@
   },
   "dependencies": {
     "@opalmind/logger": "file:../logger",
+    "ioredis": "^5.8.2",
     "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/ioredis": "^4.28.10"
   }
 }
