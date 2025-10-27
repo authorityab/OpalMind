@@ -23,6 +23,10 @@
   args: Update assistant status/backlog
   result: Logged GitHub content reporting follow-up in backlog and referenced new community artifacts in status overview.
   artifacts: .assistant/backlog.md, .assistant/status.md
+- tool: apply_patch
+  args: Add backlog task issue template
+  result: Created `backlog_task.md` issue template to streamline promoting `.assistant/backlog.md` entries into GitHub issues.
+  artifacts: .github/ISSUE_TEMPLATE/backlog_task.md
 ## 2025-10-24
 - tool: shell
   args: |

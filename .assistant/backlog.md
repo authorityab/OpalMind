@@ -138,7 +138,7 @@
       tags: docs,dx  priority: medium  est: 0.5d
       deps: B-003
       accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
-- [ ] O-001 Enable GitHub content reporting
+- [x] O-001 Enable GitHub content reporting
       tags: ops,community  priority: medium  est: 0.1d
       deps: none
       accepts: Repository administrators enable \"Report content\" in GitHub community settings and document the policy link for maintainers.
