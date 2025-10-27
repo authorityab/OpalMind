@@ -21,6 +21,7 @@ Land B-007 so Matomo tools auto-resolve siteId defaults and stage queue observab
 - Updated backlog & plan: `.assistant/backlog.md`, `.assistant/plan.md`
 - History of milestones: `.assistant/history.md`
 - ADR stubs: `.assistant/adr/ADR-0001.md`–`.assistant/adr/ADR-0003.md`
+- Community standards: `CODE_OF_CONDUCT.md`, `.github/SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/pull_request_template.md`
 
 ## Changelog
 - Added currency metadata to Matomo revenue outputs across SDK/API, fetching site currencies and updating docs/tests (B-019).

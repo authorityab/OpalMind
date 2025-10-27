@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security disclosures
+    url: mailto:security@opalmind.dev
+    about: Please use this link to report sensitive security issues privately.
+  - name: General Q&A
+    url: https://github.com/Authority/OpalMind/discussions
+    about: Ask questions or discuss ideas that do not fit the templates.
