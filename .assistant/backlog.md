@@ -19,10 +19,6 @@
       tags: security,config,prod-gate  priority: critical  est: 0.5d
       deps: ADR-0001
       accepts: Reject startup when Matomo base URL or token are unset, remove default credentials, surface actionable configuration errors, and cover the guard with tests.
-- [ ] B-007 Auto-resolve Matomo siteId defaults
-      tags: dx,api  priority: high  est: 0.5d
-      deps: ADR-0003
-      accepts: Matomo tools prefer caller-provided siteIds, fall back to `MATOMO_DEFAULT_SITE_ID` when unspecified, prompt only when neither is available, centralize default lookup, and cover the trie of scenarios with tests/docs updates.
 - [x] B-018 Resolve Matomo `getLoggedInUser` API failure
       tags: bug,api,auth  priority: critical  est: 0.5d
       deps: ADR-0003
@@ -118,6 +114,7 @@
       notes:
         1. Define a site-name → siteId mapping in a JSON/YAML document, referenced via env var or well-known path; refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
+        Previous work has been done, have a look at an old branch `feature-P010`
 - [x] P-016 Honor Matomo back-pressure in tracking retries
       tags: reliability,queue  priority: high  est: 1.5d
       deps: P-004
