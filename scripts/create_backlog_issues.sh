@@ -20,6 +20,61 @@ if [[ "${DRY_RUN}" != "true" ]]; then
   gh repo view "${REPO}" >/dev/null
 fi
 
+declare -A LABEL_COLORS=(
+  ["backlog"]="ededed"
+  ["priority:high"]="d73a4a"
+  ["priority:medium"]="fbca04"
+  ["priority:low"]="0e8a16"
+  ["tag:infrastructure"]="0366d6"
+  ["tag:reliability"]="0b5ed7"
+  ["tag:feature"]="5319e7"
+  ["tag:sdk"]="a333c8"
+  ["tag:config"]="0052cc"
+  ["tag:multi-tenant"]="5319e7"
+  ["tag:infra"]="0366d6"
+  ["tag:observability"]="5319e7"
+  ["tag:ops"]="0052cc"
+  ["tag:docs"]="66c2a5"
+  ["tag:dx"]="66c2a5"
+  ["tag:security"]="c11b17"
+  ["tag:devex"]="6f42c1"
+  ["tag:analytics"]="6f42c1"
+  ["tag:ux"]="6f42c1"
+  ["tag:bug"]="d73a4a"
+  ["tag:api"]="0b5ed7"
+  ["tag:maintenance"]="0052cc"
+  ["tag:build"]="0052cc"
+)
+
+declare -A LABEL_DESCRIPTIONS=(
+  ["backlog"]="Tracked via .assistant/backlog.md"
+  ["priority:high"]="Must land in current milestone"
+  ["priority:medium"]="Important but not blocking release"
+  ["priority:low"]="Opportunistic or nice-to-have"
+)
+
+ensure_label() {
+  local label="$1"
+  local color="${LABEL_COLORS[$label]:-ededed}"
+  local description="${LABEL_DESCRIPTIONS[$label]:-}"
+
+  if gh label view "${label}" --repo "${REPO}" >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] Missing label ${label}; would create with color ${color}"
+    return
+  fi
+
+  echo "Creating missing label '${label}'"
+  if [[ "${description}" == "-" ]]; then
+    gh label create "${label}" --color "${color}" --repo "${REPO}"
+  else
+    gh label create "${label}" --color "${color}" --description "${description}" --repo "${REPO}"
+  fi
+}
+
 create_issue() {
   local title="$1"
   local body="$2"
@@ -37,6 +92,10 @@ create_issue() {
     echo "[dry-run] Skipping issue creation for ${title}"
     return
   fi
+
+  for label in "${labels[@]}"; do
+    ensure_label "${label}"
+  done
 
   local gh_args=(issue create --repo "${REPO}" --title "${title}" --body "${body}")
   for label in "${labels[@]}"; do

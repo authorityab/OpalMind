@@ -40,8 +40,8 @@
   result: Added `scripts/create_backlog_issues.sh` to batch-create GitHub issues from Current/Future backlog items, documented usage in assistant README, and referenced the script from status artifacts.
   artifacts: scripts/create_backlog_issues.sh, .assistant/README.md, .assistant/status.md
 - tool: apply_patch
-  args: Fix default repo in issue creation script
-  result: Updated script to default to `authorityab/OpalMind` and refreshed assistant README guidance accordingly.
+  args: Fix issue script defaults and labels
+  result: Updated script to default to `authorityab/OpalMind`, auto-create missing labels when publishing issues, and refreshed assistant README guidance accordingly.
   artifacts: scripts/create_backlog_issues.sh, .assistant/README.md
 ## 2025-10-24
 - tool: shell
