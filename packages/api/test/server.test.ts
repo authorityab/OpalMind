@@ -23,9 +23,6 @@ const mockMatomoClient = vi.hoisted(() => ({
   getFunnelSummary: vi.fn(),
   runDiagnostics: vi.fn(),
   getHealthStatus: vi.fn(),
-  trackPageview: vi.fn(),
-  trackEvent: vi.fn(),
-  trackGoal: vi.fn(),
 }));
 
 const createMatomoClientMock = vi.hoisted(() => vi.fn(() => mockMatomoClient));
@@ -151,16 +148,12 @@ beforeEach(() => {
   mockMatomoClient.getFunnelSummary.mockReset();
   mockMatomoClient.runDiagnostics.mockReset();
   mockMatomoClient.getHealthStatus.mockReset();
-  mockMatomoClient.trackPageview.mockReset();
-  mockMatomoClient.trackEvent.mockReset();
-  mockMatomoClient.trackGoal.mockReset();
 
   delete process.env.OPAL_CORS_ALLOWLIST;
   delete process.env.OPAL_CORS_ALLOW_ALL;
   delete process.env.OPAL_REQUEST_BODY_LIMIT;
   delete process.env.OPAL_RATE_LIMIT_WINDOW_MS;
   delete process.env.OPAL_RATE_LIMIT_MAX;
-  delete process.env.OPAL_TRACK_RATE_LIMIT_MAX;
   delete process.env.OPAL_TRUST_PROXY;
   delete process.env.MATOMO_CACHE_WARN_HIT_RATE;
   delete process.env.MATOMO_CACHE_FAIL_HIT_RATE;
@@ -376,32 +369,6 @@ describe('security middleware', () => {
     expect(second.headers['x-ratelimit-remaining']).toBe('0');
   });
 
-  it('applies stricter rate limiting to tracking endpoints', async () => {
-    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
-    process.env.OPAL_TRACK_RATE_LIMIT_MAX = '1';
-    mockMatomoClient.trackEvent.mockResolvedValue({ ok: true, status: 204, body: '' });
-
-    const app = await createApp();
-
-    const first = await invoke(app, {
-      url: '/track/event',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
-    });
-    expect(first.status).toBe(200);
-
-    const second = await invoke(app, {
-      url: '/track/event',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
-    });
-    expect(second.status).toBe(429);
-    expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
-    expect(Number(second.headers['retry-after'])).toBeGreaterThan(0);
-    expect(second.headers['x-ratelimit-limit']).toBe('1');
-    expect(second.headers['x-ratelimit-remaining']).toBe('0');
-  });
-
   it('derives rate limit keys from the forwarded client IP when behind a proxy', async () => {
     process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
     process.env.OPAL_RATE_LIMIT_MAX = '1';
@@ -442,30 +409,6 @@ describe('security middleware', () => {
       body: { parameters: { period: 'day', date: 'today' } },
     });
     expect(third.status).toBe(429);
-  });
-
-  it('throttles repeated requests with invalid bearer tokens on tracking endpoints', async () => {
-    process.env.OPAL_RATE_LIMIT_WINDOW_MS = '60000';
-    process.env.OPAL_TRACK_RATE_LIMIT_MAX = '1';
-
-    const app = await createApp();
-
-    const first = await invoke(app, {
-      url: '/track/event',
-      headers: { authorization: 'Bearer wrong-token' },
-      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
-    });
-
-    expect(first.status).toBe(401);
-
-    const second = await invoke(app, {
-      url: '/track/event',
-      headers: { authorization: 'Bearer another-token' },
-      body: { parameters: { category: 'cta', action: 'click', siteId: 1 } },
-    });
-
-    expect(second.status).toBe(429);
-    expect(second.body).toEqual({ error: 'Too many tracking requests, please try again later.' });
   });
 
   it('rejects payloads exceeding the configured body limit', async () => {
@@ -1028,110 +971,6 @@ describe('tool endpoints', () => {
     expect(response.body).toEqual({ error: 'Matomo authentication failed: Invalid token' });
     expect(matomoError.endpoint).toContain('token_auth=REDACTED');
     expect(response.body.error).not.toContain('token_auth');
-  });
-
-  it('records pageviews via track endpoint', async () => {
-    const app = await createApp();
-    mockMatomoClient.trackPageview.mockResolvedValue({ ok: true, status: 204, body: '', pvId: 'abcdef1234567890' });
-
-    const response = await invoke(app, {
-      url: '/track/pageview',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { url: 'https://example.com/', actionName: 'Home' } },
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, status: 204, pvId: 'abcdef1234567890' });
-    expect(mockMatomoClient.trackPageview).toHaveBeenCalledWith({
-      siteId: undefined,
-      url: 'https://example.com/',
-      actionName: 'Home',
-      pvId: undefined,
-      visitorId: undefined,
-      uid: undefined,
-      referrer: undefined,
-      ts: undefined,
-    });
-  });
-
-  it('requires url for pageview tracking', async () => {
-    const app = await createApp();
-
-    const response = await invoke(app, {
-      url: '/track/pageview',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: {} },
-    });
-
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({ error: 'url is required' });
-    expect(mockMatomoClient.trackPageview).not.toHaveBeenCalled();
-  });
-
-  it('records events via track endpoint', async () => {
-    const app = await createApp();
-    mockMatomoClient.trackEvent.mockResolvedValue({ ok: true, status: 204, body: '' });
-
-    const response = await invoke(app, {
-      url: '/track/event',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { category: 'CTA', action: 'click', value: 2 } },
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, status: 204 });
-    expect(mockMatomoClient.trackEvent).toHaveBeenCalledWith({
-      siteId: undefined,
-      category: 'CTA',
-      action: 'click',
-      name: undefined,
-      value: 2,
-      url: undefined,
-      visitorId: undefined,
-      uid: undefined,
-      referrer: undefined,
-      ts: undefined,
-    });
-  });
-
-  it('records goals via track endpoint', async () => {
-    const app = await createApp();
-    mockMatomoClient.trackGoal.mockResolvedValue({ ok: true, status: 204, body: '' });
-
-    const response = await invoke(app, {
-      url: '/track/goal',
-      headers: { authorization: 'Bearer test-token' },
-      body: { parameters: { goalId: 5, revenue: 10.5 } },
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, status: 204 });
-    expect(mockMatomoClient.trackGoal).toHaveBeenCalledWith({
-      siteId: undefined,
-      goalId: 5,
-      revenue: 10.5,
-      url: undefined,
-      visitorId: undefined,
-      uid: undefined,
-      referrer: undefined,
-      ts: undefined,
-    });
-  });
-});
-
-describe('tracking endpoints', () => {
-  it('rejects unauthenticated tracking requests', async () => {
-    const app = await createApp();
-
-    const response = await invoke(app, {
-      url: '/track/pageview',
-      body: { parameters: { url: 'https://example.com/' } },
-      headers: {},
-    });
-
-    expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Authorization header missing or malformed.' });
-    expect(response.headers['www-authenticate']).toContain('error="invalid_request"');
   });
 });
 

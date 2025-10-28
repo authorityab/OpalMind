@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createMatomoClient,
-  TrackingService,
-  type TrackingQueueStats,
   type CacheStatsSnapshot,
 } from '../src/index.js';
 
@@ -1027,42 +1025,6 @@ describe('MatomoClient', () => {
     expect(result.steps[1]).toMatchObject({ id: '2', label: '/signup' });
   });
 
-  it('tracks pageviews using the default siteId', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      text: async () => '',
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 8 });
-    const result = await client.trackPageview({ url: 'https://example.com/' });
-
-    expect(result.ok).toBe(true);
-    const [, init] = fetchMock.mock.calls[0] ?? [];
-    const body = (init?.body as URLSearchParams).toString();
-    expect(body).toContain('idsite=8');
-  });
-
-  it('allows overriding siteId on tracking calls', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      text: async () => '',
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 4 });
-    await client.trackEvent({ siteId: 11, category: 'cta', action: 'click' });
-
-    const [, init] = fetchMock.mock.calls[0] ?? [];
-    const body = (init?.body as URLSearchParams).toString();
-    expect(body).toContain('idsite=11');
-    expect(body).toContain('e_c=cta');
-  });
-
   describe('getHealthStatus', () => {
     it('returns healthy status when all checks pass', async () => {
       const fetchMock = createSequencedFetchMock(['3.14.0']);
@@ -1073,7 +1035,7 @@ describe('MatomoClient', () => {
 
       expect(result.status).toBe('healthy');
       expect(result.timestamp).toBeDefined();
-      expect(result.checks).toHaveLength(3); // matomo-api, reports-cache, tracking-queue
+      expect(result.checks).toHaveLength(2); // matomo-api, reports-cache
 
       const matomoCheck = result.checks.find(c => c.name === 'matomo-api');
       expect(matomoCheck?.status).toBe('pass');
@@ -1085,13 +1047,6 @@ describe('MatomoClient', () => {
       expect(cacheCheck?.status).toBe('pass');
       expect(cacheCheck?.details).toEqual(
         expect.objectContaining({ warnHitRate: 20, failHitRate: 5, sampleSize: 20 })
-      );
-
-      const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
-      expect(queueCheck?.status).toBe('pass');
-      expect(queueCheck?.observedValue).toBe(0);
-      expect(queueCheck?.details).toEqual(
-        expect.objectContaining({ pending: 0, inflight: 0, backlogAgeMs: 0 })
       );
     });
 
@@ -1189,91 +1144,6 @@ describe('MatomoClient', () => {
       expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get('method')).toBe('API.getVersion');
     });
 
-    it('marks tracking queue as warn when backlog crosses warn thresholds', async () => {
-      vi.useFakeTimers();
-      try {
-        const now = new Date('2024-03-01T12:00:00.000Z');
-        vi.setSystemTime(now);
-
-        const fetchMock = createSequencedFetchMock(['3.14.0']);
-        vi.stubGlobal('fetch', fetchMock);
-
-        const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
-        const tracking = (client as unknown as { tracking: TrackingService }).tracking;
-        const warnStats: TrackingQueueStats = {
-          pending: 9,
-          inflight: 2,
-          totalProcessed: 15,
-          totalRetried: 4,
-          lastError: { message: 'rate limited', status: 429, timestamp: Date.now() - 30_000 },
-          lastRetryAt: Date.now() - 30_000,
-          lastBackoffMs: 2000,
-          cooldownUntil: Date.now() + 15_000,
-          lastRetryStatus: 429,
-          oldestPendingAt: Date.now() - 70_000,
-        };
-        vi.spyOn(tracking, 'getQueueStats').mockReturnValue(warnStats);
-
-        const result = await client.getHealthStatus();
-        const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
-
-        expect(queueCheck?.status).toBe('warn');
-        expect(queueCheck?.observedValue).toBe(11);
-        expect(queueCheck?.output).toContain('backlogAgeMs=70000');
-        expect(queueCheck?.details).toEqual(
-          expect.objectContaining({
-            pending: 9,
-            inflight: 2,
-            backlogAgeMs: 70000,
-          })
-        );
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('marks tracking queue as fail when backlog age exceeds fail threshold', async () => {
-      vi.useFakeTimers();
-      try {
-        const now = new Date('2024-03-01T12:00:00.000Z');
-        vi.setSystemTime(now);
-
-        const fetchMock = createSequencedFetchMock(['3.14.0']);
-        vi.stubGlobal('fetch', fetchMock);
-
-        const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 1 });
-        const tracking = (client as unknown as { tracking: TrackingService }).tracking;
-        const failStats: TrackingQueueStats = {
-          pending: 2,
-          inflight: 0,
-          totalProcessed: 5,
-          totalRetried: 3,
-          lastError: { message: 'Matomo unavailable', status: 503, timestamp: Date.now() - 200_000 },
-          lastRetryAt: Date.now() - 200_000,
-          lastBackoffMs: 4000,
-          cooldownUntil: undefined,
-          lastRetryStatus: 503,
-          oldestPendingAt: Date.now() - 200_000,
-        };
-        vi.spyOn(tracking, 'getQueueStats').mockReturnValue(failStats);
-
-        const result = await client.getHealthStatus();
-        const queueCheck = result.checks.find(c => c.name === 'tracking-queue');
-
-        expect(queueCheck?.status).toBe('fail');
-        expect(queueCheck?.observedValue).toBe(2);
-        expect(queueCheck?.output).toContain('backlogAgeMs=200000');
-        expect(queueCheck?.details).toEqual(
-          expect.objectContaining({
-            pending: 2,
-            backlogAgeMs: 200000,
-          })
-        );
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
     it('includes site access check when requested', async () => {
       const fetchMock = createSequencedFetchMock([
         '3.14.0', // API.getMatomoVersion
@@ -1284,7 +1154,7 @@ describe('MatomoClient', () => {
       const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 5 });
       const result = await client.getHealthStatus({ includeDetails: true });
 
-      expect(result.checks).toHaveLength(4); // includes site-access check
+      expect(result.checks).toHaveLength(3); // matomo-api, reports-cache, site-access
       
       const siteCheck = result.checks.find(c => c.name === 'site-access');
       expect(siteCheck?.status).toBe('pass');

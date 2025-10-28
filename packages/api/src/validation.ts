@@ -11,56 +11,6 @@ export class ValidationError extends Error {
   }
 }
 
-function requiredString(field: string) {
-  return z
-    .string({
-      required_error: `${field} is required`,
-      invalid_type_error: `${field} must be a string`,
-    })
-    .max(2048, `${field} exceeds maximum length of 2048 characters.`)
-    .transform(value => value.trim())
-    .refine(value => value.length > 0, `${field} must not be empty.`);
-}
-
-function optionalString(field: string) {
-  return z.union([
-    z
-      .string({ invalid_type_error: `${field} must be a string` })
-      .max(2048, `${field} exceeds maximum length of 2048 characters.`)
-      .transform(value => value.trim())
-      .refine(value => value.length > 0, `${field} must not be empty.`),
-    z.null(),
-    z.undefined(),
-  ]);
-}
-
-function requiredInteger(field: string) {
-  return z.union([
-    z
-      .number({ invalid_type_error: `${field} must be a number.` })
-      .refine(Number.isFinite, `${field} must be a finite number.`),
-    z
-      .string({
-        required_error: `${field} is required`,
-        invalid_type_error: `${field} must be a string.`,
-      })
-      .regex(/^-?\d+$/, `${field} must be an integer.`),
-  ]);
-}
-
-function optionalInteger(field: string) {
-  return z.union([
-    z
-      .number({ invalid_type_error: `${field} must be a number.` })
-      .refine(Number.isFinite, `${field} must be a finite number.`),
-    z
-      .string({ invalid_type_error: `${field} must be a string.` })
-      .regex(/^-?\d+$/, `${field} must be an integer.`),
-    z.null(),
-    z.undefined(),
-  ]);
-}
-
 const baseInvocationSchema = z
   .object({
     parameters: z
@@ -71,52 +21,7 @@ const baseInvocationSchema = z
   })
   .passthrough();
 
-const pageviewParametersSchema = z
-  .object({
-    url: requiredString('url'),
-    siteId: optionalInteger('siteId'),
-    actionName: optionalString('actionName'),
-    pvId: optionalString('pvId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const eventParametersSchema = z
-  .object({
-    category: requiredString('category'),
-    action: requiredString('action'),
-    name: optionalString('name'),
-    value: optionalInteger('value'),
-    url: optionalString('url'),
-    siteId: optionalInteger('siteId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const goalParametersSchema = z
-  .object({
-    goalId: requiredInteger('goalId'),
-    revenue: optionalInteger('revenue'),
-    url: optionalString('url'),
-    siteId: optionalInteger('siteId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const endpointValidators = new Map<string, z.ZodTypeAny>([
-  ['/track/pageview', pageviewParametersSchema],
-  ['/track/event', eventParametersSchema],
-  ['/track/goal', goalParametersSchema],
-]);
+const endpointValidators = new Map<string, z.ZodTypeAny>();
 
 function pickParameters(source: Record<string, unknown>): Record<string, unknown> {
   const { parameters, ...rest } = source;
