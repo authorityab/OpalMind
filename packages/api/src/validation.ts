@@ -71,52 +71,7 @@ const baseInvocationSchema = z
   })
   .passthrough();
 
-const pageviewParametersSchema = z
-  .object({
-    url: requiredString('url'),
-    siteId: optionalInteger('siteId'),
-    actionName: optionalString('actionName'),
-    pvId: optionalString('pvId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const eventParametersSchema = z
-  .object({
-    category: requiredString('category'),
-    action: requiredString('action'),
-    name: optionalString('name'),
-    value: optionalInteger('value'),
-    url: optionalString('url'),
-    siteId: optionalInteger('siteId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const goalParametersSchema = z
-  .object({
-    goalId: requiredInteger('goalId'),
-    revenue: optionalInteger('revenue'),
-    url: optionalString('url'),
-    siteId: optionalInteger('siteId'),
-    visitorId: optionalString('visitorId'),
-    uid: optionalString('uid'),
-    referrer: optionalString('referrer'),
-    timestamp: optionalInteger('timestamp'),
-  })
-  .passthrough();
-
-const endpointValidators = new Map<string, z.ZodTypeAny>([
-  ['/track/pageview', pageviewParametersSchema],
-  ['/track/event', eventParametersSchema],
-  ['/track/goal', goalParametersSchema],
-]);
+const endpointValidators = new Map<string, z.ZodTypeAny>();
 
 function pickParameters(source: Record<string, unknown>): Record<string, unknown> {
   const { parameters, ...rest } = source;
