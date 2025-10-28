@@ -219,38 +219,20 @@ export class ReportsService {
     this.cacheStore = options.cacheStore;
   }
 
-  async getCacheStats(): Promise<CacheStatsSnapshot> {
+  getCacheStats(): CacheStatsSnapshot {
     const totals: CacheStatsCounters & { entries: number } = {
       hits: 0,
       misses: 0,
       sets: 0,
       staleEvictions: 0,
-      entries: 0,
+      entries: this.cache.size,
     };
-
-    // Count entries from cache store or in-memory cache
-    if (this.cacheStore) {
-      const keys = await this.cacheStore.keys();
-      totals.entries = keys.length;
-    } else {
-      totals.entries = this.cache.size;
-    }
 
     const featureEntries = new Map<string, number>();
     
-    // Count entries per feature
-    if (this.cacheStore) {
-      const keys = await this.cacheStore.keys();
-      for (const key of keys) {
-        const entry = await this.cacheStore.get(key);
-        if (entry) {
-          featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
-        }
-      }
-    } else {
-      for (const entry of this.cache.values()) {
-        featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
-      }
+    // Count entries per feature from in-memory cache
+    for (const entry of this.cache.values()) {
+      featureEntries.set(entry.feature, (featureEntries.get(entry.feature) ?? 0) + 1);
     }
 
     const features: Array<CacheStatsCounters & { feature: string; entries: number }> = [];

@@ -1157,10 +1157,8 @@ export class MatomoClient {
     if (input.limit !== undefined) {
       request.limit = input.limit;
     }
-    const [campaigns, currency] = await Promise.all([
-      this.reports.getCampaigns(request),
-      this.resolveSiteCurrency(siteId),
-    ]);
+    const campaigns = await this.reports.getCampaigns(request);
+    const currency = await this.resolveSiteCurrency(siteId);
 
     return campaigns.map(campaign => enrichRecordWithCurrency(campaign, currency) as unknown as Campaign);
   }
@@ -1175,10 +1173,8 @@ export class MatomoClient {
     if (input.segment !== undefined) {
       request.segment = input.segment;
     }
-    const [summary, currency] = await Promise.all([
-      this.reports.getEcommerceOverview(request),
-      this.resolveSiteCurrency(siteId),
-    ]);
+    const summary = await this.reports.getEcommerceOverview(request);
+    const currency = await this.resolveSiteCurrency(siteId);
 
     return adaptEcommerceSummary(summary, currency);
   }
@@ -1198,10 +1194,8 @@ export class MatomoClient {
     if (input.includeSeries !== undefined) {
       request.includeSeries = input.includeSeries;
     }
-    const [totals, currency] = await Promise.all([
-      this.reports.getEcommerceRevenueTotals(request),
-      this.resolveSiteCurrency(siteId),
-    ]);
+    const totals = await this.reports.getEcommerceRevenueTotals(request);
+    const currency = await this.resolveSiteCurrency(siteId);
 
     const adaptedTotals = adaptEcommerceSummary(totals.totals, currency);
     const adaptedSeries = totals.series?.map(point => adaptEcommerceRevenueSeriesPoint(point, currency));
@@ -1257,10 +1251,8 @@ export class MatomoClient {
     if (input.channelType !== undefined) {
       request.channelType = input.channelType;
     }
-    const [channels, currency] = await Promise.all([
-      this.reports.getTrafficChannels(request),
-      this.resolveSiteCurrency(siteId),
-    ]);
+    const channels = await this.reports.getTrafficChannels(request);
+    const currency = await this.resolveSiteCurrency(siteId);
 
     return channels.map(channel => enrichRecordWithCurrency(channel, currency) as unknown as TrafficChannel);
   }
@@ -1284,10 +1276,8 @@ export class MatomoClient {
     if (input.goalType !== undefined) {
       request.goalType = input.goalType;
     }
-    const [goals, currency] = await Promise.all([
-      this.reports.getGoalConversions(request),
-      this.resolveSiteCurrency(siteId),
-    ]);
+    const goals = await this.reports.getGoalConversions(request);
+    const currency = await this.resolveSiteCurrency(siteId);
 
     return goals.map(goal => enrichRecordWithCurrency(goal as unknown as UnknownRecord, currency) as unknown as GoalConversion);
   }
@@ -1306,7 +1296,7 @@ export class MatomoClient {
     return this.reports.getFunnelSummary(request);
   }
 
-  async getCacheStats(): Promise<CacheStatsSnapshot> {
+  getCacheStats(): CacheStatsSnapshot {
     return this.reports.getCacheStats();
   }
 
@@ -1473,7 +1463,7 @@ export class MatomoClient {
     });
 
     // Cache health check
-    const cacheStats = await this.getCacheStats();
+    const cacheStats = this.getCacheStats();
     const totalRequests = cacheStats.total.hits + cacheStats.total.misses;
     const hitRate = totalRequests > 0 ? (cacheStats.total.hits / totalRequests) * 100 : 0;
 
