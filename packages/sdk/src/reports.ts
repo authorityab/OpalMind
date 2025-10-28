@@ -510,7 +510,7 @@ export class ReportsService {
     const cached = this.getFromCache<RawTrafficChannel[]>(feature, cacheKey);
     if (cached) return cached;
 
-    const data = await matomoGet<RawTrafficChannel[]>(this.http, {
+    const data = await matomoGet<unknown>(this.http, {
       method: 'Referrers.getReferrerType',
       params: {
         idSite: input.siteId,
@@ -521,7 +521,8 @@ export class ReportsService {
       },
     });
 
-    let parsed = trafficChannelsSchema.parse(data);
+    const normalized = normalizeTrafficChannelsResponse(data);
+    let parsed = trafficChannelsSchema.parse(normalized);
 
     if (input.channelType) {
       const target = resolveChannelAlias(input.channelType);
@@ -665,6 +666,31 @@ export class ReportsService {
     this.setCache(feature, cacheKey, result);
     return result;
   }
+}
+
+function normalizeTrafficChannelsResponse(raw: unknown): unknown {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    return raw;
+  }
+
+  const values: unknown[] = [];
+  for (const value of Object.values(raw as Record<string, unknown>)) {
+    if (!value) continue;
+    if (Array.isArray(value)) {
+      values.push(...value);
+      continue;
+    }
+
+    if (typeof value === 'object') {
+      values.push(value);
+    }
+  }
+
+  return values.length > 0 ? values : raw;
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {

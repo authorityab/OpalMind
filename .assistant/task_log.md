@@ -71,6 +71,18 @@
   args: Allow issue helper to skip done tasks
   result: Added status handling to `scripts/create_backlog_issues.sh` so items marked done are omitted from GitHub issue creation.
   artifacts: scripts/create_backlog_issues.sh
+- tool: apply_patch
+  args: Normalize GetTrafficChannels responses
+  result: Flattened Matomo object responses before schema parsing, added regression coverage for date-keyed payloads, and documented the read-only behaviour change.
+  artifacts: packages/sdk/src/reports.ts, packages/sdk/test/matomoClient.test.ts, README.md
+- tool: shell
+  args: npm run test --workspace @opalmind/sdk -- --run
+  result: SDK Vitest suite passed (70 tests) validating traffic channel response normalization.
+  artifacts: none
+- tool: apply_patch
+  args: Add backlog task for aggregating traffic channels across ranges
+  result: Logged B-023 to merge traffic channel results across date-keyed responses and updated plan/status to track it.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
 ## 2025-10-24
 - tool: shell
   args: |

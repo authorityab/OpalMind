@@ -123,6 +123,10 @@
       tags: bug,analytics,dx  priority: medium  est: 0.5d
       deps: none
       accepts: Reproduce the Matomo call returning an object instead of an array, adjust `GetTrafficChannels` parsing/schema to handle the actual payload shape (including empty data and error objects), add regression coverage, and document the fix in release notes.
+- [ ] B-023 Aggregate GetTrafficChannels range results
+      tags: enhancement,analytics  priority: low  est: 0.5d
+      deps: B-022
+      accepts: Merge normalized traffic channel entries that share the same channel label across date-keyed responses, provide per-channel totals/averages with tests covering mixed object/array payloads, and update docs to describe the aggregated output.
 
 ## Tracking
 - [ ] P-005 Persist retry queue and cache state

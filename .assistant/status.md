@@ -5,7 +5,7 @@ Retire tracking endpoints (B-021) so OpalMind is read-only and harden funnel ana
 
 ## Now / Next / Later
 - Now: B-021 Deprecate tracking endpoints; P-006a Harden funnel analytics flow outputs.
-- Next: P-010 Support multi-site indexing and configuration; P-020 Align authentication documentation with implementation; B-022 Fix GetTrafficChannels response structure mismatch.
+- Next: P-010 Support multi-site indexing and configuration; P-020 Align authentication documentation with implementation; B-022 Fix GetTrafficChannels response structure mismatch; B-023 Aggregate GetTrafficChannels range results.
 - Later: B-016 Enforce structured logging and lint rules; B-017 Tighten TypeScript compiler strictness; P-002c Compute comparative period deltas; B-006 Support decimal parsing; P-007–P-015 analytics expansion.
 
 ## Risks
