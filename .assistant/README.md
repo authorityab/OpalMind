@@ -16,6 +16,7 @@
 
 -## Creating GitHub Issues
 - Use `scripts/create_backlog_issues.sh` (defaults to `authorityab/OpalMind`) or pass `<owner/repo>` explicitly to promote Current and Future tasks into GitHub issues.
+- When invoking the helper, only tasks with status `open` are synced; mark completed items as `done` in the script to skip creation.
 - Run once in dry-run mode (default) to review the generated titles/bodies/labels.
 - After confirming, run with `DRY_RUN=false scripts/create_backlog_issues.sh <owner/repo>` to create issues via the GitHub CLI. Missing labels are auto-created with reasonable defaults, and existing open issues with the same title are skipped.
 - Ensure `gh` is authenticated with access to open issues in the target repository.

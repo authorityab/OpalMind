@@ -91,6 +91,8 @@ ensure_label() {
 }
 
 create_issue() {
+  local status="$1"
+  shift
   local title="$1"
   local body="$2"
   shift 2
@@ -98,10 +100,16 @@ create_issue() {
 
   echo "------------------------------------------------------------"
   echo "Title: ${title}"
+  echo "Status: ${status}"
   echo "Labels: ${labels[*]:-(none)}"
   echo "Body:"
   echo "${body}"
   echo "------------------------------------------------------------"
+
+  if [[ "${status}" == "done" ]]; then
+    echo "[info] Task '${title}' marked as done; skipping issue creation."
+    return
+  fi
 
   if [[ "${DRY_RUN}" == "true" ]]; then
     echo "[dry-run] Skipping issue creation for ${title}"
@@ -127,6 +135,7 @@ create_issue() {
 }
 
 create_issue \
+  "open" \
   "P-005: Persist retry queue and cache state" \
   "$(cat <<'EOF'
 ## Summary
@@ -147,6 +156,7 @@ EOF
   "backlog" "priority:medium" "tag:infrastructure" "tag:reliability"
 
 create_issue \
+  "open" \
   "P-006a: Harden funnel analytics flow outputs" \
   "$(cat <<'EOF'
 ## Summary
@@ -169,6 +179,7 @@ EOF
   "backlog" "priority:medium" "tag:feature" "tag:sdk"
 
 create_issue \
+  "open" \
   "P-010: Support multi-site indexing and configuration" \
   "$(cat <<'EOF'
 ## Summary
@@ -195,6 +206,7 @@ EOF
   "backlog" "priority:high" "tag:feature" "tag:config" "tag:multi-tenant"
 
 create_issue \
+  "open" \
   "P-018: Bound caches and idempotency stores" \
   "$(cat <<'EOF'
 ## Summary
@@ -217,6 +229,7 @@ EOF
   "backlog" "priority:high" "tag:reliability" "tag:infra"
 
 create_issue \
+  "open" \
   "P-019: Instrument health endpoint with real queue metrics" \
   "$(cat <<'EOF'
 ## Summary
@@ -240,6 +253,7 @@ EOF
   "backlog" "priority:high" "tag:observability" "tag:ops"
 
 create_issue \
+  "open" \
   "P-020: Align authentication documentation with implementation" \
   "$(cat <<'EOF'
 ## Summary
@@ -262,6 +276,31 @@ EOF
   "backlog" "priority:medium" "tag:docs" "tag:dx"
 
 create_issue \
+  "open" \
+  "B-022: Fix GetTrafficChannels response structure mismatch" \
+  "$(cat <<'EOF'
+## Summary
+Adjust `GetTrafficChannels` so it tolerates Matomo responses that return an object instead of an array at the root.
+
+## Acceptance Criteria
+- [ ] Reproduce the Matomo call returning an object at the root and document the scenario.
+- [ ] Update parsing/schema logic to accept object-based payloads (including empty data and error objects) while preserving array handling.
+- [ ] Add regression tests covering both array and object responses.
+- [ ] Document the behaviour change in release notes.
+
+## Dependencies
+- none
+
+## Context
+- Tags: bug, analytics, developer-experience
+- Priority: medium
+- Estimate: 0.5d
+EOF
+)" \
+  "backlog" "priority:medium" "tag:bug" "tag:analytics" "tag:dx"
+
+create_issue \
+  "open" \
   "B-021: Deprecate tracking endpoints" \
   "$(cat <<'EOF'
 ## Summary
@@ -284,6 +323,7 @@ EOF
   "backlog" "priority:high" "tag:api" "tag:security"
 
 create_issue \
+  "open" \
   "B-016: Enforce structured logging and lint rules" \
   "$(cat <<'EOF'
 ## Summary
@@ -306,6 +346,7 @@ EOF
   "backlog" "priority:low" "tag:security" "tag:devex"
 
 create_issue \
+  "open" \
   "B-017: Tighten TypeScript compiler strictness" \
   "$(cat <<'EOF'
 ## Summary
@@ -328,6 +369,7 @@ EOF
   "backlog" "priority:low" "tag:security" "tag:devex"
 
 create_issue \
+  "open" \
   "P-002c: Compute comparative period deltas for reports" \
   "$(cat <<'EOF'
 ## Summary
@@ -350,6 +392,7 @@ EOF
   "backlog" "priority:medium" "tag:analytics" "tag:ux"
 
 create_issue \
+  "open" \
   "B-006: Support decimal inputs in numeric parsing" \
   "$(cat <<'EOF'
 ## Summary
@@ -372,6 +415,7 @@ EOF
   "backlog" "priority:medium" "tag:bug" "tag:api"
 
 create_issue \
+  "open" \
   "P-007: Publish Opal discovery integration guide" \
   "$(cat <<'EOF'
 ## Summary
@@ -394,6 +438,7 @@ EOF
   "backlog" "priority:low" "tag:docs" "tag:dx"
 
 create_issue \
+  "open" \
   "P-008: Introduce structured logging pipeline" \
   "$(cat <<'EOF'
 ## Summary
@@ -416,6 +461,7 @@ EOF
   "backlog" "priority:low" "tag:ops" "tag:observability"
 
 create_issue \
+  "open" \
   "P-009: Lean build and dependency audit" \
   "$(cat <<'EOF'
 ## Summary
@@ -440,6 +486,7 @@ EOF
   "backlog" "priority:medium" "tag:maintenance" "tag:build"
 
 create_issue \
+  "open" \
   "P-011: Add goal analytics helpers" \
   "$(cat <<'EOF'
 ## Summary
@@ -462,6 +509,7 @@ EOF
   "backlog" "priority:medium" "tag:feature" "tag:sdk"
 
 create_issue \
+  "open" \
   "P-012: Add cohort retention analytics" \
   "$(cat <<'EOF'
 ## Summary
@@ -484,6 +532,7 @@ EOF
   "backlog" "priority:medium" "tag:feature" "tag:analytics"
 
 create_issue \
+  "open" \
   "P-013: Add campaign acquisition analytics" \
   "$(cat <<'EOF'
 ## Summary
@@ -506,6 +555,7 @@ EOF
   "backlog" "priority:medium" "tag:feature" "tag:analytics"
 
 create_issue \
+  "open" \
   "P-014: Add event flow analytics" \
   "$(cat <<'EOF'
 ## Summary
@@ -528,6 +578,7 @@ EOF
   "backlog" "priority:medium" "tag:feature" "tag:analytics"
 
 create_issue \
+  "open" \
   "P-015: Add site search analytics helpers" \
   "$(cat <<'EOF'
 ## Summary

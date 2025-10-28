@@ -67,6 +67,10 @@
   args: Add B-022 GetTrafficChannels schema bug
   result: Logged new backlog bug for the object/array mismatch, aligned plan/status Next lane to include it.
   artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
+- tool: apply_patch
+  args: Allow issue helper to skip done tasks
+  result: Added status handling to `scripts/create_backlog_issues.sh` so items marked done are omitted from GitHub issue creation.
+  artifacts: scripts/create_backlog_issues.sh
 ## 2025-10-24
 - tool: shell
   args: |
