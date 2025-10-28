@@ -30,8 +30,8 @@ class MockRedis {
   }
 
   async keys(pattern: string): Promise<string[]> {
-    // Simple pattern matching for testing
-    const prefix = pattern.replace('*', '');
+    // Simple pattern matching for testing - replace all wildcards
+    const prefix = pattern.split('*')[0] || '';
     return Array.from(this.storage.keys()).filter(key => key.startsWith(prefix));
   }
 
