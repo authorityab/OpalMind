@@ -1,17 +1,16 @@
 # Status
 
 ## Focus
-Deliver cache/queue resilience (P-018, P-019, P-005) and harden funnel analytics outputs for consistent Matomo insights.
+Retire tracking endpoints (B-021) so OpalMind is read-only and harden funnel analytics outputs (P-006a).
 
 ## Now / Next / Later
-- Now: P-018 Bound caches and idempotency stores; P-019 Instrument health endpoint with real queue metrics; P-005 Persist retry queue and cache state.
-- Next: P-006a Harden funnel analytics flow outputs; P-010 Support multi-site indexing and configuration; P-020 Align authentication documentation with implementation.
+- Now: B-021 Deprecate tracking endpoints; P-006a Harden funnel analytics flow outputs.
+- Next: P-010 Support multi-site indexing and configuration; P-020 Align authentication documentation with implementation.
 - Later: B-016 Enforce structured logging and lint rules; B-017 Tighten TypeScript compiler strictness; P-002c Compute comparative period deltas; B-006 Support decimal parsing; P-007–P-015 analytics expansion.
 
 ## Risks
-- Cache and retry queue remain memory-only until P-005/P-018 land, risking data loss on restarts and unbounded resource growth.
-- Tracking queue observability lacks real metrics until P-019 lands, leaving SRE without actionable queue depth/age signals.
-- Persistence backend for cache/queue still undecided, which impacts P-005 scope and deployment expectations.
+- Tracking removal requires careful coordination so redis persistence work is reverted or limited to read-only caches.
+- Remaining tracking tasks (P-005, P-018, P-019) are parked in the Tracking lane; revisit if write support returns.
 - Monitoring platform alignment remains open; alert hooks stay manual until an owner commits.
 - Traffic channel regression looks resolved upstream, so B-001 is parked in On Hold until the next quarterly Matomo validation run.
 

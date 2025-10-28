@@ -1,12 +1,10 @@
 # Plan
 
 ## Now
-- P-018 Bound caches and idempotency stores
-- P-019 Instrument health endpoint with real queue metrics
-- P-005 Persist retry queue and cache state
+- B-021 Deprecate tracking endpoints
+- P-006a Harden funnel analytics flow outputs
 
 ## Next
-- P-006a Harden funnel analytics flow outputs
 - P-010 Support multi-site indexing and configuration
 - P-020 Align authentication documentation with implementation
 
