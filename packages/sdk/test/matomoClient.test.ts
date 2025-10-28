@@ -841,6 +841,29 @@ describe('MatomoClient', () => {
     expect(url.searchParams.get('filter_limit')).toBe('10');
   });
 
+  it('normalizes object-shaped traffic channel responses', async () => {
+    const fetchMock = createCurrencyAwareFetchMock({
+      '2025-09-01': [
+        { label: 'Direct Entry', nb_visits: '12', revenue: '5' },
+        { label: 'Websites', nb_visits: '4' },
+      ],
+      '2025-09-02': {
+        label: 'Search Engines',
+        nb_visits: '8',
+      },
+      metadata: 'ignored',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+
+    const channels = await client.getTrafficChannels({ period: 'day', date: 'last2' });
+
+    expect(channels).toHaveLength(3);
+    expect(channels.find(channel => channel.label === 'Direct Entry')?.nb_visits).toBe(12);
+    expect(channels.find(channel => channel.label === 'Search Engines')?.nb_visits).toBe(8);
+  });
+
   it('fetches goal conversions with filters and normalization', async () => {
     const fetchMock = createCurrencyAwareFetchMock(
       [

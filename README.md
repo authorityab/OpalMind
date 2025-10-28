@@ -115,6 +115,8 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 > `avg_time_on_site` within `GetKeyNumbers` is emitted as `{ "value": number, "unit": "seconds" }`, keeping the raw seconds from Matomo explicit for downstream formatting.
 
+> `GetTrafficChannels` now normalizes Matomo responses that wrap channel data in date-keyed objects (e.g., `date=last7`), preventing validation errors when the API returns an object instead of an array.
+
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
 All `/tools/*` routes require bearer token authentication—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.
