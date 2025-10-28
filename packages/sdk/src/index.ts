@@ -31,19 +31,6 @@ import type {
   TopReferrer,
 } from './schemas.js';
 import {
-  TrackingService,
-  type TrackEventInput,
-  type TrackGoalInput,
-  type TrackPageviewInput,
-  type TrackPageviewResult,
-  type TrackResult,
-  type TrackingIdempotencyRecord,
-  type TrackingIdempotencyStore,
-  type TrackingQueueStats,
-  type TrackingBackoffOptions,
-  type TrackingOptions,
-} from './tracking.js';
-import {
   MatomoApiError,
   MatomoClientError,
   MatomoNetworkError,
@@ -66,25 +53,10 @@ export interface MatomoClientConfig {
     timeoutMs?: number;
     retry?: MatomoRetryOptions;
   };
-  tracking?: {
-    baseUrl?: string;
-    maxRetries?: number;
-    retryDelayMs?: number;
-    idempotencyStore?: TrackingIdempotencyStore;
-    backoff?: TrackingBackoffOptions;
-    healthThresholds?: Partial<TrackingQueueThresholds>;
-  };
   cacheTtlMs?: number;
   cache?: CacheConfig;
   rateLimit?: MatomoRateLimitOptions;
   cacheHealth?: Partial<CacheHealthThresholds>;
-}
-
-export interface TrackingQueueThresholds {
-  pendingWarn: number;
-  pendingFail: number;
-  ageWarnMs: number;
-  ageFailMs: number;
 }
 
 export interface CacheHealthThresholds {
@@ -845,9 +817,7 @@ function assertSiteId(siteId: number | undefined): asserts siteId is number {
 export class MatomoClient {
   private readonly http: MatomoHttpClient;
   private readonly reports: ReportsService;
-  private readonly tracking: TrackingService;
   private readonly defaultSiteId: number | undefined;
-  private readonly queueThresholds: TrackingQueueThresholds;
   private readonly cacheThresholds: CacheHealthThresholds;
   private readonly siteCurrencyCache = new Map<number, string | null>();
 
@@ -869,39 +839,7 @@ export class MatomoClient {
     }
     this.reports = new ReportsService(this.http, reportsOptions);
 
-    const trackingOptions = {
-      baseUrl: config.tracking?.baseUrl ?? config.baseUrl,
-      tokenAuth: config.tokenAuth,
-      ...(config.tracking?.maxRetries !== undefined ? { maxRetries: config.tracking.maxRetries } : {}),
-      ...(config.tracking?.retryDelayMs !== undefined ? { retryDelayMs: config.tracking.retryDelayMs } : {}),
-      ...(config.tracking?.idempotencyStore
-        ? { idempotencyStore: config.tracking.idempotencyStore }
-        : {}),
-      ...(config.tracking?.backoff ? { backoff: config.tracking.backoff } : {}),
-    } satisfies TrackingOptions;
-
-    this.tracking = new TrackingService(trackingOptions);
     this.defaultSiteId = config.defaultSiteId;
-
-    const thresholds = config.tracking?.healthThresholds ?? {};
-    const pendingWarn = Math.max(0, thresholds.pendingWarn ?? 10);
-    let pendingFail = Math.max(0, thresholds.pendingFail ?? 25);
-    if (pendingFail < pendingWarn) {
-      pendingFail = pendingWarn;
-    }
-
-    const ageWarnMs = Math.max(0, thresholds.ageWarnMs ?? 60_000);
-    let ageFailMs = Math.max(0, thresholds.ageFailMs ?? 120_000);
-    if (ageFailMs < ageWarnMs) {
-      ageFailMs = ageWarnMs;
-    }
-
-    this.queueThresholds = {
-      pendingWarn,
-      pendingFail,
-      ageWarnMs,
-      ageFailMs,
-    };
 
     const cacheThresholds = config.cacheHealth ?? {};
     const warnHitRate = clampPercentage(cacheThresholds.warnHitRate ?? 20);
@@ -1309,35 +1247,6 @@ export class MatomoClient {
     return this.http.getLastRateLimitEvent();
   }
 
-  async trackPageview(
-    input: Omit<TrackPageviewInput, 'siteId'> & { siteId?: number }
-  ): Promise<TrackPageviewResult> {
-    const siteId = this.resolveSiteId(input.siteId);
-    return this.tracking.trackPageview({ ...input, siteId });
-  }
-
-  async trackEvent(
-    input: Omit<TrackEventInput, 'siteId'> & { siteId?: number }
-  ): Promise<TrackResult> {
-    const siteId = this.resolveSiteId(input.siteId);
-    return this.tracking.trackEvent({ ...input, siteId });
-  }
-
-  async trackGoal(
-    input: Omit<TrackGoalInput, 'siteId'> & { siteId?: number }
-  ): Promise<TrackResult> {
-    const siteId = this.resolveSiteId(input.siteId);
-    return this.tracking.trackGoal({ ...input, siteId });
-  }
-
-  async getTrackingRequestMetadata(key: string): Promise<TrackingIdempotencyRecord | undefined> {
-    return this.tracking.getIdempotencyRecord(key);
-  }
-
-  getTrackingQueueStats(): TrackingQueueStats {
-    return this.tracking.getQueueStats();
-  }
-
   async runDiagnostics(input: RunDiagnosticsInput = {}): Promise<RunDiagnosticsResult> {
     const checks: MatomoDiagnosticCheck[] = [];
 
@@ -1504,74 +1413,6 @@ export class MatomoClient {
       details: cacheDetails,
     });
 
-    // Tracking queue health check
-    const queueStats = this.tracking.getQueueStats();
-    const queueNow = Date.now();
-    const backlogCount = queueStats.pending + queueStats.inflight;
-    const oldestTimestamp = queueStats.oldestPendingAt ?? queueStats.lastRetryAt;
-    const backlogAgeMs = oldestTimestamp ? Math.max(0, queueNow - oldestTimestamp) : 0;
-    const cooldownMs =
-      queueStats.cooldownUntil && queueStats.cooldownUntil > queueNow
-        ? queueStats.cooldownUntil - queueNow
-        : 0;
-
-    let queueStatus: 'pass' | 'warn' | 'fail' = 'pass';
-    if (
-      backlogCount >= this.queueThresholds.pendingFail ||
-      backlogAgeMs >= this.queueThresholds.ageFailMs
-    ) {
-      queueStatus = 'fail';
-    } else if (
-      backlogCount >= this.queueThresholds.pendingWarn ||
-      backlogAgeMs >= this.queueThresholds.ageWarnMs ||
-      cooldownMs > 0
-    ) {
-      queueStatus = 'warn';
-    }
-
-    const queueDetails: Record<string, unknown> = {
-      pending: queueStats.pending,
-      inflight: queueStats.inflight,
-      totalProcessed: queueStats.totalProcessed,
-      totalRetried: queueStats.totalRetried,
-      lastError: queueStats.lastError,
-      lastRetryAt: queueStats.lastRetryAt,
-      lastBackoffMs: queueStats.lastBackoffMs,
-      cooldownUntil: queueStats.cooldownUntil,
-      lastRetryStatus: queueStats.lastRetryStatus,
-      oldestPendingAt: queueStats.oldestPendingAt,
-      backlogAgeMs: Math.round(backlogAgeMs),
-    };
-
-    const queueOutputParts = [
-      `pending=${queueStats.pending}`,
-      `inflight=${queueStats.inflight}`,
-      `backlogAgeMs=${Math.round(backlogAgeMs)}`,
-    ];
-
-    if (typeof queueStats.lastBackoffMs === 'number') {
-      queueOutputParts.push(`lastBackoffMs=${queueStats.lastBackoffMs}`);
-    }
-
-    if (typeof queueStats.lastRetryStatus === 'number') {
-      queueOutputParts.push(`lastRetryStatus=${queueStats.lastRetryStatus}`);
-    }
-
-    if (cooldownMs > 0) {
-      queueOutputParts.push(`cooldownMs=${Math.round(cooldownMs)}`);
-    }
-
-    checks.push({
-      name: 'tracking-queue',
-      status: queueStatus,
-      componentType: 'queue',
-      observedValue: backlogCount,
-      observedUnit: 'pending',
-      time: timestamp,
-      output: queueOutputParts.join(', '),
-      details: queueDetails,
-    });
-
     // Site access check (if siteId provided and details requested)
     if (input.includeDetails && (input.siteId || this.defaultSiteId)) {
       let siteStatus: 'pass' | 'fail' = 'pass';
@@ -1631,15 +1472,6 @@ export type {
   DeviceTypeSummary,
   TopReferrer,
   EventCategory,
-  TrackEventInput,
-  TrackGoalInput,
-  TrackPageviewInput,
-  TrackPageviewResult,
-  TrackResult,
-  TrackingIdempotencyRecord,
-  TrackingIdempotencyStore,
-  TrackingQueueStats,
-  TrackingBackoffOptions,
   CacheStatsSnapshot,
   CacheEvent,
   EcommerceRevenueTotalsInput,
@@ -1650,7 +1482,6 @@ export type {
 
 export type { MatomoRateLimitOptions } from './httpClient.js';
 
-export { TrackingService } from './tracking.js';
 export {
   MatomoApiError,
   MatomoAuthError,
