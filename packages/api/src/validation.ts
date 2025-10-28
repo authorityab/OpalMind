@@ -11,56 +11,6 @@ export class ValidationError extends Error {
   }
 }
 
-function requiredString(field: string) {
-  return z
-    .string({
-      required_error: `${field} is required`,
-      invalid_type_error: `${field} must be a string`,
-    })
-    .max(2048, `${field} exceeds maximum length of 2048 characters.`)
-    .transform(value => value.trim())
-    .refine(value => value.length > 0, `${field} must not be empty.`);
-}
-
-function optionalString(field: string) {
-  return z.union([
-    z
-      .string({ invalid_type_error: `${field} must be a string` })
-      .max(2048, `${field} exceeds maximum length of 2048 characters.`)
-      .transform(value => value.trim())
-      .refine(value => value.length > 0, `${field} must not be empty.`),
-    z.null(),
-    z.undefined(),
-  ]);
-}
-
-function requiredInteger(field: string) {
-  return z.union([
-    z
-      .number({ invalid_type_error: `${field} must be a number.` })
-      .refine(Number.isFinite, `${field} must be a finite number.`),
-    z
-      .string({
-        required_error: `${field} is required`,
-        invalid_type_error: `${field} must be a string.`,
-      })
-      .regex(/^-?\d+$/, `${field} must be an integer.`),
-  ]);
-}
-
-function optionalInteger(field: string) {
-  return z.union([
-    z
-      .number({ invalid_type_error: `${field} must be a number.` })
-      .refine(Number.isFinite, `${field} must be a finite number.`),
-    z
-      .string({ invalid_type_error: `${field} must be a string.` })
-      .regex(/^-?\d+$/, `${field} must be an integer.`),
-    z.null(),
-    z.undefined(),
-  ]);
-}
-
 const baseInvocationSchema = z
   .object({
     parameters: z

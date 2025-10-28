@@ -1,6 +1,5 @@
 import 'dotenv/config';
 
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, Response, Router } from 'express';
@@ -72,14 +71,6 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return Number.isNaN(numeric) ? undefined : numeric;
 }
 
-function parseRequiredNumber(value: unknown, field: string): number {
-  const parsed = parseOptionalNumber(value);
-  if (parsed === undefined) {
-    throw new ValidationError(`${field} is required`);
-  }
-  return parsed;
-}
-
 function parseOptionalFloat(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -97,14 +88,6 @@ function parseOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
-}
-
-function requireString(value: unknown, field: string): string {
-  const parsed = parseOptionalString(value);
-  if (!parsed) {
-    throw new ValidationError(`${field} is required`);
-  }
-  return parsed;
 }
 
 function configureToolsServiceLogging(service: ToolsService) {
@@ -346,10 +329,6 @@ function preventHttpParameterPollution(req: Request, _res: Response, next: NextF
     }
   }
   next();
-}
-
-function hashToken(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
 }
 
 function createRateLimiter(options: {
