@@ -1,8 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { RedisIdempotencyStore, RedisCacheStore } from '../src/redis-stores.js';
 
-// Mock Redis client
-class MockRedis {
+// Mock Redis client that implements a subset of the Redis interface
+interface MockRedisInterface {
+  get(key: string): Promise<string | null>;
+  setex(key: string, ttl: number, value: string): Promise<'OK'>;
+  del(key: string): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
+}
+
+class MockRedis implements MockRedisInterface {
   private storage = new Map<string, string>();
   private ttls = new Map<string, number>();
 
@@ -48,7 +56,7 @@ describe('RedisIdempotencyStore', () => {
   beforeEach(() => {
     redis = new MockRedis();
     store = new RedisIdempotencyStore({
-      redis: redis as any,
+      redis: redis as unknown as Parameters<typeof RedisIdempotencyStore.prototype.constructor>[0]['redis'],
       keyPrefix: 'test:idempotency:',
       ttlSeconds: 3600,
     });
@@ -104,7 +112,7 @@ describe('RedisCacheStore', () => {
   beforeEach(() => {
     redis = new MockRedis();
     store = new RedisCacheStore({
-      redis: redis as any,
+      redis: redis as unknown as Parameters<typeof RedisCacheStore.prototype.constructor>[0]['redis'],
       keyPrefix: 'test:cache:',
     });
   });

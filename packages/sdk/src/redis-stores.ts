@@ -1,5 +1,6 @@
 import type { Redis } from 'ioredis';
-import type { IdempotencyRecord, IdempotencyStore, MaybePromise } from './tracking.js';
+
+import type { IdempotencyRecord, IdempotencyStore } from './tracking.js';
 import type { CacheEntry, CacheStore } from './reports.js';
 
 export interface RedisIdempotencyStoreOptions {
