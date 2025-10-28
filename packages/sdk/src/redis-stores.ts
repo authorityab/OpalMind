@@ -1,18 +1,6 @@
 import type { Redis } from 'ioredis';
-
-export interface IdempotencyRecord<T = unknown> {
-  key: string;
-  value: T;
-  attempts: number;
-  completedAt: number;
-}
-
-export type MaybePromise<T> = T | Promise<T>;
-
-export interface IdempotencyStore<T = unknown> {
-  get(key: string): MaybePromise<IdempotencyRecord<T> | undefined>;
-  set(record: IdempotencyRecord<T>): MaybePromise<void>;
-}
+import type { IdempotencyRecord, IdempotencyStore, MaybePromise } from './tracking.js';
+import type { CacheEntry, CacheStore } from './reports.js';
 
 export interface RedisIdempotencyStoreOptions {
   redis: Redis;
@@ -56,19 +44,6 @@ export class RedisIdempotencyStore<T = unknown> implements IdempotencyStore<T> {
     const data = JSON.stringify(record);
     await this.redis.setex(redisKey, this.ttlSeconds, data);
   }
-}
-
-export interface CacheEntry<T = unknown> {
-  feature: string;
-  value: T;
-  expiresAt: number;
-}
-
-export interface CacheStore<T = unknown> {
-  get(key: string): MaybePromise<CacheEntry<T> | undefined>;
-  set(key: string, entry: CacheEntry<T>): MaybePromise<void>;
-  delete(key: string): MaybePromise<void>;
-  keys(pattern?: string): MaybePromise<string[]>;
 }
 
 export interface RedisCacheStoreOptions {
