@@ -108,6 +108,12 @@ create_issue() {
     return
   fi
 
+  # Skip if an open issue already exists with this exact title
+  if gh issue list --repo "${REPO}" --state open --search "${title}" --limit 1 --json title | grep -q "${title}"; then
+    echo "[info] Issue '${title}' already exists; skipping creation."
+    return
+  fi
+
   for label in "${labels[@]}"; do
     ensure_label "${label}"
   done
@@ -254,6 +260,28 @@ Ensure documentation mirrors the current authenticated routes and observability 
 EOF
 )" \
   "backlog" "priority:medium" "tag:docs" "tag:dx"
+
+create_issue \
+  "B-021: Deprecate tracking endpoints" \
+  "$(cat <<'EOF'
+## Summary
+Remove the `/track/*` endpoints and associated SDK/docs so OpalMind operates strictly as a read-only analytics platform.
+
+## Acceptance Criteria
+- [ ] Remove `/track/*` routes from the API along with validation, rate limiting, and auth hooks specific to tracking.
+- [ ] Delete tracking helpers/retry queue wiring from the SDK and ensure tests pass without tracking support.
+- [ ] Update README/runbooks to document the removal and publish release notes clarifying read-only scope.
+
+## Dependencies
+- none
+
+## Context
+- Tags: api, security
+- Priority: high
+- Estimate: 1d
+EOF
+)" \
+  "backlog" "priority:high" "tag:api" "tag:security"
 
 create_issue \
   "B-016: Enforce structured logging and lint rules" \

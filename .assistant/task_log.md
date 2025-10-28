@@ -43,6 +43,26 @@
   args: Fix issue script defaults and labels
   result: Updated script to default to `authorityab/OpalMind`, auto-create missing labels when publishing issues (with caching), and refreshed assistant README guidance accordingly.
   artifacts: scripts/create_backlog_issues.sh, .assistant/README.md
+- tool: apply_patch
+  args: Add backlog item B-021 for tracking endpoint deprecation
+  result: Logged new backlog task to remove `/track/*` APIs and related SDK/docs, and promoted it into the active plan/status Next lane.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
+- tool: apply_patch
+  args: Wire B-021 into GitHub issue helper
+  result: Extended `scripts/create_backlog_issues.sh` so B-021 generates a labelled issue alongside other active backlog items.
+  artifacts: scripts/create_backlog_issues.sh
+- tool: apply_patch
+  args: Skip existing issues in GitHub helper
+  result: Added open-issue detection to bypass duplicates and documented the behaviour in the assistant README.
+  artifacts: scripts/create_backlog_issues.sh, .assistant/README.md
+- tool: apply_patch
+  args: Segment tracking work in backlog and realign plan/status
+  result: Introduced a dedicated Tracking section in the backlog, moved P-005/P-018/P-019 there, documented the lane, and updated plan/status focus to reflect the read-only direction.
+  artifacts: .assistant/backlog.md, .assistant/README.md, .assistant/plan.md, .assistant/status.md
+- tool: apply_patch
+  args: Tag historical tracking tasks in backlog
+  result: Annotated completed tracking-related entries with a `tracking` tag for quick discovery.
+  artifacts: .assistant/backlog.md
 ## 2025-10-24
 - tool: shell
   args: |

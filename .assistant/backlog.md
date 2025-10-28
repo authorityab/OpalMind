@@ -14,7 +14,7 @@
       deps: ADR-0001
       accepts: Ensure MatomoApiError and any serialized payloads omit `token_auth` values, sanitize logged endpoints, add regression tests covering API/tool error responses, and document the redaction strategy.
 - [x] B-003 Enforce authentication for tracking endpoints
-      tags: security,api,prod-gate  priority: critical  est: 1d
+      tags: security,api,prod-gate,tracking  priority: critical  est: 1d
       deps: ADR-0003
       accepts: Apply bearer (or equivalent) auth to `/track/pageview`, `/track/event`, and `/track/goal`, return 401/403 when missing or invalid, update README/docs to reflect protections, and add tests covering authorized vs unauthorized calls.
 - [x] B-004 Fail fast without explicit Matomo configuration
@@ -34,7 +34,7 @@
       deps: ADR-0001
       accepts: Replace upstream verbose logger with redacted structured logging, ensure request/response bodies never dump tokens/PII, and attest via tests or manual verification under production log level.
 - [x] B-011 Surface real tracking queue health metrics
-      tags: security,observability,reliability  priority: high  est: 0.75d
+      tags: security,observability,reliability,tracking  priority: high  est: 0.75d
       deps: ADR-0002
       accepts: Health payload reads retry queue depth/age from TrackingService, marks warn/fail thresholds based on backlog, exports metrics, and documents interpretation for SRE runbooks.
 - [x] B-012 Harden Express boundary with security middleware and validation
@@ -78,7 +78,7 @@
       deps: ADR-0001
       accepts: SDK handles 429 responses with adaptive retry/backoff, exposes retry metadata/logging, and documents rate-limit semantics with tests.
 - [x] P-004 Make tracking retries idempotent
-      tags: reliability,queue  priority: high  est: 1.5d
+      tags: reliability,queue,tracking  priority: high  est: 1.5d
       deps: ADR-0003
       accepts: Tracking queue deduplicates retried events/goals and documents caller requirements for idempotency keys.
 - [x] P-006 Add funnel analytics helpers
@@ -86,7 +86,7 @@
       deps: ADR-0001
       accepts: Provide funnel analytics helpers surfaced through the API tools, covering data retrieval, normalization, and documentation/tests for usage.
 - [x] P-016 Honor Matomo back-pressure in tracking retries
-      tags: reliability,queue  priority: high  est: 1.5d
+      tags: reliability,queue,tracking  priority: high  est: 1.5d
       deps: P-004
       accepts: Detect 429/5xx responses, honor `Retry-After` when present, implement exponential backoff with jitter, and expose retry metrics for observability with regression tests.
 - [x] P-017 Add timeout and retry safeguards to Matomo HTTP client
@@ -99,10 +99,6 @@
       accepts: Repository administrators enable "Report content" in GitHub community settings and document the policy link for maintainers.
 
 ## Current
-- [ ] P-005 Persist retry queue and cache state
-      tags: infrastructure,reliability  priority: medium  est: 2d
-      deps: ADR-0003
-      accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
 - [ ] P-006a Harden funnel analytics flow outputs
       tags: feature,sdk  priority: medium  est: 1d
       deps: P-006
@@ -115,6 +111,20 @@
         1. Define a site-name → siteId mapping in a JSON/YAML document, referenced via env var or well-known path; refresh it whenever the Matomo roster changes. Advanced option: hydrate the map dynamically via `SitesManager.getAllSitesId`.
         2. Update the Opal tool logic to parse user queries for site names, translate them to siteIds, call Matomo helpers with the resolved ids, and collate the comparative analytics (e.g., dual `GetKeyNumbers` calls for multiple sites).
         3. Previous work has been done, have a look at an old branch `feature-P010`.
+- [ ] P-020 Align authentication documentation with implementation
+      tags: docs,dx  priority: medium  est: 0.5d
+      deps: B-003
+      accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
+- [ ] B-021 Deprecate tracking endpoints
+      tags: api,security  priority: high  est: 1d
+      deps: none
+      accepts: Remove `/track/*` routes from the API, delete associated validation schemas/tests/docs, strip SDK tracking helpers and retry queue wiring, and publish release notes clarifying OpalMind is read-only.
+
+## Tracking
+- [ ] P-005 Persist retry queue and cache state
+      tags: infrastructure,reliability  priority: medium  est: 2d
+      deps: ADR-0003
+      accepts: Queue/cache survive restarts via agreed storage (e.g., Redis) with configuration docs and migration notes.
 - [ ] P-018 Bound caches and idempotency stores
       tags: reliability,infra  priority: high  est: 1d
       deps: ADR-0003
@@ -123,10 +133,6 @@
       tags: observability,ops  priority: high  est: 1d
       deps: P-002, P-016
       accepts: Report actual tracking queue depth/state, reflect rate-limit failures in health status, and update docs/tests so `/tools/get-health-status` surfaces accurate queue insights.
-- [ ] P-020 Align authentication documentation with implementation
-      tags: docs,dx  priority: medium  est: 0.5d
-      deps: B-003
-      accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
 
 ## On Hold
 - [ ] B-001 Fix traffic channel response parsing
