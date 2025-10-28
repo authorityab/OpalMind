@@ -29,7 +29,6 @@ This project provides a lightweight SDK and Express-based tool service that make
 - Opal Tools SDK integration exposing `/tools/*` endpoints plus discovery metadata.
 - Bearer-token authenticated Express service ready for Opal integration.
 - Vitest-based unit and integration tests for SDK and API layers.
-- In-memory retry queue for Matomo Tracking API calls (`trackPageview`, `trackEvent`, `trackGoal`).
 
 ## Project Structure
 ```
@@ -110,9 +109,6 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 | `GetEvents` | `POST /tools/get-events` | Returns aggregated Matomo event metrics with optional filters. |
 | `GetEventCategories` | `POST /tools/get-event-categories` | Aggregates events grouped by category for quick comparisons. |
 | `GetDeviceTypes` | `POST /tools/get-device-types` | Breaks down visits by high-level device type (desktop, mobile, tablet). |
-| `TrackPageview` | `POST /track/pageview` | Records server-side pageviews with optional `pv_id` continuity. |
-| `TrackEvent` | `POST /track/event` | Sends Matomo custom events (category/action/name/value). |
-| `TrackGoal` | `POST /track/goal` | Captures goal conversions with optional revenue. |
 | `*` | Responses surface guidance via `MatomoApiError` when Matomo rejects a request (auth, permissions, rate limits, etc.). |
 
 > Revenue-bearing fields (campaigns, traffic channels, ecommerce summaries/totals, goal conversions) now return structured objects in the form `{ "value": number, "currency": "<ISO code>" }`, using the site currency resolved from Matomo. When Matomo does not expose a currency, the `currency` property is `null` and the numeric value remains available under `value`.
@@ -121,7 +117,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 
-All `/tools/*` and `/track/*` routes require the same bearer token—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.
+All `/tools/*` routes require bearer token authentication—calls without `Authorization: Bearer <OPAL_BEARER_TOKEN>` are rejected with `401 Unauthorized`. The comparison is case-sensitive, so rotate and distribute the token exactly as provisioned.
 
 Sample responses and curl snippets are documented in `packages/api/docs/sample-responses.md`.
 
@@ -151,17 +147,11 @@ Upcoming UI requirements call for “current vs previous period” deltas (▲/�
 - Customize the behaviour via `createMatomoClient({ baseUrl, tokenAuth, http: { timeoutMs: 5000, retry: { maxAttempts: 4, baseDelayMs: 500, jitterMs: 250 } } })`.
 - Network timeouts and repeated 5xx responses raise `MatomoNetworkError` with redacted endpoints so operators can trace issues without leaking credentials.
 
-## Tracking Back-pressure
-- Tracking requests honour Matomo `429`/`5xx` responses, read `Retry-After` headers, and pause the queue with exponential backoff (jitter optional).
-- Inspect queue health via `client.getTrackingQueueStats()` to surface pending items, retry counts, last backoff delay, and cooldown deadlines.
-- Tune behaviour with `tracking.backoff` (e.g., `createMatomoClient({ tracking: { backoff: { baseDelayMs: 250, maxDelayMs: 8000, jitterMs: 250 } } })`).
-- Queue health degrades at 10 pending items or 60s backlog age and fails at 25 pending or 120s backlog by default. Override with `MATOMO_QUEUE_WARN_PENDING`, `MATOMO_QUEUE_FAIL_PENDING`, `MATOMO_QUEUE_WARN_AGE_MS`, and `MATOMO_QUEUE_FAIL_AGE_MS`.
-
 ## API Boundary Hardening
 - Express applies security headers, duplicate-parameter stripping, and configurable CORS. Allow cross-origin calls by setting `OPAL_CORS_ALLOW_ALL=1` or provide a comma-separated `OPAL_CORS_ALLOWLIST`.
 - Request bodies default to a 256 KB limit and can be tuned via `OPAL_REQUEST_BODY_LIMIT` (accepts byte counts like `512kb`). Oversized payloads return `413` with a redacted message.
-- Rate limiting protects `/tools/*` and `/track/*` independently. Configure global limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`; tracking-specific bursts use `OPAL_TRACK_RATE_LIMIT_MAX`. Responses now surface `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers to aid client backoff, and the limiter honors `X-Forwarded-For` based on `OPAL_TRUST_PROXY`.
-- All tool invocations pass through Zod validation before reaching handlers. Tracking endpoints enforce required fields (`url`, `category`, `action`, `goalId`) and coerce numeric inputs, returning structured `400` responses when validation fails.
+- Rate limiting protects `/tools/*` endpoints. Configure limits with `OPAL_RATE_LIMIT_WINDOW_MS` and `OPAL_RATE_LIMIT_MAX`. Responses surface `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers to aid client backoff, and the limiter honors `X-Forwarded-For` based on `OPAL_TRUST_PROXY`.
+- All tool invocations pass through Zod validation before reaching handlers, returning structured `400` responses when validation fails.
 - Bearer authentication enforces case-sensitive matches using constant-time comparisons and surfaces RFC6750-compliant challenges (`WWW-Authenticate` with `invalid_request`/`invalid_token`).
 - Invalid or missing bearer tokens share a defensive rate-limit bucket, so repeated failures from the same address return `429` instead of bypassing throttling.
 - Cache health thresholds are configurable via `MATOMO_CACHE_WARN_HIT_RATE`, `MATOMO_CACHE_FAIL_HIT_RATE`, and `MATOMO_CACHE_SAMPLE_SIZE`, and the health payload includes hit/miss counters for observability.
@@ -202,23 +192,6 @@ curl -H "Authorization: Bearer your-token" \
       "observedValue": 85.5,
       "observedUnit": "%",
       "output": "Hit rate: 85.5% (342/400 requests)"
-    },
-    {
-      "name": "tracking-queue",
-      "status": "pass",
-      "componentType": "queue",
-      "observedValue": 0,
-      "observedUnit": "pending",
-      "output": "pending=0, inflight=0, backlogAgeMs=0",
-      "details": {
-        "pending": 0,
-        "inflight": 0,
-        "totalProcessed": 128,
-        "totalRetried": 9,
-        "backlogAgeMs": 0,
-        "cooldownUntil": null,
-        "lastRetryStatus": null
-      }
     }
   ]
 }
@@ -227,7 +200,6 @@ curl -H "Authorization: Bearer your-token" \
 ### Health Check Components
 - **Matomo API Connectivity**: Response time and reachability
 - **Reports Cache Performance**: Hit rates with warning thresholds (warn <20%, fail <5%)
-- **Tracking Queue Status**: Queue depth, retry cadence, and cooldown delays (defaults: warn ≥10 pending or 60s backlog age; fail ≥25 pending or 120s backlog age)
 - **Site Access** *(optional)*: Site-specific permission verification
 
 ### Integration
@@ -255,7 +227,8 @@ The unauthenticated `GET /health` endpoint mirrors this payload (without requiri
 - Generate a bearer token (e.g., `openssl rand -hex 32`), store it in your secret manager, and document the rotation procedure for each environment.
 - **Set up monitoring**: Integrate the health status endpoint with your monitoring stack for production alerting.
 - Expand the SDK with additional reporting helpers (events, segments) and mirror them in the tool service.
-- Persist tracking queue and add durability/caching as traffic increases.
 - Document discovery payloads and Opal-specific configuration in more detail as integration progresses.
 - Tune caching defaults based on traffic patterns and monitor Matomo load.
 - Ship cache stats and health metrics to your preferred observability stack (Grafana/Prometheus/etc.) once production traffic is available.
+
+> **Note**: As of recent releases, OpalMind operates as a **read-only analytics platform**. All tracking endpoints (`/track/*`) have been removed. The service now focuses exclusively on querying and reporting Matomo analytics data through the `/tools/*` endpoints.

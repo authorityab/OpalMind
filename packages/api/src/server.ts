@@ -1,13 +1,12 @@
 import 'dotenv/config';
 
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
 import { Parameter, ParameterType, ToolsService, Function as ToolFunction } from '@optimizely-opal/opal-tools-sdk';
 import { logger as baseLogger, redactSecrets } from '@opalmind/logger';
-import { createMatomoClient, type TrackingQueueThresholds, type MatomoClientConfig } from '@opalmind/sdk';
+import { createMatomoClient, type MatomoClientConfig } from '@opalmind/sdk';
 
 import { ValidationError, parseToolInvocation } from './validation.js';
 
@@ -72,14 +71,6 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return Number.isNaN(numeric) ? undefined : numeric;
 }
 
-function parseRequiredNumber(value: unknown, field: string): number {
-  const parsed = parseOptionalNumber(value);
-  if (parsed === undefined) {
-    throw new ValidationError(`${field} is required`);
-  }
-  return parsed;
-}
-
 function parseOptionalFloat(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
@@ -97,14 +88,6 @@ function parseOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
-}
-
-function requireString(value: unknown, field: string): string {
-  const parsed = parseOptionalString(value);
-  if (!parsed) {
-    throw new ValidationError(`${field} is required`);
-  }
-  return parsed;
 }
 
 function configureToolsServiceLogging(service: ToolsService) {
@@ -348,10 +331,6 @@ function preventHttpParameterPollution(req: Request, _res: Response, next: NextF
   next();
 }
 
-function hashToken(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
-
 function createRateLimiter(options: {
   windowMs: number;
   max: number;
@@ -494,7 +473,6 @@ export function buildServer() {
 
   const rateLimitWindowMs = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_WINDOW_MS', 60_000);
   const rateLimitMax = parsePositiveIntegerEnv('OPAL_RATE_LIMIT_MAX', 60);
-  const trackRateLimitMax = parsePositiveIntegerEnv('OPAL_TRACK_RATE_LIMIT_MAX', 120);
 
   const generalLimiter = createRateLimiter({
     windowMs: rateLimitWindowMs,
@@ -502,40 +480,14 @@ export function buildServer() {
     message: 'Too many requests, please try again later.',
   });
 
-  const trackingLimiter = createRateLimiter({
-    windowMs: rateLimitWindowMs,
-    max: trackRateLimitMax,
-    message: 'Too many tracking requests, please try again later.',
-    keyGenerator: (req: Request) => {
-      const ip = getClientIp(req);
-      const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
-      const { token } = extractBearerToken(header);
-
-      if (!token) {
-        return `${ip}:invalid`;
-      }
-
-      if (constantTimeEqual(bearerToken, token)) {
-        return `${ip}:valid:${hashToken(token)}`;
-      }
-
-      return `${ip}:invalid`;
-    },
-  });
-
   app.use('/tools', generalLimiter);
-  app.use('/track', trackingLimiter);
 
-  const queueWarnPending = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_PENDING);
-  const queueFailPending = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_PENDING);
-  const queueWarnAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_WARN_AGE_MS);
-  const queueFailAgeMs = parseOptionalNumber(process.env.MATOMO_QUEUE_FAIL_AGE_MS);
   const cacheWarnHitRate = parseOptionalFloat(process.env.MATOMO_CACHE_WARN_HIT_RATE);
   const cacheFailHitRate = parseOptionalFloat(process.env.MATOMO_CACHE_FAIL_HIT_RATE);
   const cacheSampleSize = parseOptionalNumber(process.env.MATOMO_CACHE_SAMPLE_SIZE);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
-    const requiresAuth = req.path.startsWith('/tools') || req.path.startsWith('/track');
+    const requiresAuth = req.path.startsWith('/tools');
     if (!requiresAuth) {
       return next();
     }
@@ -562,26 +514,14 @@ export function buildServer() {
     return next();
   });
 
-  const queueHealthThresholds: Partial<TrackingQueueThresholds> = {};
-  if (queueWarnPending !== undefined) queueHealthThresholds.pendingWarn = queueWarnPending;
-  if (queueFailPending !== undefined) queueHealthThresholds.pendingFail = queueFailPending;
-  if (queueWarnAgeMs !== undefined) queueHealthThresholds.ageWarnMs = queueWarnAgeMs;
-  if (queueFailAgeMs !== undefined) queueHealthThresholds.ageFailMs = queueFailAgeMs;
-
   const cacheHealthThresholds: Record<string, number> = {};
   if (cacheWarnHitRate !== undefined) cacheHealthThresholds.warnHitRate = cacheWarnHitRate;
   if (cacheFailHitRate !== undefined) cacheHealthThresholds.failHitRate = cacheFailHitRate;
   if (cacheSampleSize !== undefined) cacheHealthThresholds.sampleSize = cacheSampleSize;
 
-  const trackingConfig: NonNullable<MatomoClientConfig['tracking']> = { baseUrl: matomoBaseUrl };
-  if (Object.keys(queueHealthThresholds).length > 0) {
-    trackingConfig.healthThresholds = queueHealthThresholds;
-  }
-
   const clientConfig: MatomoClientConfig = {
     baseUrl: matomoBaseUrl,
     tokenAuth: matomoToken,
-    tracking: trackingConfig,
     ...(defaultSiteId !== undefined ? { defaultSiteId } : {}),
     ...(Object.keys(cacheHealthThresholds).length > 0
       ? { cacheHealth: cacheHealthThresholds }
@@ -598,20 +538,6 @@ export function buildServer() {
   const dateParam = new Parameter('date', ParameterType.String, 'Date or range (YYYY-MM-DD, today, yesterday, last7, etc.)', false);
   const segmentParam = new Parameter('segment', ParameterType.String, 'Matomo segment expression', false);
   const limitParam = new Parameter('limit', ParameterType.Integer, 'Maximum number of records to return', false);
-  const pageUrlParam = new Parameter('url', ParameterType.String, 'Absolute URL for the pageview', true);
-  const eventUrlParam = new Parameter('url', ParameterType.String, 'Absolute URL associated with the event or goal', false);
-  const actionNameParam = new Parameter('actionName', ParameterType.String, 'Human-readable page title', false);
-  const pvIdParam = new Parameter('pvId', ParameterType.String, 'Provide an existing Matomo pv_id for continuity', false);
-  const visitorIdParam = new Parameter('visitorId', ParameterType.String, '16-character Matomo visitor ID', false);
-  const uidParam = new Parameter('uid', ParameterType.String, 'User identifier for Matomo', false);
-  const referrerParam = new Parameter('referrer', ParameterType.String, 'Referrer URL', false);
-  const timestampParam = new Parameter('timestamp', ParameterType.Integer, 'Event timestamp (ms since epoch)', false);
-  const categoryParam = new Parameter('category', ParameterType.String, 'Event category', true);
-  const actionParam = new Parameter('action', ParameterType.String, 'Event action', true);
-  const nameParam = new Parameter('name', ParameterType.String, 'Event name', false);
-  const valueParam = new Parameter('value', ParameterType.Integer, 'Event value', false);
-  const goalIdParam = new Parameter('goalId', ParameterType.Integer, 'Goal identifier', true);
-  const revenueParam = new Parameter('revenue', ParameterType.Number, 'Goal revenue amount', false);
   const eventCategoryFilterParam = new Parameter('category', ParameterType.String, 'Filter by event category', false);
   const eventActionFilterParam = new Parameter('action', ParameterType.String, 'Filter by event action', false);
   const eventNameFilterParam = new Parameter('name', ParameterType.String, 'Filter by event name', false);
@@ -1151,169 +1077,6 @@ export function buildServer() {
     },
     [siteIdParam, periodParam, dateParam, segmentParam, limitParam],
     '/tools/get-device-types'
-  );
-
-  toolsService.registerTool(
-    'TrackPageview',
-    'Records a server-side pageview with optional pv_id continuity.',
-    async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
-      const url = requireString(parameters?.['url'], 'url');
-      const actionName = parseOptionalString(parameters?.['actionName']);
-      const pvId = parseOptionalString(parameters?.['pvId']);
-      const visitorId = parseOptionalString(parameters?.['visitorId']);
-      const uid = parseOptionalString(parameters?.['uid']);
-      const referrer = parseOptionalString(parameters?.['referrer']);
-      const timestamp = parseOptionalNumber(parameters?.['timestamp']);
-
-      const request: Parameters<typeof matomoClient.trackPageview>[0] = { url };
-      if (siteId !== undefined) {
-        request.siteId = siteId;
-      }
-      if (actionName !== undefined) {
-        request.actionName = actionName;
-      }
-      if (pvId !== undefined) {
-        request.pvId = pvId;
-      }
-      if (visitorId !== undefined) {
-        request.visitorId = visitorId;
-      }
-      if (uid !== undefined) {
-        request.uid = uid;
-      }
-      if (referrer !== undefined) {
-        request.referrer = referrer;
-      }
-      if (timestamp !== undefined) {
-        request.ts = timestamp;
-      }
-      const result = await matomoClient.trackPageview(request);
-
-      return { ok: result.ok, status: result.status, pvId: result.pvId };
-    },
-    [
-      siteIdParam,
-      pageUrlParam,
-      actionNameParam,
-      pvIdParam,
-      visitorIdParam,
-      uidParam,
-      referrerParam,
-      timestampParam,
-    ],
-    '/track/pageview'
-  );
-
-  toolsService.registerTool(
-    'TrackEvent',
-    'Records a Matomo custom event.',
-    async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
-      const category = requireString(parameters?.['category'], 'category');
-      const action = requireString(parameters?.['action'], 'action');
-      const name = parseOptionalString(parameters?.['name']);
-      const value = parseOptionalNumber(parameters?.['value']);
-      const url = parseOptionalString(parameters?.['url']);
-      const visitorId = parseOptionalString(parameters?.['visitorId']);
-      const uid = parseOptionalString(parameters?.['uid']);
-      const referrer = parseOptionalString(parameters?.['referrer']);
-      const timestamp = parseOptionalNumber(parameters?.['timestamp']);
-
-      const request: Parameters<typeof matomoClient.trackEvent>[0] = { category, action };
-      if (siteId !== undefined) {
-        request.siteId = siteId;
-      }
-      if (name !== undefined) {
-        request.name = name;
-      }
-      if (value !== undefined) {
-        request.value = value;
-      }
-      if (url !== undefined) {
-        request.url = url;
-      }
-      if (visitorId !== undefined) {
-        request.visitorId = visitorId;
-      }
-      if (uid !== undefined) {
-        request.uid = uid;
-      }
-      if (referrer !== undefined) {
-        request.referrer = referrer;
-      }
-      if (timestamp !== undefined) {
-        request.ts = timestamp;
-      }
-      const result = await matomoClient.trackEvent(request);
-
-      return { ok: result.ok, status: result.status };
-    },
-    [
-      siteIdParam,
-      categoryParam,
-      actionParam,
-      nameParam,
-      valueParam,
-      eventUrlParam,
-      visitorIdParam,
-      uidParam,
-      referrerParam,
-      timestampParam,
-    ],
-    '/track/event'
-  );
-
-  toolsService.registerTool(
-    'TrackGoal',
-    'Records a goal conversion.',
-    async (parameters: Record<string, unknown>) => {
-      const siteId = parseOptionalNumber(parameters?.['siteId']);
-      const goalId = parseRequiredNumber(parameters?.['goalId'], 'goalId');
-      const revenue = parseOptionalNumber(parameters?.['revenue']);
-      const url = parseOptionalString(parameters?.['url']);
-      const visitorId = parseOptionalString(parameters?.['visitorId']);
-      const uid = parseOptionalString(parameters?.['uid']);
-      const referrer = parseOptionalString(parameters?.['referrer']);
-      const timestamp = parseOptionalNumber(parameters?.['timestamp']);
-
-      const request: Parameters<typeof matomoClient.trackGoal>[0] = { goalId };
-      if (siteId !== undefined) {
-        request.siteId = siteId;
-      }
-      if (revenue !== undefined) {
-        request.revenue = revenue;
-      }
-      if (url !== undefined) {
-        request.url = url;
-      }
-      if (visitorId !== undefined) {
-        request.visitorId = visitorId;
-      }
-      if (uid !== undefined) {
-        request.uid = uid;
-      }
-      if (referrer !== undefined) {
-        request.referrer = referrer;
-      }
-      if (timestamp !== undefined) {
-        request.ts = timestamp;
-      }
-      const result = await matomoClient.trackGoal(request);
-
-      return { ok: result.ok, status: result.status };
-    },
-    [
-      siteIdParam,
-      goalIdParam,
-      revenueParam,
-      eventUrlParam,
-      visitorIdParam,
-      uidParam,
-      referrerParam,
-      timestampParam,
-    ],
-    '/track/goal'
   );
 
   app.get('/healthz', (_req: Request, res: Response) => {

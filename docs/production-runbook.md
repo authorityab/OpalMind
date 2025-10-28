@@ -48,7 +48,7 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
      http://localhost:3000/tools/get-health-status | jq
    ```
    - Confirm `status` is `healthy` or `degraded` (investigate `unhealthy`).
-   - Inspect `checks[]` for `matomo-api`, `reports-cache`, and `tracking-queue` metrics.
+   - Inspect `checks[]` for `matomo-api` and `reports-cache` metrics.
 3. **Readiness probe**
    ```bash
    curl -i http://localhost:3000/health
@@ -58,9 +58,6 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 
 ## Observability & Alerting
 - Ship logs emitted by `@opalmind/logger` (JSON) to your log aggregation platform; tokens are auto-redacted.
-- Create alerts on `tracking-queue` metrics:
-  - `status: warn` → investigate backlog, confirm Matomo availability.
-  - `status: fail` → escalate; queue is exceeding configured thresholds.
 - Monitor `reports-cache` hit rate; adjust cache TTL or thresholds via env vars if sustained below warning/failure thresholds.
 
 ## Rollback
