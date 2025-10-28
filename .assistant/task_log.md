@@ -63,6 +63,10 @@
   args: Tag historical tracking tasks in backlog
   result: Annotated completed tracking-related entries with a `tracking` tag for quick discovery.
   artifacts: .assistant/backlog.md
+- tool: apply_patch
+  args: Add B-022 GetTrafficChannels schema bug
+  result: Logged new backlog bug for the object/array mismatch, aligned plan/status Next lane to include it.
+  artifacts: .assistant/backlog.md, .assistant/plan.md, .assistant/status.md
 ## 2025-10-24
 - tool: shell
   args: |

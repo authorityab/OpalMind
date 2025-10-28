@@ -7,6 +7,7 @@
 ## Next
 - P-010 Support multi-site indexing and configuration
 - P-020 Align authentication documentation with implementation
+- B-022 Fix GetTrafficChannels response structure mismatch
 
 ## Later
 - B-016 Enforce structured logging and lint rules

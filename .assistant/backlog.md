@@ -97,6 +97,10 @@
       tags: ops,community  priority: medium  est: 0.1d
       deps: none
       accepts: Repository administrators enable "Report content" in GitHub community settings and document the policy link for maintainers.
+- [x] B-021 Deprecate tracking endpoints
+      tags: api,security  priority: high  est: 1d
+      deps: none
+      accepts: Remove `/track/*` routes from the API, delete associated validation schemas/tests/docs, strip SDK tracking helpers and retry queue wiring, and publish release notes clarifying OpalMind is read-only.
 
 ## Current
 - [ ] P-006a Harden funnel analytics flow outputs
@@ -115,10 +119,10 @@
       tags: docs,dx  priority: medium  est: 0.5d
       deps: B-003
       accepts: Ensure README and monitoring docs accurately describe authenticated routes, update observability promises to match current metrics, and call out any remaining roadmap gaps.
-- [ ] B-021 Deprecate tracking endpoints
-      tags: api,security  priority: high  est: 1d
+- [ ] B-022 Fix GetTrafficChannels response structure mismatch
+      tags: bug,analytics,dx  priority: medium  est: 0.5d
       deps: none
-      accepts: Remove `/track/*` routes from the API, delete associated validation schemas/tests/docs, strip SDK tracking helpers and retry queue wiring, and publish release notes clarifying OpalMind is read-only.
+      accepts: Reproduce the Matomo call returning an object instead of an array, adjust `GetTrafficChannels` parsing/schema to handle the actual payload shape (including empty data and error objects), add regression coverage, and document the fix in release notes.
 
 ## Tracking
 - [ ] P-005 Persist retry queue and cache state
