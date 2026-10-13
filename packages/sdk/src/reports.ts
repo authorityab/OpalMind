@@ -524,6 +524,11 @@ export class ReportsService {
     const normalized = normalizeTrafficChannelsResponse(data);
     let parsed = trafficChannelsSchema.parse(normalized);
 
+    // Date-keyed payloads (e.g. `period=day&date=last7`) repeat each channel once per date.
+    if (!Array.isArray(data) && Array.isArray(normalized)) {
+      parsed = aggregateTrafficChannels(parsed);
+    }
+
     if (input.channelType) {
       const target = resolveChannelAlias(input.channelType);
       parsed = parsed.filter(channel => resolveChannelAlias(channel.label) === target);
@@ -691,6 +696,144 @@ function normalizeTrafficChannelsResponse(raw: unknown): unknown {
   }
 
   return values.length > 0 ? values : raw;
+}
+
+const additiveTrafficChannelFields = [
+  'nb_visits',
+  'nb_actions',
+  'nb_visits_converted',
+  'nb_conversions',
+  'sum_visit_length',
+  'nb_hits',
+  'bounce_count',
+  'revenue',
+] as const;
+
+const maximumTrafficChannelFields = ['max_actions'] as const;
+
+// Ratios Matomo derives per period; they are recomputed from the summed totals instead.
+const derivedTrafficChannelFields = ['bounce_rate', 'conversion_rate', 'nb_actions_per_visit', 'avg_time_on_site'] as const;
+
+/**
+ * Merges channel rows that share a label across the date buckets of a range response,
+ * summing counters, recomputing ratios from the totals, and ordering by visits.
+ * Channels that appear only once are returned untouched.
+ */
+function aggregateTrafficChannels(channels: RawTrafficChannel[]): RawTrafficChannel[] {
+  const groups = new Map<string, RawTrafficChannel[]>();
+  for (const channel of channels) {
+    const group = groups.get(channel.label);
+    if (group) {
+      group.push(channel);
+    } else {
+      groups.set(channel.label, [channel]);
+    }
+  }
+
+  const merged = Array.from(groups.values()).map(group =>
+    group.length === 1 ? group[0]! : mergeTrafficChannelGroup(group)
+  );
+
+  return merged
+    .map((channel, index) => ({ channel, index }))
+    .sort((a, b) => (b.channel.nb_visits ?? 0) - (a.channel.nb_visits ?? 0) || a.index - b.index)
+    .map(entry => entry.channel);
+}
+
+function mergeTrafficChannelGroup(group: RawTrafficChannel[]): RawTrafficChannel {
+  const records = group as unknown as Record<string, unknown>[];
+  const merged = mergeRecordsByField(records, new Set(derivedTrafficChannelFields));
+
+  const visits = parseNumeric(merged.nb_visits);
+  if (visits !== undefined && visits > 0) {
+    const bounces = parseNumeric(merged.bounce_count);
+    const bounceRate =
+      bounces !== undefined ? (bounces / visits) * 100 : weightedPercentage(records, 'bounce_rate');
+    if (bounceRate !== undefined) {
+      merged.bounce_rate = `${Math.round(bounceRate)}%`;
+    }
+
+    const converted = parseNumeric(merged.nb_visits_converted);
+    if (converted !== undefined) {
+      merged.conversion_rate = `${Math.round((converted / visits) * 1000) / 10}%`;
+    }
+
+    const actions = parseNumeric(merged.nb_actions);
+    if (actions !== undefined) {
+      merged.nb_actions_per_visit = Math.round((actions / visits) * 10) / 10;
+    }
+
+    const visitLength = parseNumeric(merged.sum_visit_length);
+    if (visitLength !== undefined) {
+      merged.avg_time_on_site = Math.round(visitLength / visits);
+    }
+  }
+
+  const goalMaps = records
+    .map(record => record.goals)
+    .filter((goals): goals is Record<string, unknown> => !!goals && typeof goals === 'object' && !Array.isArray(goals));
+  if (goalMaps.length > 0) {
+    const goalIds = new Set(goalMaps.flatMap(goals => Object.keys(goals)));
+    const goals: Record<string, unknown> = {};
+    for (const goalId of goalIds) {
+      const goalRecords = goalMaps
+        .map(goalMap => goalMap[goalId])
+        .filter((goal): goal is Record<string, unknown> => !!goal && typeof goal === 'object' && !Array.isArray(goal));
+      goals[goalId] = mergeRecordsByField(goalRecords, new Set(['conversion_rate']));
+    }
+    merged.goals = goals;
+  }
+
+  return merged as unknown as RawTrafficChannel;
+}
+
+/**
+ * Sums additive counters and keeps the maximum of peak counters. Any other field is kept only
+ * when every record agrees on it, so per-date values (unique visitor counts, subtable ids)
+ * are dropped rather than misreported for the whole range.
+ */
+function mergeRecordsByField(records: Record<string, unknown>[], omit: Set<string>): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  const keys = new Set(records.flatMap(record => Object.keys(record)));
+
+  for (const key of keys) {
+    if (omit.has(key) || key === 'goals') continue;
+
+    const values = records.map(record => record[key]).filter(value => value !== undefined && value !== null);
+    if (values.length === 0) continue;
+
+    if ((additiveTrafficChannelFields as readonly string[]).includes(key)) {
+      const total = sumDefined(values.map(parseNumeric));
+      if (total !== undefined) merged[key] = total;
+      continue;
+    }
+
+    if ((maximumTrafficChannelFields as readonly string[]).includes(key)) {
+      const numbers = values.map(parseNumeric).filter((value): value is number => value !== undefined);
+      if (numbers.length > 0) merged[key] = Math.max(...numbers);
+      continue;
+    }
+
+    const [first] = values;
+    if (values.length === records.length && values.every(value => JSON.stringify(value) === JSON.stringify(first))) {
+      merged[key] = first;
+    }
+  }
+
+  return merged;
+}
+
+function weightedPercentage(records: Record<string, unknown>[], field: string): number | undefined {
+  let weighted = 0;
+  let weight = 0;
+  for (const record of records) {
+    const rate = parsePercentage(record[field]);
+    const visits = parseNumeric(record.nb_visits);
+    if (rate === undefined || visits === undefined) return undefined;
+    weighted += rate * visits;
+    weight += visits;
+  }
+  return weight > 0 ? weighted / weight : undefined;
 }
 
 function extractEcommerceSummary(data: unknown): Record<string, unknown> | undefined {

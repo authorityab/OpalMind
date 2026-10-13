@@ -115,7 +115,7 @@ All endpoints require `Authorization: Bearer <OPAL_BEARER_TOKEN>`.
 
 > `avg_time_on_site` within `GetKeyNumbers` is emitted as `{ "value": number, "unit": "seconds" }`, keeping the raw seconds from Matomo explicit for downstream formatting.
 
-> `GetTrafficChannels` now normalizes Matomo responses that wrap channel data in date-keyed objects (e.g., `date=last7`), preventing validation errors when the API returns an object instead of an array.
+> `GetTrafficChannels` now normalizes Matomo responses that wrap channel data in date-keyed objects (e.g., `date=last7`), preventing validation errors when the API returns an object instead of an array. Channels that appear under several dates are merged into one entry per channel: counters (`nb_visits`, `nb_actions`, `nb_conversions`, `nb_visits_converted`, `sum_visit_length`, `bounce_count`, `revenue`, plus per-goal counters) are summed, `max_actions` keeps the peak, `bounce_rate`, `conversion_rate`, `nb_actions_per_visit`, and `avg_time_on_site` are recomputed from the range totals, and per-date values that cannot be combined (such as `nb_uniq_visitors` or `idsubdatatable`) are omitted. Results are ordered by total visits.
 
 Matomo errors automatically redact `token_auth` query parameters before they reach logs or API responses; expect to see `token_auth=REDACTED` when inspecting diagnostics.
 

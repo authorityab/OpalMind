@@ -864,6 +864,134 @@ describe('MatomoClient', () => {
     expect(channels.find(channel => channel.label === 'Search Engines')?.nb_visits).toBe(8);
   });
 
+  it('aggregates channels that repeat across date-keyed range responses', async () => {
+    const fetchMock = createCurrencyAwareFetchMock({
+      '2025-09-01': [
+        {
+          label: 'Direct Entry',
+          nb_uniq_visitors: '9',
+          nb_visits: '10',
+          nb_actions: '30',
+          max_actions: '7',
+          sum_visit_length: '600',
+          bounce_count: '4',
+          bounce_rate: '40%',
+          nb_visits_converted: '1',
+          nb_conversions: '1',
+          revenue: '12.5',
+          referer_type: 1,
+          idsubdatatable: 11,
+          goals: { 'idgoal=2': { nb_conversions: '1', nb_visits_converted: '1', revenue: '12.5' } },
+        },
+        { label: 'Websites', nb_visits: '4', nb_actions: '4', bounce_count: '4', referer_type: 3 },
+      ],
+      '2025-09-02': {
+        label: 'Search Engines',
+        nb_visits: '8',
+        nb_actions: '16',
+        referer_type: 2,
+      },
+      '2025-09-03': [
+        {
+          label: 'Direct Entry',
+          nb_uniq_visitors: '28',
+          nb_visits: '30',
+          nb_actions: '50',
+          max_actions: '12',
+          sum_visit_length: '1800',
+          bounce_count: '11',
+          bounce_rate: '37%',
+          nb_visits_converted: '2',
+          nb_conversions: '3',
+          revenue: '20.25',
+          referer_type: 1,
+          idsubdatatable: 12,
+          goals: {
+            'idgoal=2': { nb_conversions: '2', nb_visits_converted: '1', revenue: '7.5' },
+            'idgoal=4': { nb_conversions: '1', nb_visits_converted: '1', revenue: '0.25' },
+          },
+        },
+        { label: 'Websites', nb_visits: '6', nb_actions: '9', bounce_count: '1', referer_type: 3 },
+      ],
+      '2025-09-04': [],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+
+    const channels = await client.getTrafficChannels({ period: 'day', date: 'last4' });
+
+    expect(channels.map(channel => channel.label)).toEqual(['Direct Entry', 'Websites', 'Search Engines']);
+
+    const direct = channels[0];
+    expect(direct.nb_visits).toBe(40);
+    expect(direct.nb_actions).toBe(80);
+    expect(direct.sum_visit_length).toBe(2400);
+    expect(direct.nb_visits_converted).toBe(3);
+    expect(direct.nb_conversions).toBe(4);
+    expect(direct.bounce_count).toBe(15);
+    expect(direct.max_actions).toBe(12);
+    expect(direct.revenue).toEqual({ value: 32.75, currency: 'USD' });
+    expect(direct.bounce_rate).toBe('38%');
+    expect(direct.nb_actions_per_visit).toBe(2);
+    expect(direct.avg_time_on_site).toBe(60);
+    expect(direct.conversion_rate).toBe('7.5%');
+    expect(direct.referer_type).toBe(1);
+    // Per-day unique visitors and subtable ids cannot be combined into a range value.
+    expect(direct).not.toHaveProperty('nb_uniq_visitors');
+    expect(direct).not.toHaveProperty('idsubdatatable');
+    expect(direct.goals).toEqual({
+      'idgoal=2': { nb_conversions: 3, nb_visits_converted: 2, revenue: { value: 20, currency: 'USD' } },
+      'idgoal=4': { nb_conversions: 1, nb_visits_converted: 1, revenue: { value: 0.25, currency: 'USD' } },
+    });
+
+    const websites = channels[1];
+    expect(websites.nb_visits).toBe(10);
+    expect(websites.nb_actions).toBe(13);
+    expect(websites.bounce_rate).toBe('50%');
+
+    // Channels seen on a single day are returned unchanged.
+    expect(channels[2]).toMatchObject({ label: 'Search Engines', nb_visits: 8, nb_actions: 16, referer_type: 2 });
+    expect(channels[2]).not.toHaveProperty('bounce_rate');
+
+    const filtered = await client.getTrafficChannels({ period: 'day', date: 'last4', channelType: 'direct' });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].nb_visits).toBe(40);
+  });
+
+  it('weights per-date bounce rates by visits when bounce counts are absent', async () => {
+    const fetchMock = createCurrencyAwareFetchMock({
+      '2025-09-01': [{ label: 'Social Networks', nb_visits: '10', bounce_rate: '20%', nb_actions_per_visit: '3' }],
+      '2025-09-02': [{ label: 'Social Networks', nb_visits: '30', bounce_rate: '60%', nb_actions_per_visit: '1' }],
+      '2025-09-03': [{ label: 'Social Networks', nb_visits: '0', bounce_rate: '0%' }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const channels = await client.getTrafficChannels({ period: 'day', date: 'last3' });
+
+    expect(channels).toHaveLength(1);
+    expect(channels[0].nb_visits).toBe(40);
+    expect(channels[0].bounce_rate).toBe('50%');
+    // Without nb_actions the per-date ratio cannot be rebuilt, so it is omitted rather than guessed.
+    expect(channels[0]).not.toHaveProperty('nb_actions_per_visit');
+  });
+
+  it('keeps single-period traffic channel arrays unchanged', async () => {
+    const fetchMock = createCurrencyAwareFetchMock([
+      { label: 'Websites', nb_visits: '5', bounce_rate: '20%', nb_uniq_visitors: '4' },
+      { label: 'Direct Entry', nb_visits: '9', bounce_rate: '10%', nb_uniq_visitors: '8' },
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createMatomoClient({ baseUrl, tokenAuth: token, defaultSiteId: 3 });
+    const channels = await client.getTrafficChannels({ period: 'month', date: '2025-09-01' });
+
+    expect(channels.map(channel => channel.label)).toEqual(['Websites', 'Direct Entry']);
+    expect(channels[0]).toMatchObject({ nb_visits: 5, bounce_rate: '20%', nb_uniq_visitors: '4' });
+    expect(channels[0]).not.toHaveProperty('nb_actions_per_visit');
+  });
+
   it('fetches goal conversions with filters and normalization', async () => {
     const fetchMock = createCurrencyAwareFetchMock(
       [
